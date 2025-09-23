@@ -28,7 +28,7 @@ bash vm-install-vnc.sh
 
 ![Install NoVNC](../images/gns3-install-script-vnc-1.png)
 
-### Install Containers (only needed for MacOS)
+### Install Containers
 
 This manually adds Docker containers, which is sutiable for ARM64. Check the script before running it, as you may need to change USERNAME, PLATFORM.
 

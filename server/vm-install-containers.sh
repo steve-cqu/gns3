@@ -1,6 +1,9 @@
 #!/bin/bash
 # Install Docker containers manually (rather than through GNS3 GUI)
-# Useful for MacOS
+# This normally wil lbe run on a fresh GNS3 VM that has not had any nodes/projects created yet
+# Usage: ./vm-install-containers.sh <ostype>
+
+OSTYPE=$1
 
 mkdir -p /home/gns3/docker
 cd /home/gns3/docker
@@ -8,8 +11,13 @@ cd /home/gns3/docker
 # Set platform:
 #  - Apple Mac: linux/arm64/v8
 #  - Windows/Linux: linux/amd64
-PLATFORM="linux/arm64/v8" 
-#PLATFORM="linux/amd64"
+if [ "$OSTYPE" == "mac" ]; then
+  echo "Apple Mac detected"
+  PLATFORM="linux/arm64/v8" 
+else
+  echo "Windows/Linux detected"
+  PLATFORM="linux/amd64"
+fi
 
 # Set username, e.g. gns3
 USERNAME="gns3"
@@ -55,7 +63,7 @@ USERNAME="cqugns3" # User name
 DOCKERNAME="ansible"
 mkdir $DOCKERNAME 
 cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/steve-cqu/networking/refs/heads/main/data/docker/cqugns3/ansible/Dockerfile
+wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/ansible/Dockerfile
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
 docker build --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
@@ -63,8 +71,8 @@ cd ..
 DOCKERNAME="vpnrouter"
 mkdir $DOCKERNAME 
 cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/steve-cqu/networking/refs/heads/main/data/docker/cqugns3/vpnrouter/Dockerfile
-wget https://raw.githubusercontent.com/steve-cqu/networking/refs/heads/main/data/docker/cqugns3/vpnrouter/99-tailscale.conf
+wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/Dockerfile
+wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/99-tailscale.conf
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
 docker build --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
@@ -77,11 +85,7 @@ wget https://raw.githubusercontent.com/adosztal/gns3-containers/refs/heads/maste
 docker build --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
-
-# Copy templates
 cd ..
-#cp /home/gns3/.config/GNS3/2.2/gns3_controller.conf ./original_gns_controller.conf
-#cp template_gns3_controller.conf /home/gns3/.config/GNS3/2.2/gns3_controller.conf
 
 # Show summary
 docker image ls
