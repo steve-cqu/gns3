@@ -1,13 +1,19 @@
-# Scripts
+# Setting up GNS3 VM (for Staff)
 
-## Setting up GNS3 VM
+## Copy Install Files
 
-Download/copy the following scripts into the GNS3 VM inside ``/home/gns3``, then run them. Make sure you have the .sh script and the ``template_gns3_controller.conf`` file in the GNS3 VM.
+You can use Git to clone the GNS3 repository to obtain the install files. First login to the GNS3 VM with Shell access. then run:
 
+```
+mkdir git
+cd git
+git clone https://github.com/steve-cqu/gns3.git
+cd git/gns3/server/
+```
 
-![Secure Copy Scripts](../images/gns3-scp-install-scripts-1.png))
+Now you can run the following install scripts.
 
-### Install Logos
+## Install Logos
 
 Some logos are not included in the standard directory. This downloads them and puts them in the correct directory:
 
@@ -16,7 +22,7 @@ bash vm-install-logos.sh
 ```
 
 
-### Install noVNC
+## Install noVNC
 
 NoVNC allows access to VNC node in the web browser (avoiding need for students to install VNC client). This installs noVNC in GNS3 VM and creates a simple script that can be run when needed:
 
@@ -24,9 +30,7 @@ NoVNC allows access to VNC node in the web browser (avoiding need for students t
 bash vm-install-vnc.sh
 ```
 
-![Install NoVNC](../images/gns3-install-script-vnc-1.png)
-
-### Install Docker Containers
+## Install Docker Containers
 
 Install Docker containers, for a Windows/Linux host:
 
@@ -34,29 +38,27 @@ Install Docker containers, for a Windows/Linux host:
 bash vm-install-containers.sh pc
 ```
 
-![Install containers](../images/gns3-install-containers-1.png)
-
 or for an Apple Mac host:
 
 ```
 bash vm-install-containers.sh mac
 ```
 
-### Install Qemu VMs
+## Install Qemu VMs
 
 Download the Qemu VM images, for a Windows/Linux host:
 
 ```
-bash vm-isntall-qemuvms.sh pc
+bash vm-install-qemuvms.sh pc
 ```
 
 or for an Apple Mac host:
 
 ```
-bash vm-isntall-qemuvms.sh mac
+bash vm-install-qemuvms.sh mac
 ```
 
-### Install Templates
+## Install Templates
 
 Update the tempplates for all Docker and Qemu images installed:
 
