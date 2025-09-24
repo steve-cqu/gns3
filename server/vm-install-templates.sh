@@ -23,6 +23,7 @@ cp template_gns3_controller.conf $TMPCONFIG
 if [ "$TEMPLATESET" == "all" ] || [ "$TEMPLATESET" == "docker" ]; then
     PLACEHOLDER="DOCKERTEMPLATES"
     INSERT_FILE="templates_containers.conf"
+    sed -i 's/\r$//' ${INSERT_FILE}
     awk -v insert="$(<"$INSERT_FILE")" -v keyword="$PLACEHOLDER" '
     {
     gsub(keyword, insert)
@@ -43,6 +44,7 @@ fi
 if [ "$TEMPLATESET" == "all" ] || [ "$TEMPLATESET" == "qemu" ]; then
     PLACEHOLDER="QEMUTEMPLATES"
     INSERT_FILE="templates_qemuvms.conf"
+    sed -i 's/\r$//' ${INSERT_FILE}
     awk -v insert="$(<"$INSERT_FILE")" -v keyword="$PLACEHOLDER" '
     {
     gsub(keyword, insert)
