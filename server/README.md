@@ -7,15 +7,13 @@ Download/copy the following scripts into the GNS3 VM inside ``/home/gns3``, then
 
 ![Secure Copy Scripts](../images/gns3-scp-install-scripts-1.png))
 
-### Copy Firefox Logo
+### Install Logos
 
-The Firefox.svg logo appears to be missing. So we download and copy into relevant directory.
+Some logos are not included in the standard directory. This downloads them and puts them in the correct directory:
 
 ```
-bash vm-install-fflogo.sh
+bash vm-install-logos.sh
 ```
-
-![Install Firefox Logo](../images/gns3-install-script-fflogo-1.png)
 
 
 ### Install noVNC
@@ -28,14 +26,52 @@ bash vm-install-vnc.sh
 
 ![Install NoVNC](../images/gns3-install-script-vnc-1.png)
 
-### Install Containers
+### Install Docker Containers
 
-This manually adds Docker containers, which is sutiable for ARM64. Check the script before running it, as you may need to change USERNAME, PLATFORM.
-
+Install Docker containers, for a Windows/Linux host:
 
 ```
-bash vm-install-containers.sh
+bash vm-install-containers.sh pc
 ```
 
 ![Install containers](../images/gns3-install-containers-1.png)
 
+or for an Apple Mac host:
+
+```
+bash vm-install-containers.sh mac
+```
+
+### Install Qemu VMs
+
+Download the Qemu VM images, for a Windows/Linux host:
+
+```
+bash vm-isntall-qemuvms.sh pc
+```
+
+or for an Apple Mac host:
+
+```
+bash vm-isntall-qemuvms.sh mac
+```
+
+### Install Templates
+
+Update the tempplates for all Docker and Qemu images installed:
+
+```
+bash vm-install-templates.sh all
+```
+
+or if only Docker container templates needed:
+
+```
+bash vm-install-templates.sh docker
+```
+
+or if only Qemu VM templates needed:
+
+```
+bash vm-install-templates.sh qemu
+```
