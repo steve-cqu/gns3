@@ -6,4 +6,4 @@ wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/symb
 cp /home/gns3/firefox.svg ~/.venv/gns3server-venv/lib/python3.9/site-packages/gns3server/symbols/classic/
 
 # Other logos
-cp ../../images/symbols/*.svg ~/.venv/gns3server-venv/lib/python3.9/site-packages/gns3server/symbols/classic/
+cp ../images/symbols/*.svg ~/.venv/gns3server-venv/lib/python3.9/site-packages/gns3server/symbols/classic/
