@@ -11,13 +11,12 @@ elif [ "$1" == "qemu" ]; then
   TEMPLATESET="qemu"
 fi
 
-# Working dir
-#cd /home/gns3
 
 # Stop the GNS3 server
-#sudo systemctl stop gns3
+sudo systemctl stop gns3
 
 TMPCONFIG=`mktemp`
+TMP2CONFIG=`mktemp`
 cp template_gns3_controller.conf $TMPCONFIG
 
 # Docker templates
@@ -29,8 +28,9 @@ if [ "$TEMPLATESET" == "all" ] || [ "$TEMPLATESET" == "docker" ]; then
     gsub(keyword, insert)
     print
     }
-    ' "$TMPCONFIG"
+    ' "$TMPCONFIG" > $TMP2CONFIG
 fi
+cp $TMP2CONFIG $TMPCONFIG
 
 # Insert comma if both templates used
 if [ "$TEMPLATESET" == "all" ]; then
@@ -48,12 +48,17 @@ if [ "$TEMPLATESET" == "all" ] || [ "$TEMPLATESET" == "qemu" ]; then
     gsub(keyword, insert)
     print
     }
-    ' "$TMPCONFIG"
+    ' "$TMPCONFIG" > $TMP2CONFIG
 fi
+cp $TMP2CONFIG $TMPCONFIG
 
+sed -i 's/DOCKERTEMPLATES//' ${TMPCONFIG}
+sed -i 's/QEMUTEMPLATES//' ${TMPCONFIG}
+sed -i 's/INSERTCOMMAIFBOTH//' $TMPCONFIG
 
-cat $TMPCONFIG
-rm -f $TMPCONFIG
+cp $TMPCONFIG /home/gns3/.config/GNS3/2.2/gns3_controller.conf
+
+rm -f $TMPCONFIG $TMP2CONFIG
 
 # Start the GNS3 server
-#sudo systemctl start gns3
+sudo systemctl start gns3

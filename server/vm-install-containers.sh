@@ -6,6 +6,7 @@
 OSTYPE=$1
 
 mkdir -p /home/gns3/docker
+CURDIR=`pwd`
 cd /home/gns3/docker
 
 # Set platform:
@@ -89,3 +90,5 @@ cd ..
 
 # Show summary
 docker image ls
+
+cd $CURDIR
