@@ -1,13 +1,16 @@
 #!/bin/bash
 # Copy the templates for nodes installed manually (rather than through GNS3 GUI)
 # Requires that the GNS3 server is stopped before copying
-# Usage: ./vm-install-templates.sh <template-set>
+# Usage: ./vm-install-templates.sh <os-type> <template-set>
+# <os-type> can be "mac" (Apple Mac) or "pc" (Windows/Linux)
 # <template-set> can be "all" (default), "docker" or "qemu"
 
+OSTYPE=$1
+
 TEMPLATESET="all"
-if [ "$1" == "docker" ]; then
+if [ "$2" == "docker" ]; then
   TEMPLATESET="docker"
-elif [ "$1" == "qemu" ]; then
+elif [ "$2" == "qemu" ]; then
   TEMPLATESET="qemu"
 fi
 
@@ -43,7 +46,11 @@ fi
 # Qemu templates
 if [ "$TEMPLATESET" == "all" ] || [ "$TEMPLATESET" == "qemu" ]; then
     PLACEHOLDER="QEMUTEMPLATES"
-    INSERT_FILE="templates_qemuvms.conf"
+    if [ "$OSTYPE" == "mac" ]; then
+      INSERT_FILE="templates_qemuvms_mac.conf"
+    else
+      INSERT_FILE="templates_qemuvms.conf"
+    fi
     sed -i 's/\r$//' ${INSERT_FILE}
     awk -v insert="$(<"$INSERT_FILE")" -v keyword="$PLACEHOLDER" '
     {

@@ -63,17 +63,24 @@ bash vm-install-qemuvms.sh mac
 Update the tempplates for all Docker and Qemu images installed:
 
 ```
-bash vm-install-templates.sh all
+bash vm-install-templates.sh pc all
 ```
+
+or for Apple Mac:
+
+```
+bash vm-install-templates.sh mac all
+```
+
 
 or if only Docker container templates needed:
 
 ```
-bash vm-install-templates.sh docker
+bash vm-install-templates.sh pc docker
 ```
 
 or if only Qemu VM templates needed:
 
 ```
-bash vm-install-templates.sh qemu
+bash vm-install-templates.sh pc qemu
 ```
