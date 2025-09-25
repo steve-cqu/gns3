@@ -6,9 +6,9 @@ These are written for CQUniversity students.
 
 ## What do you need?
 
-- VirtualBox virtualisation software. This is likely already installed on a lab computer. If you are using your personal computer (e.g., laptop) then you can [download and install VirtualBox](https://www.virtualbox.org/) yourself. We are using version 7, so the latest version 7 for Windows should be sufficient.
-- GNS3 VM Appliance. This is a ``.ova`` file. It is usually multiple GB in size. Your teacher will tell you where to download the ``.ova`` file from. 
-- A web browser, e.g., Firefox, Edge, Chrome on Windows.
+- **VirtualBox virtualisation software**. This is likely already installed on a lab computer. If you are using your personal computer (e.g., laptop) then you can [download and install VirtualBox](https://www.virtualbox.org/) yourself. We are using version 7, so the latest version 7 for Windows should be sufficient.
+- **GNS3 VM Appliance**. This is a ``.ova`` file. It is usually multiple GB in size. Your teacher will tell you where to download the ``.ova`` file from. 
+- **A web browser**, e.g., Firefox, Edge, Chrome on Windows.
 
 In the following we assume you have VirtualBox running successfully and have downloaded the GNS3 VM Appliance (``.ova`` file).
 
