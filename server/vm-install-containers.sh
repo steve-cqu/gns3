@@ -24,7 +24,7 @@ fi
 USERNAME="gns3"
 
 DOCKERNAME="endhost"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/Dockerfile
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
@@ -32,7 +32,7 @@ docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
 DOCKERNAME="openvswitch"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/openvswitch/Dockerfile
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/openvswitch/init.sh
@@ -40,21 +40,21 @@ docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
 DOCKERNAME="ipterm-base"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/ipterm/base/Dockerfile
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
 DOCKERNAME="ipterm"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/ipterm/cli/Dockerfile
 docker build --no-cache --platform $PLATFORM --build-arg DOCKER_REPOSITORY=$USERNAME -t $USERNAME/$DOCKERNAME  .
 cd ..
 
 DOCKERNAME="webterm"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/ipterm/web/Dockerfile
 docker build --no-cache --platform $PLATFORM --build-arg DOCKER_REPOSITORY=$USERNAME -t $USERNAME/$DOCKERNAME  .
@@ -62,7 +62,7 @@ cd ..
 
 USERNAME="cqugns3" # User name 
 DOCKERNAME="ansible"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/ansible/Dockerfile
 wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
@@ -70,7 +70,7 @@ docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
 DOCKERNAME="vpnrouter"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/Dockerfile
 wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/99-tailscale.conf
@@ -80,7 +80,7 @@ cd ..
 
 USERNAME="adosztal" # User name 
 DOCKERNAME="net_toolbox"
-mkdir $DOCKERNAME 
+mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
 wget https://raw.githubusercontent.com/adosztal/gns3-containers/refs/heads/master/net_toolbox/Dockerfile
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
