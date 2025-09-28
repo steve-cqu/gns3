@@ -47,15 +47,14 @@ bash vm-install-containers.sh mac
 Example result is:
 ```
 REPOSITORY             TAG       IMAGE ID       CREATED         SIZE
-adosztal/net_toolbox   latest    1151fe7a6c65   6 seconds ago   416MB
-cqugns3/vpnrouter      latest    a93c8dbe0d47   3 minutes ago   122MB
-cqugns3/ansible        latest    77492798867b   3 minutes ago   542MB
-gns3/webterm           latest    aec4f5bad4c6   4 minutes ago   718MB
-gns3/ipterm            latest    71e5bf020d19   6 minutes ago   110MB
-gns3/ipterm-base       latest    9c54f1940ebc   6 minutes ago   110MB
-gns3/openvswitch       latest    d660265052ce   9 minutes ago   17.5MB
-gns3/endhost           latest    169af3eab1da   9 minutes ago   92.3MB
+adosztal/net_toolbox   latest    485fb9402b4e   5 seconds ago   416MB
+cqugns3/alpinenode     latest    3200f987131c   3 minutes ago   575MB
+gns3/webterm           latest    453bb6679762   4 minutes ago   718MB
+gns3/ipterm            latest    b6e30f6baefc   7 minutes ago   110MB
+gns3/ipterm-base       latest    58d195564a49   7 minutes ago   110MB
+gns3/openvswitch       latest    b9848ec79e6f   9 minutes ago   17.5MB
 ```
+
 
 ## Install Qemu VMs
 
@@ -117,3 +116,14 @@ or if only Qemu VM templates needed:
 ```
 bash vm-install-templates.sh pc qemu
 ```
+
+## Cleanup
+
+Temporary files can be deleted:
+```
+sudo apt clean
+```
+
+## Shutdown and Snapshot
+
+You are recommended to now shutdown the GNS3 VM and take a snapshot.
