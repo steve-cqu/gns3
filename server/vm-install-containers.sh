@@ -23,13 +23,13 @@ fi
 # Set username, e.g. gns3
 USERNAME="gns3"
 
-DOCKERNAME="endhost"
-mkdir -p $DOCKERNAME 
-cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/Dockerfile
-wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
-docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
-cd ..
+#DOCKERNAME="endhost"
+#mkdir -p $DOCKERNAME 
+#cd $DOCKERNAME 
+#wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/Dockerfile
+#wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
+#docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+#cd ..
 
 DOCKERNAME="openvswitch"
 mkdir -p $DOCKERNAME 
@@ -61,20 +61,15 @@ docker build --no-cache --platform $PLATFORM --build-arg DOCKER_REPOSITORY=$USER
 cd ..
 
 USERNAME="cqugns3" # User name 
-DOCKERNAME="ansible"
+DOCKERNAME="alpinenode"
 mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/ansible/Dockerfile
-wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
-docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
-cd ..
-
-DOCKERNAME="vpnrouter"
-mkdir -p $DOCKERNAME 
-cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/Dockerfile
-wget https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/docker/vpnrouter/99-tailscale.conf
-wget https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master/docker/endhost/start-ssh.sh
+cp $CURDIR/git/gns3/server/docker/alpinenode/Dockerfile .
+cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.prv .
+cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.pub .
+cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.prv .
+cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.pub .
+cp $CURDIR/git/gns3/server/docker/alpinenode/start-ssh.sh
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
