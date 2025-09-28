@@ -64,12 +64,12 @@ USERNAME="cqugns3" # User name
 DOCKERNAME="alpinenode"
 mkdir -p $DOCKERNAME 
 cd $DOCKERNAME 
-cp $CURDIR/git/gns3/server/docker/alpinenode/Dockerfile .
-cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.prv .
-cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.pub .
-cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.prv .
-cp $CURDIR/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.pub .
-cp $CURDIR/git/gns3/server/docker/alpinenode/start-ssh.sh
+cp /home/gns3/git/gns3/server/docker/alpinenode/Dockerfile .
+cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.prv .
+cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.pub .
+cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.prv .
+cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.pub .
+cp /home/gns3/git/gns3/server/docker/alpinenode/start-ssh.sh .
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
