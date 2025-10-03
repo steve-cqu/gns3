@@ -1,0 +1,29 @@
+vlans:
+    office:
+        vid: 100
+        description: "office network"
+    lab:
+        vid: 200
+        description: "lab network"
+
+dps:
+    sw1:
+        dp_id: 0x1
+        hardware: "Open vSwitch"
+        interfaces:
+            1:
+                name: "h1"
+                description: "host1"
+                native_vlan: office
+            2:
+                name: "h2"
+                description: "host2"
+                native_vlan: office
+            3:
+                name: "h3"
+                description: "host3"
+                native_vlan: lab
+            4:
+                name: "h4"
+                description: "host4"
+                native_vlan: lab
