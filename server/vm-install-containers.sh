@@ -76,8 +76,8 @@ cd ..
 USERNAME="adosztal" # User name 
 DOCKERNAME="net_toolbox"
 mkdir -p $DOCKERNAME 
-cd $DOCKERNAME 
-wget https://raw.githubusercontent.com/adosztal/gns3-containers/refs/heads/master/net_toolbox/Dockerfile
+cd $DOCKERNAME
+cp /home/gns3/git/gns3/server/docker/net_toolbox/* . 
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
