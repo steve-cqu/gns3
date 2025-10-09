@@ -11,8 +11,8 @@ docker-adosztal-net_toolbox
 qemu-ubuntu
 qemu-netem
 qemu-openwrt
-qemu-opnsense
+#qemu-opnsense
 qemu-frr
-qemu-reactos
+#qemu-reactos
 #qemu-alpine
 
