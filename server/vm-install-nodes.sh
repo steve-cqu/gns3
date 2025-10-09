@@ -35,6 +35,7 @@ if [ ! -f "$NODEFILE" ]; then
 fi
 
 # Prepare
+sudo apt -y install zip unzip
 mkdir -p /home/gns3/docker
 CURDIR=`pwd`
 TMPTEMPLATE=`mktemp`
@@ -271,6 +272,7 @@ echo "Done processing all nodes."
 # Stop GNS3 server
 sudo systemctl stop gns3
 # Remove the last line which is a comma
+cp $TMPTEMPLATE /home/gns3/tmptemplate1.conf
 TMPTEMPLATE2=`mktemp`
 head -n -1 $TMPTEMPLATE > $TMPTEMPLATE2
 # Add tail
@@ -278,12 +280,16 @@ cat template_gns3_controller-tail.conf >> $TMPTEMPLATE2
 rm -f $TMPTEMPLATE
 # Copy the config
 cp $TMPTEMPLATE2 /home/gns3/.config/GNS3/2.2/gns3_controller.conf
+cp $TMPTEMPLATE2 /home/gns3/tmptemplate2.conf
 rm -f $TMPTEMPLATE2
 # Start the GNS3 server
 sudo systemctl start gns3
+
+# Cleanup
+sudo apt -y cleanup
 
 # Show results
 echo "Installed Docker images:" 
 docker image ls
 echo "Installed QEMU images:"
-ls -l /opt/gns3/images/QEMU/*.{img,qcow2} 
+ls -l /opt/gns3/images/QEMU/*.{img,qcow2,iso} 

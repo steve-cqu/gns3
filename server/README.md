@@ -30,6 +30,26 @@ NoVNC allows access to VNC node in the web browser (avoiding need for students t
 bash vm-install-vnc.sh
 ```
 
+## Install Nodes (Docker Containers and Qemu VMs)
+
+The file ``nodelist-pc.txt`` lists the Docker containers and Qemu VMs to install. You can edit the file to comment (#) those that you do not want. 
+
+On a PC:
+```
+bash vm-install-nodes.sh pc nodelist-pc.txt
+```
+
+On a Mac, edit ``nodelist-mac.txt`` and run:
+```
+bash vm-install-nodes.sh mac nodelist-mac.txt
+```
+## Shutdown and Snapshot
+
+You are recommended to now shutdown the GNS3 VM and take a snapshot.
+
+# Old BELOW - No longer used as of 9 Oct
+
+
 ## Install Docker Containers
 
 Install Docker containers, for a Windows/Linux host:

@@ -1,0 +1,13 @@
+# List of nodes (Docker, Qemu) to install
+# Comment out those not required
+docker-gns3-openvswitch
+docker-gns3-ipterm-base
+docker-gns3-ipterm
+docker-gns3-webterm
+docker-cqugns3-alpinenode
+docker-adosztal-net_toolbox
+#docker-gns3-endhost
+# QEMU VMs
+#qemu-ubuntu-mac
+#qemu-openwrt-mac
+#qemu-opnsense-mac

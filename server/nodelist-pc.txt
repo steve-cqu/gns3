@@ -7,7 +7,7 @@ docker-gns3-webterm
 docker-cqugns3-alpinenode
 docker-adosztal-net_toolbox
 #docker-gns3-endhost
-# Windows/Linux Intel
+# QEMU VMs
 qemu-ubuntu
 qemu-netem
 qemu-openwrt
@@ -15,8 +15,4 @@ qemu-opnsense
 qemu-frr
 qemu-reactos
 #qemu-alpine
-# Apple Mac
-#qemu-ubuntu-mac
-#qemu-openwrt-mac
-#qemu-opnsense-mac
 
