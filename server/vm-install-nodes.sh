@@ -286,7 +286,7 @@ rm -f $TMPTEMPLATE2
 sudo systemctl start gns3
 
 # Cleanup
-sudo apt -y cleanup
+sudo apt -y clean
 
 # Show results
 echo "Installed Docker images:" 
