@@ -1,5 +1,14 @@
 # Setting up GNS3 VM (for Staff)
 
+These instructions are for staff that create a GNS3 VM for distribution. There are three steps:
+1. Install the logos, software, Docker containers, Qemu VMs and templates needed
+2. Importing projects for a student VM
+3. Importing additional projects for a staff only VM
+
+You are recommended to make a snapshot after each step, and export an appliance after step 2 (GNS3-CQU-vxxx-studentid.ova) and step 3 (GNS3-CQU-vxxx-StaffOnly.ova).
+
+# Installing the GNS3 VM
+
 ## Copy Install Files
 
 You can use Git to clone the GNS3 repository to obtain the install files. First login to the GNS3 VM with Shell access. then run:
@@ -47,103 +56,57 @@ bash vm-install-nodes.sh mac nodelist-mac.txt
 
 You are recommended to now shutdown the GNS3 VM and take a snapshot.
 
-# Old BELOW - No longer used as of 9 Oct
+# Importing Student Projects
 
+## Transfer Projects to the GNS3 VM
 
-## Install Docker Containers
-
-Install Docker containers, for a Windows/Linux host:
-
+Start the GNS3 VM and login with the shell then:
 ```
-bash vm-install-containers.sh pc
-```
-
-or for an Apple Mac host:
-
-```
-bash vm-install-containers.sh mac
+mkdir -p /home/gns3/projects
+cd git/gns3/server
 ```
 
-Example result is:
+Using a file transfer program (e.g., FileZilla in Windows or scp in Linux), copy the .gns3project files into the /home/gns3/projects directory inside GNS3. These projects are not available on this GitHub repository. Only staff have access to the actual projects.
+
+## Import the Projects
+
+Run the import script:
 ```
-REPOSITORY             TAG       IMAGE ID       CREATED         SIZE
-adosztal/net_toolbox   latest    485fb9402b4e   5 seconds ago   416MB
-cqugns3/alpinenode     latest    3200f987131c   3 minutes ago   575MB
-gns3/webterm           latest    453bb6679762   4 minutes ago   718MB
-gns3/ipterm            latest    b6e30f6baefc   7 minutes ago   110MB
-gns3/ipterm-base       latest    58d195564a49   7 minutes ago   110MB
-gns3/openvswitch       latest    b9848ec79e6f   9 minutes ago   17.5MB
+bash vm-import-projects.sh projects-student.txt
 ```
 
+## Delete the Projects
 
-## Install Qemu VMs
-
-Download the Qemu VM images, for a Windows/Linux host:
-
+This is only required if the projects you transferred included *staff only* projects. You should NOT leave them in the VM that is distributed to students.
 ```
-bash vm-install-qemuvms.sh pc
+rm -f /home/gns3/projects/*
 ```
 
-or for an Apple Mac host:
+## Shutdown, Snapshot and Export Appliance
 
-```
-bash vm-install-qemuvms.sh mac
-```
+Shutdown the VM, take a snapshort and export appliance, e.g., ``GNS3-CQU-vxxx-studentid.ova``.
 
-Example result is:
+# Importing Staff Only Projects
+
+Start the GNS3 VM and login with the shell then:
 ```
-Windows/Linux detected
-Downloading NETem-v4.qcow2 ...
-NETem-v4.qcow2: OK
-Downloading ubuntu-24.04-server-cloudimg-amd64.img ...
-ubuntu-24.04-server-cloudimg-amd64.img: OK
-ubuntu-cloud-init-data.iso: OK
-Image resized.
-Downloading openwrt-23.05.0-x86-64-generic-ext4-combined.img ...
-gzip: openwrt-23.05.0-x86-64-generic-ext4-combined.img.gz: decompression OK, trailing garbage ignored
-openwrt-23.05.0-x86-64-generic-ext4-combined.img: OK
-Downloading OPNsense-24.1-nano-amd64.img ...
-OPNsense-24.1-nano-amd64.img: OK
--rw-r--r-- 1 gns3 gns3    1048576 Apr  6  2020 /opt/gns3/images/QEMU/config.img
--rw-rw-r-- 1 gns3 gns3  126353408 Oct 12  2023 /opt/gns3/images/QEMU/openwrt-23.050-x86-64-generic-ext4-combined.img
--rw-rw-r-- 1 gns3 gns3 3221225472 Jan 29  2024 /opt/gns3/images/QEMU/OPNsense-241-nano-amd64.img
--rw-rw-r-- 1 gns3 gns3  587268184 Sep 24 11:20 /opt/gns3/images/QEMU/ubuntu-2404-server-cloudimg-amd64.img
+mkdir -p /home/gns3/projects
+cd git/gns3/server
 ```
 
-## Install Templates
+Using a file transfer program (e.g., FileZilla in Windows or scp in Linux), copy the .gns3project files into the /home/gns3/projects directory inside GNS3. These projects are not available on this GitHub repository. Only staff have access to the actual projects.
 
-Update the tempplates for all Docker and Qemu images installed:
+## Import the Projects
 
+Run the import script:
 ```
-bash vm-install-templates.sh pc all
-```
-
-or for Apple Mac:
-
-```
-bash vm-install-templates.sh mac all
+bash vm-import-projects.sh projects-staff.txt
 ```
 
+You may optionally delete the projects, e.g., ``rm -f /home/gns3/projects/*`` but that is not required.
 
-or if only Docker container templates needed:
+## Shutdown, Snapshot and Export Appliance
 
-```
-bash vm-install-templates.sh pc docker
-```
+Shutdown the VM, take a snapshort and export appliance, e.g., ``GNS3-CQU-vxxx-StaffOnly.ova``.
 
-or if only Qemu VM templates needed:
 
-```
-bash vm-install-templates.sh pc qemu
-```
-
-## Cleanup
-
-Temporary files can be deleted:
-```
-sudo apt clean
-```
-
-## Shutdown and Snapshot
-
-You are recommended to now shutdown the GNS3 VM and take a snapshot.
