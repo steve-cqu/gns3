@@ -274,7 +274,10 @@ sudo systemctl stop gns3
 # Remove the last line which is a comma
 cp $TMPTEMPLATE /home/gns3/tmptemplate1.conf
 TMPTEMPLATE2=`mktemp`
+# TODO: currently assumes .conf have empty last line - this should be improved
+# Remove last line that has a comma
 head -n -1 $TMPTEMPLATE > $TMPTEMPLATE2
+
 # Add tail
 cat template_gns3_controller-tail.conf >> $TMPTEMPLATE2
 rm -f $TMPTEMPLATE
