@@ -141,6 +141,19 @@ while IFS= read -r line || [ -n "$line" ]; do
             cat templates/docker-linuxserver.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
+        docker-cqugns3-alpinenode)
+            USERNAME="cqugns3" # User name 
+            DOCKERNAME="auth-kerberos"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/auth-kerberos/Dockerfile .
+            cp /home/gns3/git/gns3/server/docker/auth-kerberos/krb5.conf .
+            cp /home/gns3/git/gns3/server/docker/auth-kerberos/hosts.txt .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-kerberos.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
         qemu-netem)
             cd /opt/gns3/images/QEMU
             fn="NETem-v4.qcow2"
