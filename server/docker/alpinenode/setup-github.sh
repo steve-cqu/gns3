@@ -30,19 +30,38 @@ git config --global credential.helper store
 echo "https://$GH_USER:$GH_TOKEN@github.com" > "$STUDENT_HOME/.git-credentials"
 chmod 600 "$STUDENT_HOME/.git-credentials"
 
+# --- Token validation ---
+echo "Verifying your GitHub token..."
+API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -u "$GH_USER:$GH_TOKEN" https://api.github.com/user)
+
+if [ "$API_RESPONSE" -eq 200 ]; then
+    echo "✅ Token verified — access OK (fine-grained or classic)."
+elif [ "$API_RESPONSE" -eq 401 ]; then
+    echo "❌ Invalid or expired token. Please check and rerun the script."
+    exit 1
+else
+    echo "⚠️ Unexpected response from GitHub API (HTTP $API_RESPONSE). Proceeding cautiously..."
+fi
+
 # Prepare repo folder
 mkdir -p "$STUDENT_HOME/git"
 cd "$STUDENT_HOME/git" || exit 1
 
 # Clone the repo
-echo "Cloning your repository..."
-git clone "https://github.com/$GH_USER/$GH_REPO.git" "$STUDENT_HOME/git/$GH_REPO"
-
-if [ $? -eq 0 ]; then
-    echo "✅ Repository cloned successfully!"
-    echo "You can find it at: $STUDENT_HOME/git/$GH_REPO"
+if [ -d "$GH_REPO/.git" ]; then
+    echo "Repository folder already exists. Skipping clone."
 else
-    echo "❌ Failed to clone repository. Check your token or repo name."
-    echo "The URL used was: https://github.com/$GH_USER/$GH_REPO.git"
-    echo "You can reset GitHub credentials using /bin/reset-github.sh"
+    echo "Cloning your repository..."
+    git clone "https://github.com/$GH_USER/$GH_REPO.git" 2>/tmp/git-error.log
+
+    if [ $? -eq 0 ]; then
+        echo "✅ Repository cloned successfully!"
+        echo "You can find it at: $STUDENT_HOME/git/$GH_REPO"
+    else
+        echo "❌ Failed to clone repository. Check your token or repo name."
+        echo "The URL used was: https://github.com/$GH_USER/$GH_REPO.git"
+        echo "You can reset GitHub credentials using /bin/reset-github.sh"
+        echo "Error details:"
+        cat /tmp/git-error.log
+    fi
 fi
