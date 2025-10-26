@@ -22,7 +22,7 @@ Click on the link icon, then click on first node and select interface. Then clic
 
 Right-click on a node to display the node context menu.
 
-## Starting a Nodes
+## Starting a Node
 
 Right-click on a node to display the context menu, then select start. Once the node is shown as green in the node list (Mpa topology), right-click again and *Web console in new tab*.
 
@@ -45,18 +45,18 @@ You can still use the normal copy-and-paste keyboard combinations in other progr
 
 For example, to copy from Notepad to the web console, use the normal Notepad copy, such as right-click and Copy or Ctrl-c:
 
-![](../images/gns3-copypaste-notepad-copy-1.png)
+![Copy from Notepad](../images/gns3-copypaste-notepad-copy-1.png)
 
 Now in the web console, use Shift-Insert to paste:
 
-![](../images/gns3-copypaste-gns3-paste-1.png)
+![Paste with Shift Insert](../images/gns3-copypaste-gns3-paste-1.png)
 
 You can copy from the web console by selecting text with your mouse and then Ctrl-Insert:
 
-![](../images/gns3-copypaste-gns3-copy-1.png)
+![Copy with Ctrl Insert](../images/gns3-copypaste-gns3-copy-1.png)
 
 And then paste that into Notepad using the normal approach, such as right-click and Paste or Ctrl-v.
 
-![](../images/gns3-copypaste-notepad-paste-1.png)
+![Paste into Notepad](../images/gns3-copypaste-notepad-paste-1.png)
 
 

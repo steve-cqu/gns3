@@ -6,6 +6,8 @@ GNS3-Internet-NAT-Solution
 HTTPClient-CLI-Basics-Solution
 HTTPClient-GUI-Basics-Solution
 HTTPS-Setup-Selfsigned-Solution
+OSPF-Basics-Solution
+Reverse-Proxy-Solution
 Setting-IP-Solution
 Tailscale-Basics-Solution-1
 Tailscale-Basics-Solution-2

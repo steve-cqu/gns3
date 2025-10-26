@@ -1,6 +1,7 @@
 GNS3-Intro-Solution
+LAN-Routing-Template
+OSPF-Basics-Template
+Reverse-Proxy-Template
+SDN-Basics-Template
 Small-Internet-Demo
 UDP-Basics-Template
-OSPF-Basics-Template
-LAN-Routing-Template
-SDN-Basics-Template
