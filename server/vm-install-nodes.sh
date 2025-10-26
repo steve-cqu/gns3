@@ -113,12 +113,7 @@ while IFS= read -r line || [ -n "$line" ]; do
             DOCKERNAME="alpinenode"
             mkdir -p /home/gns3/docker/$DOCKERNAME
             cd /home/gns3/docker/$DOCKERNAME
-            cp /home/gns3/git/gns3/server/docker/alpinenode/Dockerfile .
-            cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.prv .
-            cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_ed25519_key.pub .
-            cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.prv .
-            cp /home/gns3/git/gns3/server/docker/alpinenode/gns3_student_rsa_key.pub .
-            cp /home/gns3/git/gns3/server/docker/alpinenode/start-ssh.sh .
+            cp /home/gns3/git/gns3/server/docker/alpinenode/* .
             docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
             cd $CURDIR
             cat templates/docker-linuxhost.conf >> $TMPTEMPLATE
@@ -141,7 +136,7 @@ while IFS= read -r line || [ -n "$line" ]; do
             cat templates/docker-linuxserver.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
-        docker-cqugns3-alpinenode)
+        docker-cqugns3-auth-kerberos)
             USERNAME="cqugns3" # User name 
             DOCKERNAME="auth-kerberos"
             mkdir -p /home/gns3/docker/$DOCKERNAME
@@ -153,6 +148,18 @@ while IFS= read -r line || [ -n "$line" ]; do
             cd $CURDIR
             cat templates/docker-kerberos.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
+            ;;
+        docker-kali)
+            USERNAME="gns3"
+            DOCKERNAME="kalilinux"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            wget -q https://github.com/GNS3/gns3-registry/raw/refs/heads/master/docker/kalilinux/Dockerfile 
+            wget -q https://github.com/GNS3/gns3-registry/raw/refs/heads/master/docker/kalilinux/index-1.html
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-kali.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE 
             ;;
         qemu-netem)
             cd /opt/gns3/images/QEMU
