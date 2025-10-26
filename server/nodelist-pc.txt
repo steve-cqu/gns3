@@ -8,6 +8,7 @@ docker-cqugns3-alpinenode
 docker-adosztal-net_toolbox
 #docker-gns3-endhost
 #docker-cqugns3-auth-kerberos
+#docker-gns3-kali
 # QEMU VMs
 qemu-ubuntu
 qemu-netem

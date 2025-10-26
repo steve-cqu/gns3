@@ -35,6 +35,7 @@ if [ ! -f "$NODEFILE" ]; then
 fi
 
 # Prepare
+sudo apt -y update
 sudo apt -y install zip unzip
 mkdir -p /home/gns3/docker
 CURDIR=`pwd`
@@ -149,7 +150,7 @@ while IFS= read -r line || [ -n "$line" ]; do
             cat templates/docker-kerberos.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
-        docker-kali)
+        docker-gns3-kali)
             USERNAME="gns3"
             DOCKERNAME="kalilinux"
             mkdir -p /home/gns3/docker/$DOCKERNAME
