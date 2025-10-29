@@ -1,9 +1,11 @@
 # Dockerfile for NAT64 Router
 FROM cqugns3/alpinenode
 
+# Testing needed for tayga package
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
 # Install required packages
-RUN apk update && \
-    apk add --no-cache \
+RUN apk add --no-cache \
     tayga \
     iptables \
     ip6tables
@@ -17,17 +19,10 @@ ADD start-nat64.sh /bin/start-nat64.sh
 ADD configure-nat64-router.sh /bin/configure-nat64-router.sh
 ADD setup-nat64.sh /bin/setup-nat64.sh
 ADD nat64-status.sh /bin/nat64-status.sh
-ADD nat64-welcome.sh /etc/profile.d/nat64-welcome.sh
 
 # Make all scripts executable
 RUN chmod +x /bin/start-nat64.sh \
              /bin/configure-nat64-router.sh \
              /bin/setup-nat64.sh \
-             /bin/nat64-status.sh \
-             /etc/profile.d/nat64-welcome.sh
+             /bin/nat64-status.sh
 
-# Set bash as default shell for better script support
-#ENV SHELL=/bin/bash
-
-# Default command
-#CMD ["/bin/bash"]

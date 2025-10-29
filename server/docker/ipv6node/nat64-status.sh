@@ -34,7 +34,8 @@ iptables -t nat -L POSTROUTING -n -v | grep 192.168.255 || echo "   No masquerad
 echo ""
 
 echo "7. Router Interfaces:"
-ip -br addr show eth0 eth1
+ip addr show eth0
+ip addr show eth1
 echo ""
 
 echo "================================================"

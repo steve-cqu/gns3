@@ -2,7 +2,7 @@
 FROM alpine:latest
 
 # Add community repository to access more packages
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | tr -d \")/community" \
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | cut -d "." -f 1,2 | tr -d \")/community" \
     >> /etc/apk/repositories  
 
 # Add packages
