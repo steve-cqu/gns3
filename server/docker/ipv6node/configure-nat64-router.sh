@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# This script configures the NAT64 router interfaces and routing.
+# Router A ---- (eth0) Router B (NAT64) (eth1) ---- Subnet 3
+
 echo "================================================"
 echo "NAT64 Router Interface Configuration"
 echo "================================================"
@@ -16,7 +19,7 @@ ip -6 address add 2001:db8:1:3::1/64 dev eth1 2>/dev/null || echo "  IPv6 alread
 
 # Add routes to Subnet 1 via Router A
 echo "Adding routes to Subnet 1 via Router A..."
-ip -6 route add 2001:db8:1:1::/64 via 2001:db8:1:2::1 dev eth1 2>/dev/null || echo "  IPv6 route to Subnet 1 already exists"
+ip -6 route add 2001:db8:1:1::/64 via 2001:db8:1:2::1 dev eth0 2>/dev/null || echo "  IPv6 route to Subnet 1 already exists"
 
 # Enable IP forwarding
 echo "Enabling IP forwarding..."
