@@ -15,6 +15,7 @@ ip link set nat64 up
 echo "Configuring nat64 interface addresses..."
 ip addr add 192.168.255.1 dev nat64 2>/dev/null || echo "IPv4 address already configured"
 ip -6 addr add 2001:db8:64::192.168.255.1/96 dev nat64 2>/dev/null || echo "IPv6 address already configured"
+ip -6 route add 2001:db8:1:1::/64 via 2001:db8:1:2::1 dev eth0 2>/dev/null || echo "IPv6 default route already exists"
 
 # Add routes
 echo "Adding NAT64 routes..."

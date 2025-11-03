@@ -24,7 +24,7 @@ echo ""
 
 echo "5. NAT64 Routes:"
 echo "   IPv6 routes:"
-ip -6 route show | grep 64:ff9b || echo "     No NAT64 IPv6 route found"
+ip -6 route show | grep 2001:db8 || echo "     No NAT64 IPv6 route found"
 echo "   IPv4 routes:"
 ip route show | grep 192.168.255 || echo "     No NAT64 IPv4 route found"
 echo ""
