@@ -142,12 +142,21 @@ while IFS= read -r line || [ -n "$line" ]; do
             DOCKERNAME="auth-kerberos"
             mkdir -p /home/gns3/docker/$DOCKERNAME
             cd /home/gns3/docker/$DOCKERNAME
-            cp /home/gns3/git/gns3/server/docker/auth-kerberos/Dockerfile .
-            cp /home/gns3/git/gns3/server/docker/auth-kerberos/krb5.conf .
-            cp /home/gns3/git/gns3/server/docker/auth-kerberos/hosts.txt .
+            cp /home/gns3/git/gns3/server/docker/auth-kerberos/* .
             docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
             cd $CURDIR
             cat templates/docker-kerberos.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
+        docker-cqugns3-ipv6node)
+            USERNAME="cqugns3" # User name 
+            DOCKERNAME="ipv6node"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/ipv6node/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-ipv6node.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
         docker-gns3-kali)
