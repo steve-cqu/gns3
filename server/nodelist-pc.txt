@@ -6,15 +6,16 @@ docker-gns3-ipterm
 docker-gns3-webterm
 docker-cqugns3-alpinenode
 docker-adosztal-net_toolbox
-#docker-gns3-endhost
-#docker-cqugns3-auth-kerberos
+docker-cqugns3-auth-kerberos
+docker-cqugns3-ipv6node
 #docker-gns3-kali
+#docker-gns3-endhost
 # QEMU VMs
 qemu-ubuntu
 qemu-netem
 qemu-openwrt
-#qemu-opnsense
 qemu-frr
+#qemu-opnsense
 #qemu-reactos
 #qemu-alpine
 
