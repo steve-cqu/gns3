@@ -24,7 +24,12 @@ python3 \
 ansible \
 tailscale \
 git \
-ca-certificates
+ca-certificates \
+openssl \
+nginx \
+fail2ban \
+wireguard-tools \
+whois
 
 # Update CA certificates
 RUN update-ca-certificates

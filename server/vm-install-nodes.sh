@@ -38,6 +38,11 @@ fi
 sudo apt -y update
 sudo apt -y install zip unzip
 mkdir -p /home/gns3/docker
+
+# Load WireGuard kernel module (needed for wireguard-basics activity)
+# Docker containers share the host kernel, so the module must be loaded here
+modprobe wireguard 2>/dev/null || echo "Warning: wireguard module not available (may need kernel update)"
+echo "wireguard" > /etc/modules-load.d/wireguard.conf
 CURDIR=`pwd`
 TMPTEMPLATE=`mktemp`
 cat template_gns3_controller-head.conf > $TMPTEMPLATE
@@ -149,7 +154,7 @@ while IFS= read -r line || [ -n "$line" ]; do
             echo "," >> $TMPTEMPLATE
             ;;
         docker-cqugns3-ipv6node)
-            USERNAME="cqugns3" # User name 
+            USERNAME="cqugns3" # User name
             DOCKERNAME="ipv6node"
             mkdir -p /home/gns3/docker/$DOCKERNAME
             cd /home/gns3/docker/$DOCKERNAME
@@ -157,6 +162,28 @@ while IFS= read -r line || [ -n "$line" ]; do
             docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
             cd $CURDIR
             cat templates/docker-ipv6node.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
+        docker-cqugns3-suricata)
+            USERNAME="cqugns3"
+            DOCKERNAME="suricata"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/suricata/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-suricata.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
+        docker-cqugns3-wazuh-agent)
+            USERNAME="cqugns3"
+            DOCKERNAME="wazuh-agent"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/wazuh-agent/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-wazuh-agent.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
         docker-gns3-kali)
