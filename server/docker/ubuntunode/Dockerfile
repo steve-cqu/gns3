@@ -18,6 +18,7 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     ca-certificates openssl git python3 \
     nginx wireguard-tools iperf3 iperf \
     sudo fail2ban libpam-pwquality libpwquality-tools \
+    libpam-google-authenticator \
     john \
     tzdata \
  && dpkg-reconfigure --frontend noninteractive tzdata \
