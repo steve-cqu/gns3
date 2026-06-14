@@ -41,8 +41,8 @@ mkdir -p /home/gns3/docker
 
 # Load WireGuard kernel module (needed for wireguard-basics activity)
 # Docker containers share the host kernel, so the module must be loaded here
-modprobe wireguard 2>/dev/null || echo "Warning: wireguard module not available (may need kernel update)"
-echo "wireguard" > /etc/modules-load.d/wireguard.conf
+sudo modprobe wireguard 2>/dev/null || echo "Warning: wireguard module not available (may need kernel update)"
+echo "wireguard" | sudo tee /etc/modules-load.d/wireguard.conf >/dev/null
 CURDIR=`pwd`
 TMPTEMPLATE=`mktemp`
 cat template_gns3_controller-head.conf > $TMPTEMPLATE
