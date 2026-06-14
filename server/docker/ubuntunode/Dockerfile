@@ -18,12 +18,19 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     ca-certificates openssl git python3 \
     nginx wireguard-tools iperf3 iperf \
     sudo fail2ban libpam-pwquality libpwquality-tools \
+    john \
     tzdata \
  && dpkg-reconfigure --frontend noninteractive tzdata \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Update CA certificates
 RUN update-ca-certificates
+
+# Wordlist for password-cracking activities (John the Ripper), at the conventional Kali path
+RUN mkdir -p /usr/share/wordlists \
+ && wget -q -O /usr/share/wordlists/rockyou.txt \
+      https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt \
+ && test -s /usr/share/wordlists/rockyou.txt
 
 # Copy GitHub helper scripts
 ADD setup-github.sh /bin/setup-github.sh
