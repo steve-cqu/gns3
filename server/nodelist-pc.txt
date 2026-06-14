@@ -11,14 +11,14 @@ docker-cqugns3-auth-kerberos
 docker-cqugns3-ipv6node
 docker-cqugns3-wazuh-agent
 docker-cqugns3-suricata
-#docker-gns3-kali
+docker-gns3-kali
 #docker-gns3-endhost
 # QEMU VMs
-qemu-ubuntu
+#qemu-ubuntu
 qemu-netem
 qemu-openwrt
 qemu-frr
-#qemu-opnsense
+qemu-opnsense
 #qemu-reactos
 #qemu-alpine
 
