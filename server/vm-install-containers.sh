@@ -73,7 +73,19 @@ cp /home/gns3/git/gns3/server/docker/alpinenode/start-ssh.sh .
 docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
 cd ..
 
-USERNAME="adosztal" # User name 
+USERNAME="cqugns3" # User name
+DOCKERNAME="ubuntunode"
+mkdir -p $DOCKERNAME
+cd $DOCKERNAME
+cp /home/gns3/git/gns3/server/docker/ubuntunode/Dockerfile .
+cp /home/gns3/git/gns3/server/docker/ubuntunode/start-ssh.sh .
+cp /home/gns3/git/gns3/server/docker/ubuntunode/setup-github.sh .
+cp /home/gns3/git/gns3/server/docker/ubuntunode/reset-github.sh .
+cp /home/gns3/git/gns3/server/docker/ubuntunode/gns3_student_*_key.* .
+docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+cd ..
+
+USERNAME="adosztal" # User name
 DOCKERNAME="net_toolbox"
 mkdir -p $DOCKERNAME 
 cd $DOCKERNAME
