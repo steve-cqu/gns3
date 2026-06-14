@@ -5,6 +5,7 @@ docker-gns3-ipterm-base
 docker-gns3-ipterm
 docker-gns3-webterm
 docker-cqugns3-alpinenode
+docker-cqugns3-ubuntunode
 docker-adosztal-net_toolbox
 docker-cqugns3-auth-kerberos
 docker-cqugns3-ipv6node

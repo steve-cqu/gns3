@@ -131,6 +131,17 @@ while IFS= read -r line || [ -n "$line" ]; do
             cat templates/docker-ansiblehost.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
+        docker-cqugns3-ubuntunode)
+            USERNAME="cqugns3" # User name
+            DOCKERNAME="ubuntunode"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/ubuntunode/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-ubuntuhost.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
         docker-adosztal-net_toolbox)
             USERNAME="adosztal" # User name 
             DOCKERNAME="net_toolbox"
