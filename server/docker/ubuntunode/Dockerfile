@@ -20,6 +20,7 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     sudo fail2ban libpam-pwquality libpwquality-tools \
     libpam-google-authenticator \
     john \
+    dsniff nftables rsyslog \
     tzdata \
  && dpkg-reconfigure --frontend noninteractive tzdata \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
