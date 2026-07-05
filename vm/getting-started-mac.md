@@ -13,7 +13,7 @@ These are written for CQUniversity students.
 In the following we assume you have VMWare running successfully and have downloaded the GNS3 VM Appliance (``.ova`` file).
 
 ## Import the Appliance into VMWare
-
+INCOMPLETE. Not yet tested from this point onwards, and some of the screenshots/text is just copied from the Windows instructions.
 
 ## Start the GNS3 VM
 
