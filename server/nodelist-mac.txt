@@ -13,7 +13,10 @@ docker-cqugns3-wazuh-agent
 docker-cqugns3-suricata
 docker-gns3-kali
 #docker-gns3-endhost
+# Docker replacements for FRR and NETem (no arm64 Qemu images exist for these)
+docker-cqugns3-frrnode
+docker-cqugns3-netemnode
 # QEMU VMs
 #qemu-ubuntu-mac
-#qemu-openwrt-mac
+qemu-openwrt-mac
 qemu-opnsense-mac

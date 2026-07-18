@@ -52,6 +52,8 @@ On a Mac, edit ``nodelist-mac.txt`` and run:
 ```
 bash vm-install-nodes.sh mac nodelist-mac.txt
 ```
+
+Note the Mac differences: Docker images are built for arm64, and Qemu VMs use arm64 images (``-mac`` node names). No arm64 Qemu images exist for FRR and NETem, so on a Mac these are installed as Docker containers instead (``docker-cqugns3-frrnode`` and ``docker-cqugns3-netemnode``). The templates keep the same names (*FRR*, *NETem*) so activity instructions are unchanged, but projects exported from a PC VM that contain Qemu FRR/NETem/OpenWrt/OPNsense nodes will not run on a Mac VM - solution projects must be rebuilt on the Mac using its templates.
 ## Shutdown and Snapshot
 
 You are recommended to now shutdown the GNS3 VM and take a snapshot.

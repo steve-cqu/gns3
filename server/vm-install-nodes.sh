@@ -8,11 +8,12 @@
 #   docker-ubuntu
 #   qemu-netem
 
-OSTYPE="$1"
+# Note: not called OSTYPE as that is a Bash builtin variable
+PLATFORMTYPE="$1"
 # Set platform:
 #  - Apple Mac: linux/arm64/v8
 #  - Windows/Linux: linux/amd64
-if [ "$OSTYPE" == "mac" ]; then
+if [ "$PLATFORMTYPE" == "mac" ]; then
   echo "Apple Mac detected"
   PLATFORM="linux/arm64/v8" 
 else
@@ -43,6 +44,10 @@ mkdir -p /home/gns3/docker
 # Docker containers share the host kernel, so the module must be loaded here
 sudo modprobe wireguard 2>/dev/null || echo "Warning: wireguard module not available (may need kernel update)"
 echo "wireguard" | sudo tee /etc/modules-load.d/wireguard.conf >/dev/null
+
+# Load netem qdisc kernel module (needed by the NETem docker node)
+sudo modprobe sch_netem 2>/dev/null || echo "Warning: sch_netem module not available (NETem docker node will not work)"
+echo "sch_netem" | sudo tee /etc/modules-load.d/sch_netem.conf >/dev/null
 CURDIR=`pwd`
 TMPTEMPLATE=`mktemp`
 cat template_gns3_controller-head.conf > $TMPTEMPLATE
@@ -197,6 +202,30 @@ while IFS= read -r line || [ -n "$line" ]; do
             cat templates/docker-wazuh-agent.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
             ;;
+        docker-cqugns3-frrnode)
+            # Docker replacement for the FRR Qemu VM (used on Mac; no arm64 Qemu image exists)
+            USERNAME="cqugns3"
+            DOCKERNAME="frrnode"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/frrnode/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-frr.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
+        docker-cqugns3-netemnode)
+            # Docker replacement for the NETem Qemu VM (used on Mac; no arm64 Qemu image exists)
+            USERNAME="cqugns3"
+            DOCKERNAME="netemnode"
+            mkdir -p /home/gns3/docker/$DOCKERNAME
+            cd /home/gns3/docker/$DOCKERNAME
+            cp /home/gns3/git/gns3/server/docker/netemnode/* .
+            docker build --no-cache --platform $PLATFORM -t $USERNAME/$DOCKERNAME  .
+            cd $CURDIR
+            cat templates/docker-netem.conf >> $TMPTEMPLATE
+            echo "," >> $TMPTEMPLATE
+            ;;
         docker-gns3-kali)
             USERNAME="gns3"
             DOCKERNAME="kalilinux"
@@ -299,7 +328,11 @@ while IFS= read -r line || [ -n "$line" ]; do
         qemu-ubuntu-mac)
             cd /opt/gns3/images/QEMU
             fn="ubuntu-24.04-server-cloudimg-arm64.img"
+            # Note: cloud-images-archive.ubuntu.com does not serve https; integrity is verified by md5
             wget -q http://cloud-images-archive.ubuntu.com/releases/noble/release-20241004/ubuntu-24.04-server-cloudimg-arm64.img -O ${fn}
+            # md5 from http://cloud-images-archive.ubuntu.com/releases/noble/release-20241004/MD5SUMS
+            echo -n "9b4b8ee2be8ad36a5cedd2f2c4356e6f" > ${fn}.md5sum
+            md5sum -c <(echo $(<${fn}.md5sum) ${fn})
             # Cloud init data
             wget -q https://github.com/GNS3/gns3-registry/raw/master/cloud-init/ubuntu-cloud/ubuntu-cloud-init-data.iso -O ubuntu-cloud-init-data.iso
             echo -n "9a90ee8f88736204c756015b3cd86500" > ubuntu-cloud-init-data.iso.md5sum
@@ -315,6 +348,8 @@ while IFS= read -r line || [ -n "$line" ]; do
             fn="OPNsense-24.1-ufs-efi-vm-aarch64.qcow2"
             wget -q https://github.com/maurice-w/opnsense-vm-images/releases/download/24.1/OPNsense-24.1-ufs-efi-vm-aarch64.qcow2.bz2 -O ${fn}.bz2
             bzip2 -d ${fn}.bz2
+            echo -n "99c897037a166a7ffedb56a3621bd3d1" > ${fn}.md5sum
+            md5sum -c <(echo $(<${fn}.md5sum) ${fn})
             cd $CURDIR
             cat templates/qemu-opnsense-mac.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE
@@ -324,6 +359,9 @@ while IFS= read -r line || [ -n "$line" ]; do
             fn="openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img"
             wget -q https://archive.openwrt.org/releases/23.05.0/targets/armsr/armv8/openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img.gz -O ${fn}.gz
             gzip -d ${fn}.gz
+            rm -f ${fn}.gz
+            echo -n "bbb6191154e26079b19a1337d2545442" > ${fn}.md5sum
+            md5sum -c <(echo $(<${fn}.md5sum) ${fn})
             cd $CURDIR
             cat templates/qemu-openwrt-mac.conf >> $TMPTEMPLATE
             echo "," >> $TMPTEMPLATE

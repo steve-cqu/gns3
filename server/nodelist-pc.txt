@@ -13,6 +13,11 @@ docker-cqugns3-wazuh-agent
 docker-cqugns3-suricata
 docker-gns3-kali
 #docker-gns3-endhost
+# Docker replacements for the FRR and NETem Qemu VMs (currently used on Mac only;
+# planned to become the PC default from next term - enable these and comment out
+# qemu-frr and qemu-netem below)
+#docker-cqugns3-frrnode
+#docker-cqugns3-netemnode
 # QEMU VMs
 #qemu-ubuntu
 qemu-netem
