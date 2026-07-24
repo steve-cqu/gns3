@@ -6,11 +6,17 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     frr \
     iproute2 \
+    ifupdown \
     iputils-ping \
     tcpdump \
     procps \
     nano \
     && rm -rf /var/lib/apt/lists/*
+# ifupdown provides ifup/ifdown and /etc/init.d/networking so the activities'
+# "edit /etc/network/interfaces then restart networking" step works (Debian
+# bookworm-slim has no networking tooling by default; Alpine nodes get it from
+# BusyBox). GNS3 applies the interfaces file at container start; ifupdown lets a
+# student re-apply edits at runtime without restarting the node.
 
 # Enable the routing daemons used in activities (zebra and staticd always run)
 RUN sed -i \
