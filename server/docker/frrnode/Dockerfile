@@ -26,6 +26,11 @@ RUN sed -i \
     -e 's/^ripd=no/ripd=yes/' \
     /etc/frr/daemons
 
+# Use split per-daemon config files (ospfd.conf, bgpd.conf, …) like the FRR Qemu VM
+# and the activities, instead of Debian's default integrated /etc/frr/frr.conf.
+RUN echo 'no service integrated-vtysh-config' > /etc/frr/vtysh.conf \
+    && chown frr:frr /etc/frr/vtysh.conf
+
 ADD start-frr.sh /bin/start-frr.sh
 RUN chmod +x /bin/start-frr.sh
 
