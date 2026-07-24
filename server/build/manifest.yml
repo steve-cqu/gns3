@@ -1,0 +1,172 @@
+# GNS3 VM build manifest — single source of truth for node/template installation.
+#
+# Consumed by gns3build.py (Layer 0) and, later, the Ansible roles (Layer 1).
+# Node/template mapping and image sources were extracted from ../vm-install-nodes.sh.
+#
+# Project audience mapping: the curated lists ../projects-student.txt and
+# ../projects-staff.txt are the source of truth. As a guideline, *-Template projects
+# go to the student VM and *-Solution projects to the staff VM, with some student-facing
+# exceptions already captured in projects-student.txt (e.g. GNS3-Intro-Solution).
+
+gns3_version: "2.2.54"
+
+# Paths relative to this manifest file.
+paths:
+  templates_dir: ../templates      # templates/<name>.conf (each a GNS3 template JSON object)
+  docker_dir: ../docker            # server/docker/<name>/ build contexts (local sources)
+
+# GNS3 registry raw base (for docker nodes pulled from upstream)
+registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master
+
+# ---------------------------------------------------------------------------
+# Profiles = platform (arch) x audience. The build host picks the platform
+# (Ubuntu -> pc/amd64, Apple Silicon -> mac/arm64); audience selects the project set.
+# ---------------------------------------------------------------------------
+profiles:
+  pc-student:  { platform: pc,  audience: student }
+  pc-staff:    { platform: pc,  audience: staff   }
+  mac-student: { platform: mac, audience: student }
+  mac-staff:   { platform: mac, audience: staff   }
+
+# Nodes enabled per platform, in install order. Keys reference `nodes:` below.
+# NOTE: pc now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
+# Qemu ones — this bakes in the Qemu->Docker migration for the fresh PC VM.
+platforms:
+  pc:
+    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
+             net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
+             frrnode, netemnode]
+    qemu:   [openwrt, opnsense]
+  mac:
+    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
+             net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
+             frrnode, netemnode]
+    qemu:   [openwrt-mac, opnsense-mac]
+
+# ---------------------------------------------------------------------------
+# Node definitions. `templates` lists the templates/<name>.conf files to register
+# for that node (one image can back several templates, e.g. alpinenode).
+# ---------------------------------------------------------------------------
+nodes:
+  # --- Docker nodes built from the GNS3 registry ---
+  openvswitch:
+    kind: docker
+    image: gns3/openvswitch:latest
+    source: {type: registry, dir: docker/openvswitch, files: [Dockerfile, init.sh]}
+    templates: [docker-openvswitch]
+  ipterm-base:
+    kind: docker
+    image: gns3/ipterm-base:latest
+    source: {type: registry, dir: docker/ipterm/base, files: [Dockerfile]}
+    templates: []                       # support image, no template
+  ipterm:
+    kind: docker
+    image: gns3/ipterm:latest
+    source: {type: registry, dir: docker/ipterm/cli, files: [Dockerfile]}
+    build_args: {DOCKER_REPOSITORY: gns3}
+    templates: []
+  webterm:
+    kind: docker
+    image: gns3/webterm:latest
+    source: {type: registry, dir: docker/ipterm/web, files: [Dockerfile]}
+    build_args: {DOCKER_REPOSITORY: gns3}
+    templates: [docker-firefoxhost]
+  kali:
+    kind: docker
+    image: gns3/kalilinux:latest
+    source: {type: registry, dir: docker/kalilinux, files: [Dockerfile, index-1.html]}
+    templates: [docker-kali]
+
+  # --- Docker nodes built from this repo (server/docker/<name>/) ---
+  alpinenode:
+    kind: docker
+    image: cqugns3/alpinenode:latest
+    source: {type: local, path: alpinenode}
+    templates: [docker-linuxhost, docker-linuxrouter, docker-vpnrouter, docker-ansiblehost]
+  ubuntunode:
+    kind: docker
+    image: cqugns3/ubuntunode:latest
+    source: {type: local, path: ubuntunode}
+    templates: [docker-ubuntuhost]
+  net_toolbox:
+    kind: docker
+    image: adosztal/net_toolbox:latest
+    source: {type: local, path: net_toolbox}
+    templates: [docker-linuxserver]
+  auth-kerberos:
+    kind: docker
+    image: cqugns3/auth-kerberos:latest
+    source: {type: local, path: auth-kerberos}
+    templates: [docker-kerberos]
+  ipv6node:
+    kind: docker
+    image: cqugns3/ipv6node:latest
+    source: {type: local, path: ipv6node}
+    templates: [docker-ipv6node]
+  wazuh-agent:
+    kind: docker
+    image: cqugns3/wazuh-agent:latest
+    source: {type: local, path: wazuh-agent}
+    templates: [docker-wazuh-agent]
+  suricata:
+    kind: docker
+    image: cqugns3/suricata:latest
+    source: {type: local, path: suricata}
+    templates: [docker-suricata]
+  frrnode:
+    kind: docker
+    image: cqugns3/frrnode:latest
+    source: {type: local, path: frrnode}
+    templates: [docker-frr]
+  netemnode:
+    kind: docker
+    image: cqugns3/netemnode:latest
+    source: {type: local, path: netemnode}
+    templates: [docker-netem]
+
+  # --- Qemu images (amd64 / pc) ---
+  openwrt:
+    kind: qemu
+    file: openwrt-23.05.0-x86-64-generic-ext4-combined.img
+    url: https://downloads.openwrt.org/releases/23.05.0/targets/x86/64/openwrt-23.05.0-x86-64-generic-ext4-combined.img.gz
+    unpack: gzip
+    md5: 8d53c7aa2605a8848b0b2ca759fc924f
+    templates: [qemu-openwrt]
+  opnsense:
+    kind: qemu
+    file: OPNsense-24.1-nano-amd64.img
+    url: https://opnsense.c0urier.net/releases/24.1/OPNsense-24.1-nano-amd64.img.bz2
+    unpack: bzip2
+    md5: ea8472df2c272419b7834cddaf68048d
+    templates: [qemu-opnsense]
+
+  # --- Qemu images (arm64 / mac) ---
+  openwrt-mac:
+    kind: qemu
+    file: openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img
+    url: https://archive.openwrt.org/releases/23.05.0/targets/armsr/armv8/openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img.gz
+    unpack: gzip
+    md5: bbb6191154e26079b19a1337d2545442
+    templates: [qemu-openwrt-mac]
+  opnsense-mac:
+    kind: qemu
+    file: OPNsense-24.1-ufs-efi-vm-aarch64.qcow2
+    url: https://github.com/maurice-w/opnsense-vm-images/releases/download/24.1/OPNsense-24.1-ufs-efi-vm-aarch64.qcow2.bz2
+    unpack: bzip2
+    md5: 99c897037a166a7ffedb56a3621bd3d1
+    templates: [qemu-opnsense-mac]
+
+  # --- Qemu images available but not in the default platform lists ---
+  # (kept for reference / opt-in; FRR & NETem are now Docker, ubuntu host is Docker)
+  frr-qemu:
+    kind: qemu
+    file: frr-8.2.2.qcow2
+    url: http://downloads.sourceforge.net/project/gns-3/Qemu%20Appliances/frr-8.2.2.qcow2
+    md5: 45cda6b991a1b9e8205a3a0ecc953640
+    templates: [qemu-frr]
+  netem-qemu:
+    kind: qemu
+    file: NETem-v4.qcow2
+    url: https://sourceforge.net/projects/gns-3/files/Qemu%20Appliances/NETem-v4.qcow2/download
+    md5: e678698c97804901c7a53f6b68c8b861
+    templates: [qemu-netem]
