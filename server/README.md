@@ -39,7 +39,36 @@ NoVNC allows access to VNC node in the web browser (avoiding need for students t
 bash vm-install-vnc.sh
 ```
 
-## Install Nodes (Docker Containers and Qemu VMs)
+## Install Nodes (Docker Containers and Qemu VMs) — new way
+
+``build/gns3build.py`` installs nodes and templates from a single manifest
+(``build/manifest.yml``) instead of the ``vm-install-*.sh`` scripts. It is idempotent, so
+re-running it only does the work still outstanding. Run it on the GNS3 VM:
+
+```
+cd git/gns3/server/build
+./gns3build.py plan   --profile pc-staff      # show what would be installed
+./gns3build.py docker --profile pc-staff      # build the Docker node images
+./gns3build.py qemu   --profile pc-staff      # download + verify the Qemu disk images
+./gns3build.py templates --profile pc-staff   # register templates via the GNS3 API
+```
+
+Profiles are ``{pc,mac}-{student,staff}``: ``pc`` builds amd64 images and amd64 Qemu
+disks, ``mac`` builds arm64. Useful options:
+
+* ``--only frrnode,netemnode`` — work on just those nodes (handy while iterating)
+* ``--force`` — rebuild an image / re-download a disk that is already present
+  (needed after editing a Dockerfile, since an existing image is otherwise skipped)
+* ``--dry-run`` — print what would happen and change nothing
+* ``qemu --verify`` — re-hash disks already present instead of trusting their ``.md5sum``
+
+``templates`` also takes ``--server http://<vm-ip>`` so it can be run from your own
+machine; ``docker`` and ``qemu`` must run on the VM itself.
+
+Nothing here edits ``gns3_controller.conf`` or restarts the GNS3 service — templates are
+registered through the REST API, which is additive and safe to repeat.
+
+## Install Nodes (Docker Containers and Qemu VMs) — old way
 
 The file ``nodelist-pc.txt`` lists the Docker containers and Qemu VMs to install. You can edit the file to comment (#) those that you do not want. 
 
