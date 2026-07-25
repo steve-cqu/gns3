@@ -88,6 +88,15 @@ Kali) and about 3.7 GB of Qemu disks downloaded and checksummed. Everything is i
 so a re-run does only what is outstanding: a fully-built VM re-runs in well under a second
 per phase.
 
+**Ansible prints nothing while a task runs**, so it looks stalled for the whole of that
+first build. Both long phases are teed to logs — the playbook prints these commands before
+it goes quiet:
+
+```sh
+ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build.log'   # the build phases, on the VM
+tail -F ansible/gns3build-verify.log                  # the verification runs, here
+```
+
 Useful flags (anything after the profile is passed to `ansible-playbook`):
 
 | | |

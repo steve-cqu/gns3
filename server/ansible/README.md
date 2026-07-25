@@ -55,6 +55,19 @@ put that on the VM's disk *and* transfer it, for no benefit.
 | `-e extra_project_dir=…` | where the oversized out-of-git projects live (default: `../infiles`) |
 | `--check` | dry run — passes `--dry-run` through to rsync *and* `gns3build.py`, so it reports what the build would actually do rather than skipping the tasks |
 
+## Watching a run
+
+Ansible shows no output while a task is running, and the build phase is half an hour of
+Docker builds. The two long phases are teed to logs, and the playbook prints these
+commands at the start, before it goes quiet:
+
+```sh
+ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build.log'   # build phases, on the VM
+tail -F gns3build-verify.log                          # verification, here
+```
+
+Both are truncated at the start of each run, hence `tail -F` rather than `-f`.
+
 ## Artifacts a run leaves here
 
 Both are per-build records, gitignored, and worth keeping alongside the OVA:

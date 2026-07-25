@@ -1,3 +1,4 @@
 # Build artifacts produced by a run — records of a specific build, not source.
 .gns3build-imports.json
 provenance-*.json
+gns3build-verify.log

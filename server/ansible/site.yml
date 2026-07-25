@@ -62,6 +62,12 @@
     import_record_remote: /home/gns3/.gns3build-imports.json
     provenance_path: /home/gns3/gns3-build-provenance.json
 
+    # Ansible shows nothing while a task runs, and the build phase is half an hour of
+    # docker builds. Tee the two long, silent phases to logs you can tail. Stable paths,
+    # truncated per run, so the tail command never changes (use `tail -F`).
+    build_log: /home/gns3/gns3build.log
+    verify_log: "{{ playbook_dir }}/gns3build-verify.log"
+
     # Resolved via hostvars, not bare ansible_host: inside a `delegate_to: localhost`
     # task ansible_host refers to the *delegation target*, so the bare form silently
     # becomes "localhost" in exactly the tasks that need the VM's address.
@@ -94,10 +100,12 @@
 
     - name: Report what we are building
       ansible.builtin.debug:
-        msg: >-
-          profile={{ profile }} vm={{ api_url }}
-          gns3={{ (gns3_version.content | from_json).version }}
-          verify={{ verify }}
+        msg:
+          - "profile={{ profile }} vm={{ api_url }}
+             gns3={{ (gns3_version.content | from_json).version }} verify={{ verify }}"
+          - "The build phase is long and ansible prints nothing while it runs. Watch it:"
+          - "  ssh {{ ansible_user }}@{{ vm_address }} 'tail -F {{ build_log }}'"
+          - "  tail -F {{ verify_log }}    # once it reaches verification"
 
     # ---------------------------------------------------------------- sync ----
     # Sync only what the engine needs: the build tooling, docker contexts, templates and
@@ -217,10 +225,17 @@
     # --------------------------------------------------------------- build ----
     # Everything except projects runs on the VM: docker builds must happen on the
     # target architecture, and qemu/logos/novnc touch its filesystem.
+    # `set -o pipefail` is load-bearing: without it the task's exit status is tee's, which
+    # is always 0, and a failed build would be reported as a success. bash because the
+    # VM's /bin/sh is dash, which has no pipefail.
     - name: Run the build phases on the VM
-      ansible.builtin.command: >-
+      ansible.builtin.shell: >-
+        set -o pipefail &&
         {{ gns3build }} build --profile {{ profile }} --skip projects
         --server http://localhost {{ '--dry-run' if ansible_check_mode else '' }}
+        2>&1 | tee {{ build_log }}
+      args:
+        executable: /bin/bash
       register: gns3_build
       check_mode: false
       changed_when: >-
@@ -264,11 +279,25 @@
     # failed_when: false so every activity runs even after one goes red — a pre-export
     # gate should report the whole list of what is broken, not just the first thing.
     # The assert below is the gate.
+    - name: Start a fresh verification log
+      ansible.builtin.copy:
+        content: "verification of {{ profile }} on {{ api_url }} — {{ verify }}\n"
+        dest: "{{ verify_log }}"
+        mode: "0644"
+      delegate_to: localhost
+      changed_when: false
+      when: verify != 'none' and not ansible_check_mode
+
+    # pipefail again — see the build phase. Without it every activity would report rc=0
+    # and the gate below would pass whatever happened.
     - name: Verify the appliance with gns3_autotest.py
-      ansible.builtin.command: >-
+      ansible.builtin.shell: >-
+        set -o pipefail &&
         python3 {{ gns3_dev_repo }}/tools/gns3_autotest.py
         {{ '--all' if verify == 'all' else item }}
-        --server {{ api_url }}
+        --server {{ api_url }} 2>&1 | tee -a {{ verify_log }}
+      args:
+        executable: /bin/bash
       register: gns3_verify
       delegate_to: localhost
       changed_when: false
