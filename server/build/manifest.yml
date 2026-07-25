@@ -14,9 +14,27 @@ gns3_version: "2.2.54"
 paths:
   templates_dir: ../templates      # templates/<name>.conf (each a GNS3 template JSON object)
   docker_dir: ../docker            # server/docker/<name>/ build contexts (local sources)
+  symbols_dir: ../../images/symbols  # CQU node logos (*.svg) installed by the `logos` phase
+  lists_dir: ..                    # projects-<audience>.txt
 
 # Absolute path on the GNS3 VM where Qemu disk images live.
 qemu_images_dir: /opt/gns3/images/QEMU
+
+# Where the `projects` phase looks for <Name>.gns3project, in order, searched
+# recursively; first match wins. Override with --roots (e.g. when importing from the
+# build host over --server instead of from the VM's own disk), in which case use
+#   --roots <gns3-dev>/activities,<infiles>
+# ORDER MATTERS: put the authoritative copy first. Do NOT include gns3-dev/outfiles —
+# it is a generated-output dir holding stale exports that share their project_id with the
+# rebuilt originals under activities/, so importing one shadows the other. The phase warns
+# (DUP) whenever a name resolves under more than one root.
+project_roots: [/home/gns3/projects]
+
+# noVNC lets students reach VNC nodes (e.g. Firefox Host) from a browser.
+novnc:
+  packages: [novnc, python3-websockify, python3-numpy]
+  script: ../start-vnc.sh          # installed to, and run from, the gns3 home dir
+  install_to: ~/start-vnc.sh
 
 # GNS3 registry raw base (for docker nodes pulled from upstream)
 registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master
@@ -46,13 +64,13 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
-    qemu:   [openwrt, opnsense]
+    qemu:   [openwrt, opnsense, ubuntu-cloud]
   mac:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
-    qemu:   [openwrt-mac, opnsense-mac]
+    qemu:   [openwrt-mac, opnsense-mac, ubuntu-cloud-mac]
 
 # ---------------------------------------------------------------------------
 # Node definitions. `templates` lists the templates/<name>.conf files to register
@@ -139,6 +157,7 @@ nodes:
   # file:   name under qemu_images_dir (post-unpack); md5 is of *this* file
   # unpack: gzip | bzip2 | zip | none (default none)
   # resize: optional `qemu-img resize` argument, e.g. "+2G" (applied after md5 verify)
+  # extra:  companion files the node's template also needs (same keys), e.g. a cdrom ISO
 
   # --- Qemu images (amd64 / pc) ---
   openwrt:
@@ -155,6 +174,20 @@ nodes:
     unpack: bzip2
     md5: ea8472df2c272419b7834cddaf68048d
     templates: [qemu-opnsense]
+  # Required by SDN-Basics-Template: its SDN controller node is a qcow2 *overlay* whose
+  # backing file is this image at exactly this size, so the `resize` is not optional.
+  # (The legacy nodelist-pc.txt omitted qemu-ubuntu, which left that node unstartable.)
+  ubuntu-cloud:
+    kind: qemu
+    file: ubuntu-24.04-server-cloudimg-amd64.img
+    url: https://cloud-images.ubuntu.com/releases/noble/release-20241004/ubuntu-24.04-server-cloudimg-amd64.img
+    md5: a1c8a01953578ad432cbef03db2f3161
+    resize: "+2G"
+    extra:
+      - file: ubuntu-cloud-init-data.iso
+        url: https://github.com/GNS3/gns3-registry/raw/master/cloud-init/ubuntu-cloud/ubuntu-cloud-init-data.iso
+        md5: 9a90ee8f88736204c756015b3cd86500
+    templates: [qemu-ubuntu]
 
   # --- Qemu images (arm64 / mac) ---
   openwrt-mac:
@@ -171,6 +204,19 @@ nodes:
     unpack: bzip2
     md5: 99c897037a166a7ffedb56a3621bd3d1
     templates: [qemu-opnsense-mac]
+  ubuntu-cloud-mac:
+    kind: qemu
+    file: ubuntu-24.04-server-cloudimg-arm64.img
+    # cloud-images-archive.ubuntu.com does not serve https; integrity is verified by md5
+    # (published at .../releases/noble/release-20241004/MD5SUMS)
+    url: http://cloud-images-archive.ubuntu.com/releases/noble/release-20241004/ubuntu-24.04-server-cloudimg-arm64.img
+    md5: 9b4b8ee2be8ad36a5cedd2f2c4356e6f
+    resize: "+2G"
+    extra:
+      - file: ubuntu-cloud-init-data.iso
+        url: https://github.com/GNS3/gns3-registry/raw/master/cloud-init/ubuntu-cloud/ubuntu-cloud-init-data.iso
+        md5: 9a90ee8f88736204c756015b3cd86500
+    templates: [qemu-ubuntu-mac]
 
   # --- Qemu images available but not in the default platform lists ---
   # (kept for reference / opt-in; FRR & NETem are now Docker, ubuntu host is Docker)
