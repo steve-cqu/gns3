@@ -54,6 +54,14 @@
 
     gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
 
+    # The projects phase runs on the control node, so its record of each source file's
+    # size + sha256 lands here and is copied to the VM for `provenance` to fold in. Git
+    # cannot hold the oversized projects, so this is the only durable statement of which
+    # bytes the appliance was built from.
+    import_record_local: "{{ playbook_dir }}/.gns3build-imports.json"
+    import_record_remote: /home/gns3/.gns3build-imports.json
+    provenance_path: /home/gns3/gns3-build-provenance.json
+
     # Resolved via hostvars, not bare ansible_host: inside a `delegate_to: localhost`
     # task ansible_host refers to the *delegation target*, so the bare form silently
     # becomes "localhost" in exactly the tasks that need the VM's address.
@@ -182,6 +190,7 @@
         --profile {{ profile }}
         --server {{ api_url }}
         --roots {{ project_roots | join(',') }}
+        --record {{ import_record_local }}
         {{ '--dry-run' if ansible_check_mode else '' }}
       register: gns3_projects
       delegate_to: localhost
@@ -240,6 +249,56 @@
         label: "{{ item.item | default('all') or 'all' }}"
       when: verify != 'none' and not ansible_check_mode
 
+    # ------------------------------------------------- pre-export gate + record ----
+    # A student OVA must not carry staff solutions, and a stray .gns3project staged on
+    # the VM ships inside the image even though nothing imports it. Fail here rather than
+    # after the OVA is built and handed out.
+    - name: Check nothing outside this audience would ship
+      ansible.builtin.command: "{{ gns3build }} export-check --profile {{ profile }}"
+      register: gns3_export_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Report the export check
+      ansible.builtin.debug:
+        msg: "{{ gns3_export_check.stdout_lines }}"
+
+    - name: Fail if the appliance would leak another audience's projects
+      ansible.builtin.assert:
+        that: gns3_export_check.rc == 0
+        fail_msg: >-
+          export-check found content that must not ship as '{{ profile }}' — see the LEAK
+          lines above. Do NOT export this VM until they are removed.
+        quiet: true
+
+    - name: Copy the source-checksum record to the VM
+      ansible.builtin.copy:
+        src: "{{ import_record_local }}"
+        dest: "{{ import_record_remote }}"
+        mode: "0644"
+      when: not ansible_check_mode
+
+    - name: Record what this appliance contains
+      ansible.builtin.command: >-
+        {{ gns3build }} provenance --profile {{ profile }}
+        --imports {{ import_record_remote }} --out {{ provenance_path }}
+      register: gns3_provenance
+      changed_when: not ansible_check_mode
+      failed_when: false
+      check_mode: false
+
+    - name: Report the provenance manifest
+      ansible.builtin.debug:
+        msg: "{{ gns3_provenance.stdout_lines }}"
+
+    - name: Fetch the provenance manifest next to the build
+      ansible.builtin.fetch:
+        src: "{{ provenance_path }}"
+        dest: "{{ playbook_dir }}/provenance-{{ profile }}.json"
+        flat: true
+      when: not ansible_check_mode
+
     - name: Build complete
       ansible.builtin.debug:
         msg: >-
@@ -249,4 +308,6 @@
           {{ 'skipped in check mode' if ansible_check_mode
              else ('skipped' if verify == 'none' else verify + ' PASSED') }}.
           {{ '' if ansible_check_mode else
-             'Snapshot the VM now, then export the appliance.' }}
+             'export-check OK; provenance in ' + provenance_path + ' (copy fetched to '
+             + playbook_dir + '/provenance-' + profile + '.json). Next: shut the VM down,'
+             + ' snapshot it, then export the OVA — see ansible/README.md.' }}

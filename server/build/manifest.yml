@@ -55,6 +55,16 @@ profiles:
   mac-student: { platform: mac, audience: student }
   mac-staff:   { platform: mac, audience: staff   }
 
+# Which ../projects-<list>.txt each audience installs, in order (names de-duplicated).
+# The staff VM is a superset: the manual build imported the student projects, exported the
+# student OVA, then added the staff-only projects to the same VM and exported again. The
+# two lists are disjoint, so a staff build that read only projects-staff.txt would ship a
+# VM missing every student project. `export-check` enforces this both ways: nothing outside
+# the audience's own lists may be present when the OVA is cut.
+audiences:
+  student: [student]
+  staff:   [student, staff]
+
 # Nodes enabled per platform, in install order. Keys reference `nodes:` below.
 # NOTE: pc now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
 # Qemu ones — this bakes in the Qemu->Docker migration for the fresh PC VM.

@@ -19,6 +19,10 @@ Subcommands
   projects  --profile P     import the audience's .gns3project files
   build     --profile P     every phase above, in order
 
+Before cutting an OVA:
+  export-check --profile P  fail if the VM carries another audience's projects
+  provenance   --profile P  record what this appliance actually contains
+
 `validate`/`plan`/`templates`/`projects` work from anywhere (they take --server URL,
 default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `logos` and `novnc` touch the
 local docker daemon and filesystem, so they run **on the GNS3 VM** — the Ansible wrapper
@@ -33,6 +37,7 @@ already in place (qemu) is skipped, so re-running is cheap. --force rebuilds/re-
 """
 import argparse
 import bz2
+import datetime
 import hashlib
 import json
 import os
@@ -132,12 +137,31 @@ def run(cmd, check=True, capture=False):
     return r
 
 
-def md5_of(path, chunk=1 << 20):
-    h = hashlib.md5()
+def _digest(path, algo, chunk=1 << 20):
+    h = hashlib.new(algo)
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(chunk), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def md5_of(path, chunk=1 << 20):
+    return _digest(path, "md5", chunk)
+
+
+def sha256_of(path, chunk=1 << 20):
+    return _digest(path, "sha256", chunk)
+
+
+def dir_bytes(path):
+    total = 0
+    for root, _dirs, files in os.walk(str(path)):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(root, name)).st_size
+            except OSError:
+                pass
+    return total
 
 
 def human(n):
@@ -206,6 +230,9 @@ class Controller:
 
     def projects(self):
         return self._req("GET", "/projects")
+
+    def project_nodes(self, project_id):
+        return self._req("GET", f"/projects/{project_id}/nodes")
 
     def import_project(self, project_id, path, timeout=3600):
         """POST a .gns3project as the raw body, streamed — SDN-Basics-Template is 729 MB."""
@@ -752,16 +779,26 @@ def cmd_novnc(args):
 # Phase: projects — import the audience's .gns3project files via the API
 # --------------------------------------------------------------------------- #
 def read_project_list(m, audience):
-    """Names from projects-<audience>.txt (the file has no trailing newline)."""
-    f = (m["_dir"] / m["paths"].get("lists_dir", "..") / f"projects-{audience}.txt").resolve()
-    if not f.exists():
-        sys.exit(f"project list not found: {f}")
-    names = []
-    for line in f.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            names.append(line)
-    return f, names
+    """Project names for an audience, from every list the manifest maps it to.
+
+    `audiences:` decides which projects-<list>.txt files apply; staff maps to
+    [student, staff] because the staff VM is the student VM plus the solutions. Order is
+    preserved and names de-duplicated. The files have no trailing newline, which
+    splitlines() handles.
+    """
+    lists = (m.get("audiences") or {}).get(audience, [audience])
+    files, names, seen = [], [], set()
+    for which in lists:
+        f = (m["_dir"] / m["paths"].get("lists_dir", "..") / f"projects-{which}.txt").resolve()
+        if not f.exists():
+            sys.exit(f"project list not found: {f}")
+        files.append(f)
+        for line in f.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and line not in seen:
+                seen.add(line)
+                names.append(line)
+    return files, names
 
 
 def find_project_files(name, roots):
@@ -798,7 +835,7 @@ def cmd_projects(args):
     if args.profile not in m["profiles"]:
         sys.exit(f"unknown profile '{args.profile}' (have: {', '.join(m['profiles'])})")
     audience = m["profiles"][args.profile]["audience"]
-    list_file, names = read_project_list(m, audience)
+    list_files, names = read_project_list(m, audience)
     roots = ([r.strip() for r in args.roots.split(",") if r.strip()] if args.roots
              else m.get("project_roots", ["/home/gns3/projects"]))
 
@@ -808,13 +845,13 @@ def cmd_projects(args):
     except urllib.error.URLError as e:
         sys.exit(f"cannot reach controller at {args.server}: {e}")
     print(f"controller {args.server} — GNS3 {ver}")
-    print(f"profile {args.profile}  (audience: {audience}) — {list_file.name}, "
-          f"{len(names)} project(s)")
+    print(f"profile {args.profile}  (audience: {audience}) — "
+          f"{', '.join(f.name for f in list_files)}, {len(names)} project(s)")
     print(f"roots: {', '.join(str(r) for r in roots)}\n")
 
     existing = {p["project_id"] for p in ctrl.projects()}
     imported = skipped = 0
-    notfound, failures, shadowed = [], [], []
+    notfound, failures, shadowed, records = [], [], [], []
     for name in names:
         hits = find_project_files(name, roots)
         if not hits:
@@ -837,6 +874,11 @@ def cmd_projects(args):
             print(f"  ERROR  {name:34} no project_id in project.gns3")
             failures.append(name)
             continue
+        # Recorded whether or not we import: git cannot hold the oversized project files,
+        # so this is the only durable statement of which bytes a build was made from.
+        if args.record:
+            records.append({"name": name, "project_id": pid, "source": str(path),
+                            "bytes": path.stat().st_size, "sha256": sha256_of(path)})
         if pid in existing:
             print(f"  skip   {name:34} (already imported: {pid})")
             skipped += 1
@@ -858,6 +900,10 @@ def cmd_projects(args):
             print(f"  ERROR  {name}: {e}")
             failures.append(name)
 
+    if args.record and not args.dry_run:
+        write_import_record(args.record, args.profile, audience, records)
+        print(f"\n  record {args.record} ({len(records)} source file(s))")
+
     verb = "would import" if args.dry_run else "imported"
     print(f"\n{verb} {imported}, skipped {skipped}, not found {len(notfound)}, "
           f"failed {len(failures)}")
@@ -871,6 +917,261 @@ def cmd_projects(args):
     if failures:
         print(f"  failed: {', '.join(failures)}")
     return 1 if failures else 0
+
+
+# --------------------------------------------------------------------------- #
+# Phase: export-check — the gate that runs before an OVA is cut
+# --------------------------------------------------------------------------- #
+def cmd_export_check(args):
+    """Refuse to bless an appliance that carries projects its audience should not ship.
+
+    Two ways content leaks into an OVA: a project imported into the controller, and a
+    stray .gns3project staged on the VM's disk (the manual build copied them to
+    /home/gns3/projects, and `rm -f` was a step you had to remember). Both are checked.
+    """
+    m = load_manifest(args.manifest)
+    if args.profile not in m["profiles"]:
+        sys.exit(f"unknown profile '{args.profile}' (have: {', '.join(m['profiles'])})")
+    audience = m["profiles"][args.profile]["audience"]
+    _files, allowed = read_project_list(m, audience)
+    allowed_set = set(allowed)
+
+    # Everything this build is NOT supposed to ship, named so the report can say why.
+    foreign = {}
+    for other in m.get("audiences", {}):
+        if other == audience:
+            continue
+        for name in read_project_list(m, other)[1]:
+            if name not in allowed_set:
+                foreign[name] = other
+
+    ctrl = Controller(args.server)
+    try:
+        ctrl.version()
+    except urllib.error.URLError as e:
+        sys.exit(f"cannot reach controller at {args.server}: {e}")
+
+    print(f"profile {args.profile}  (audience: {audience}) — "
+          f"{len(allowed)} project(s) permitted\n")
+
+    problems, warnings = [], []
+
+    imported = {p["name"]: p["project_id"] for p in ctrl.projects()}
+    for name in sorted(imported):
+        if name in allowed_set:
+            continue
+        if name in foreign:
+            problems.append(f"project '{name}' is imported but belongs to the "
+                            f"'{foreign[name]}' audience")
+        else:
+            warnings.append(f"project '{name}' is imported but is on no audience list")
+    missing = [n for n in allowed if n not in imported]
+
+    # Staged .gns3project files ship inside the OVA even though nothing imports them.
+    staged_dirs = [Path(os.path.expanduser(str(d)))
+                   for d in (m.get("project_roots") or [])]
+    staged = []
+    for d in staged_dirs:
+        if d.is_dir():
+            staged += sorted(d.rglob("*.gns3project"))
+    for f in staged:
+        name = f.name[: -len(".gns3project")]
+        if name in foreign:
+            problems.append(f"staged file {f} belongs to the '{foreign[name]}' audience "
+                            f"and would ship inside the OVA")
+        else:
+            warnings.append(f"staged file {f} ({human(f.stat().st_size)}) would ship "
+                            f"inside the OVA for no benefit — delete it")
+
+    # Will the nodes actually start? A project can be perfectly legal for this audience
+    # and still be unusable because it names an image this platform does not install.
+    # The mac profile is where this bites: a project built on a PC carries amd64 Qemu
+    # nodes (and SDN-Basics-Template's disk is an overlay backed by the *amd64* Ubuntu
+    # image), none of which exist on an arm64 build.
+    images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
+    have_docker = set()
+    if shutil.which("docker"):
+        out = _cmd_out(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}"])
+        have_docker = set((out or "").split())
+    broken = []
+    for name, pid in sorted(imported.items()):
+        for node in ctrl.project_nodes(pid):
+            props = node.get("properties") or {}
+            if node.get("node_type") == "qemu":
+                for field in ("hda_disk_image", "hdb_disk_image", "cdrom_image"):
+                    disk = props.get(field)
+                    if disk and not (images_dir / os.path.basename(disk)).exists():
+                        broken.append(f"{name}: qemu disk '{os.path.basename(disk)}' "
+                                      f"is not installed")
+            elif node.get("node_type") == "docker" and have_docker:
+                if props.get("image") and props["image"] not in have_docker:
+                    broken.append(f"{name}: docker image '{props['image']}' is not built")
+    broken = sorted(set(broken))
+
+    print(f"  imported projects   {len(imported)}")
+    print(f"  permitted           {len(allowed)}")
+    print(f"  staged files        {len(staged)}")
+    if missing:
+        print(f"\n  INCOMPLETE  {len(missing)} permitted project(s) not imported: "
+              f"{', '.join(missing)}")
+    for b in broken:
+        print(f"  BROKEN {b}")
+    for w in warnings:
+        print(f"  WARN   {w}")
+    for p in problems:
+        print(f"  LEAK   {p}")
+
+    if broken and args.strict:
+        problems += [f"unstartable node: {b}" for b in broken]
+    if problems:
+        print(f"\nFAIL — {len(problems)} problem(s). Do NOT export this VM as "
+              f"'{audience}' until they are fixed.")
+        return 1
+    print(f"\nOK — nothing outside the '{audience}' audience is present."
+          + (f" ({len(broken)} unstartable, " if broken else " (")
+          + f"{len(warnings)} warning(s))")
+    if broken:
+        print("       the BROKEN entries above will not start on this platform — "
+              "expected on mac for PC-built Qemu projects; use --strict to fail on them.")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# Phase: provenance — record what this appliance actually contains
+# --------------------------------------------------------------------------- #
+PROVENANCE_SCHEMA = "gns3build-provenance/1"
+
+
+def write_import_record(path, profile, audience, records):
+    """Source-side record written by `projects`, merged into the provenance manifest."""
+    p = Path(os.path.expanduser(path))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"profile": profile, "audience": audience,
+                             "sources": records}, indent=2, sort_keys=True) + "\n")
+
+
+def _cmd_out(cmd):
+    try:
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           universal_newlines=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except OSError:
+        return None
+
+
+def cmd_provenance(args):
+    """Emit a manifest of what is in this appliance.
+
+    Two OVAs with the same filename are otherwise indistinguishable. This answers "which
+    build is a student running, and exactly what is in it" months later, when the only
+    thing you have is the .ova and a bug report.
+    """
+    m = load_manifest(args.manifest)
+    if args.profile not in m["profiles"]:
+        sys.exit(f"unknown profile '{args.profile}' (have: {', '.join(m['profiles'])})")
+    prof = m["profiles"][args.profile]
+    platform = prof["platform"]
+
+    ctrl = Controller(args.server)
+    try:
+        gns3_version = ctrl.version()
+    except urllib.error.URLError as e:
+        sys.exit(f"cannot reach controller at {args.server}: {e}")
+
+    prov = {
+        "schema": PROVENANCE_SCHEMA,
+        "generated_utc": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "profile": args.profile,
+        "platform": platform,
+        "audience": prof["audience"],
+        "gns3": {"controller_version": gns3_version,
+                 "manifest_expects": m.get("gns3_version")},
+        "system": {
+            "hostname": _cmd_out(["hostname"]),
+            "arch": _cmd_out(["uname", "-m"]),
+            "kernel": _cmd_out(["uname", "-r"]),
+            "docker": _cmd_out(["docker", "--version"]),
+        },
+    }
+
+    # Docker: the image ID is the content hash, so it identifies the exact bytes even for
+    # a :latest tag that has been rebuilt.
+    images = []
+    for key in m["platforms"][platform].get("docker", []):
+        image = m["nodes"][key]["image"]
+        raw = _cmd_out(["docker", "image", "inspect", image,
+                        "--format", "{{.Id}}\t{{.Size}}\t{{.Created}}"])
+        if raw:
+            iid, size, created = (raw.split("\t") + ["", "", ""])[:3]
+            images.append({"node": key, "image": image, "id": iid,
+                           "bytes": int(size) if size.isdigit() else None,
+                           "created": created})
+        else:
+            images.append({"node": key, "image": image, "id": None, "missing": True})
+    prov["docker_images"] = images
+
+    # Qemu: md5 comes from the sidecar the qemu phase wrote, so this costs nothing.
+    images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
+    disks = []
+    for key in m["platforms"][platform].get("qemu", []):
+        for spec in qemu_files(m["nodes"][key]):
+            f = images_dir / spec["file"]
+            sidecar = Path(str(f) + ".md5sum")
+            disks.append({
+                "node": key, "file": spec["file"],
+                "present": f.exists(),
+                "bytes": f.stat().st_size if f.exists() else None,
+                "md5": sidecar.read_text().strip() if sidecar.exists()
+                       else spec.get("md5"),
+                "resize": spec.get("resize"),
+            })
+    prov["qemu_images"] = disks
+
+    prov["templates"] = sorted(
+        ({"name": t.get("name"), "template_id": t.get("template_id"),
+          "type": t.get("template_type")} for t in ctrl.templates()),
+        key=lambda t: (t["name"] or ""))
+
+    projects_dir = Path(args.projects_dir)
+    projects = []
+    for p in sorted(ctrl.projects(), key=lambda p: p["name"]):
+        d = projects_dir / p["project_id"]
+        projects.append({"name": p["name"], "project_id": p["project_id"],
+                         "bytes": dir_bytes(d) if d.is_dir() else None})
+    prov["projects"] = projects
+
+    # Source checksums recorded by `projects --record`, if that record reached us.
+    record = Path(os.path.expanduser(args.imports)) if args.imports else None
+    if record and record.is_file():
+        prov["sources"] = json.loads(record.read_text()).get("sources", [])
+    else:
+        prov["sources"] = []
+        if args.imports:
+            print(f"  note   no import record at {record} — source checksums omitted")
+
+    out = Path(os.path.expanduser(args.out))
+    if args.dry_run:
+        print(json.dumps(prov, indent=2, sort_keys=True))
+        return 0
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+
+    missing_imgs = [i["image"] for i in images if i.get("missing")]
+    missing_disks = [d["file"] for d in disks if not d["present"]]
+    print(f"provenance -> {out}")
+    print(f"  generated    {prov['generated_utc']}")
+    print(f"  profile      {args.profile} ({platform}/{prof['audience']})")
+    print(f"  gns3         {gns3_version}  on {prov['system']['arch']} "
+          f"kernel {prov['system']['kernel']}")
+    print(f"  docker       {len(images)} image(s)"
+          + (f" — MISSING: {', '.join(missing_imgs)}" if missing_imgs else ""))
+    print(f"  qemu         {len(disks)} disk(s)"
+          + (f" — MISSING: {', '.join(missing_disks)}" if missing_disks else ""))
+    print(f"  templates    {len(prov['templates'])}")
+    print(f"  projects     {len(projects)} "
+          f"({human(sum(p['bytes'] or 0 for p in projects))} on disk)")
+    print(f"  sources      {len(prov['sources'])} file(s) with checksums")
+    return 1 if (missing_imgs or missing_disks) else 0
 
 
 # --------------------------------------------------------------------------- #
@@ -898,11 +1199,15 @@ def cmd_build(args):
 
     handlers = {"templates": cmd_templates, "docker": cmd_docker, "qemu": cmd_qemu,
                 "logos": cmd_logos, "novnc": cmd_novnc, "projects": cmd_projects}
-    # Every phase reads its options off one namespace; unused ones are simply ignored.
+    # Every phase reads its options off this one namespace, so it must carry a default
+    # for every option any phase's sub-parser defines — a missing one is an AttributeError
+    # at run time, not a parse error. Add new phase options here too.
     common = argparse.Namespace(
         manifest=args.manifest, profile=args.profile, server=args.server,
         dry_run=args.dry_run, force=args.force, only=None, skip=None, verify=False,
-        images_dir=None, symbols_dir=None, dest=None, roots=args.roots)
+        images_dir=None, symbols_dir=None, dest=None, roots=args.roots,
+        record=None, imports=None, out=None, projects_dir="/opt/gns3/projects",
+        strict=False)
 
     print(f"build profile {args.profile}: {' -> '.join(phases)}\n")
     results = []
@@ -912,6 +1217,9 @@ def cmd_build(args):
             rc = handlers[phase](common) or 0
         except SystemExit as e:                       # a phase's sys.exit(msg)
             print(f"== phase {phase} aborted: {e}")
+            rc = 1
+        except Exception as e:                        # keep going; the summary still prints
+            print(f"== phase {phase} crashed: {type(e).__name__}: {e}")
             rc = 1
         results.append((phase, rc))
         if rc:
@@ -968,7 +1276,27 @@ def main():
     pr.add_argument("--profile", required=True)
     pr.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
     pr.add_argument("--roots", help="comma-separated dirs to search (overrides the manifest)")
+    pr.add_argument("--record", help="write a JSON record of each source file's size and "
+                                     "sha256 (feeds `provenance --imports`)")
     pr.add_argument("--dry-run", action="store_true")
+
+    ec = sub.add_parser("export-check",
+                        help="refuse to bless an OVA carrying another audience's projects")
+    ec.add_argument("--profile", required=True)
+    ec.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
+    ec.add_argument("--images-dir", help="override the manifest's qemu_images_dir")
+    ec.add_argument("--strict", action="store_true",
+                    help="also fail on projects whose nodes cannot start here")
+
+    pv = sub.add_parser("provenance", help="record what this appliance contains")
+    pv.add_argument("--profile", required=True)
+    pv.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
+    pv.add_argument("--out", default="~/gns3-build-provenance.json")
+    pv.add_argument("--imports", help="import record from `projects --record`")
+    pv.add_argument("--images-dir", help="override the manifest's qemu_images_dir")
+    pv.add_argument("--projects-dir", default="/opt/gns3/projects")
+    pv.add_argument("--dry-run", action="store_true",
+                    help="print the manifest instead of writing it")
 
     bd = sub.add_parser("build", help="run every phase in order")
     bd.add_argument("--profile", required=True)
@@ -987,7 +1315,9 @@ def main():
         pass
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
             "docker": cmd_docker, "qemu": cmd_qemu, "logos": cmd_logos,
-            "novnc": cmd_novnc, "projects": cmd_projects, "build": cmd_build}[args.cmd](args)
+            "novnc": cmd_novnc, "projects": cmd_projects, "build": cmd_build,
+            "export-check": cmd_export_check,
+            "provenance": cmd_provenance}[args.cmd](args)
 
 
 if __name__ == "__main__":

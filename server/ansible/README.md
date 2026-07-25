@@ -28,6 +28,12 @@ wrapper around it. In order:
 4. **import projects** with `gns3build.py projects` **from your machine**, straight into
    the VM's API
 5. **verify** with `gns3_autotest.py` and fail the build if anything comes back red
+6. **export-check** — fail if the VM carries projects this audience must not ship
+7. **provenance** — record what the appliance contains, and fetch a copy back here
+
+Steps 6 and 7 are the pre-export gate. The playbook stops short of cutting the OVA
+itself: that is one `VBoxManage export` / `ovftool` command and needs the VM shut down,
+so it stays manual — see [`../README.md`](../README.md).
 
 Every phase is idempotent, so re-running is safe and cheap — a second run of an
 unchanged build reports `changed=0` and finishes in seconds.
@@ -47,10 +53,30 @@ put that on the VM's disk *and* transfer it, for no benefit.
 | `-e verify=none` | skip verification (iterating on the build itself) |
 | `-e gns3_dev_repo=…` | path to the private `gns3-dev` checkout (default: alongside `gns3`) |
 | `-e extra_project_dir=…` | where the oversized out-of-git projects live (default: `../infiles`) |
-| `--check` | dry run |
+| `--check` | dry run — passes `--dry-run` through to rsync *and* `gns3build.py`, so it reports what the build would actually do rather than skipping the tasks |
+
+## Artifacts a run leaves here
+
+Both are per-build records, gitignored, and worth keeping alongside the OVA:
+
+- `provenance-<profile>.json` — fetched from the VM. Date, profile, GNS3/kernel versions,
+  every Docker image ID, every Qemu disk md5, every template and project, and the size +
+  sha256 of each source `.gns3project`. Without it you cannot tell two `GNS3-CQU-*.ova`
+  files apart later.
+- `.gns3build-imports.json` — the source-side record the `projects` phase writes and
+  `provenance` folds in. It is the only durable statement of which bytes the oversized
+  out-of-git projects were built from, since git cannot hold them.
 
 `build.sh` passes any extra arguments straight through, e.g.
 `./build.sh "GNS3 VM" pc-student -e verify=all`.
+
+## Tested status
+
+The `pc` (VirtualBox) path is validated end to end: build, idempotent re-run
+(`changed=0`), `--check`, verification, export-check and provenance. The `mac` (VMware
+Fusion) path shares the same code and has been dry-run checked, but has never been run on
+Apple Silicon — `vmrun getGuestIPAddress` in `build.sh` is the least-proven part, and
+`GNS3_VM_IP=<ip>` bypasses it.
 
 ## Requirements
 

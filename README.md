@@ -12,4 +12,4 @@ If you have completed the above quick start but want to know more or have issues
 - [Using GNS3 Web User Interface](./vm/using-gns3.md)
 - [VirtualBox for GNS3](./vm/virtualbox.md)
 - [VMWare for GNS3](./vm/vmware.md)
-- [Creating a new GNS3 VM](./server/README.md) (only for staff)
+- [Building the CQU GNS3 VM](./server/README.md) (only for staff)
