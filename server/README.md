@@ -39,11 +39,27 @@ NoVNC allows access to VNC node in the web browser (avoiding need for students t
 bash vm-install-vnc.sh
 ```
 
-## Building the VM with gns3build.py — new way
+## Building the VM — new way
+
+### One command, from your own machine
+
+``ansible/build.sh`` finds the VM's IP from the hypervisor, syncs this repo to it, runs the
+whole build, imports the projects and verifies the result:
+
+```
+cd ansible
+./build.sh "GNS3 VM" pc-student            # VirtualBox (PC)
+./build.sh ~/VMs/GNS3.vmx mac-staff        # VMware Fusion (Apple Silicon)
+```
+
+See ``ansible/README.md``. Everything below is what that runs under the hood, and is
+still the way to drive individual steps.
+
+### The engine, run on the VM
 
 ``build/gns3build.py`` builds the whole VM from a single manifest (``build/manifest.yml``)
 instead of the ``vm-install-*.sh`` scripts. Every phase is idempotent, so re-running only
-does the work still outstanding. The one-command form, run on the GNS3 VM:
+does the work still outstanding:
 
 ```
 cd git/gns3/server/build

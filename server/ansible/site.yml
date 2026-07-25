@@ -1,0 +1,252 @@
+---
+# Host-driven GNS3 VM build — the Layer 1 wrapper around build/gns3build.py.
+#
+#   ansible-playbook site.yml -e profile=pc-student
+#   ansible-playbook -i 192.168.56.106, site.yml -e profile=pc-staff
+#
+# or, discovering the VM's IP from the hypervisor first, `./build.sh <vm-name> <profile>`.
+#
+# This playbook is deliberately thin: gns3build.py is the engine and every phase it runs
+# is idempotent, so the playbook's job is only to (1) put the repo on the VM, (2) invoke
+# the engine, (3) import the projects, and (4) verify. Re-running is safe and cheap.
+#
+# Projects are imported *from the control node* over the API rather than being synced to
+# the VM first. SDN-Basics-Template alone is 729 MB; syncing it would copy that to the
+# VM's disk and then import it from there, doubling both the transfer and the space.
+
+- name: Build the GNS3 VM
+  # `all`, not `gns3vm`: build.sh passes the discovered IP as an inline inventory
+  # (-i "<ip>,"), which puts the host in no group at all. Targeting the group meant the
+  # play matched nothing and ansible-playbook still exited 0 — a build that silently did
+  # nothing and reported success. With `all` both inventory forms work, and inventory.ini
+  # keeps its [gns3vm:vars] because that host is still in `all`.
+  hosts: all
+  gather_facts: true
+
+  vars:
+    # Which profile to build: {pc,mac}-{student,staff}. No default — it decides the
+    # architecture and the project set, so it must be a conscious choice.
+    # profile: pc-student
+
+    # Repo locations on the *control node*. Defaults assume the standard side-by-side
+    # checkout: <workspace>/gns3 (public) and <workspace>/gns3-dev (private).
+    gns3_repo: "{{ playbook_dir }}/../.."
+    gns3_dev_repo: "{{ playbook_dir }}/../../../gns3-dev"
+    extra_project_dir: "{{ playbook_dir }}/../../../infiles"
+
+    # Where the repo lands on the VM.
+    vm_repo_dir: /home/gns3/git/gns3
+
+    # Project search roots, in order — the authoritative copy MUST come first.
+    # gns3-dev/outfiles is deliberately absent: it holds stale exports that share their
+    # project_id with the rebuilt originals under activities/, so importing one shadows
+    # the other. gns3build.py warns (DUP) if a name resolves under more than one root.
+    project_roots:
+      - "{{ gns3_dev_repo }}/activities"
+      - "{{ extra_project_dir }}"
+
+    # Verification gate: none | smoke | all.
+    #   smoke - a few fast activities spanning docker + qemu + the custom images
+    #   all   - every activity with a test manifest; slow (tens of minutes), and what
+    #           you want before exporting an OVA
+    verify: smoke
+    verify_smoke_activities: [ping-basics, stp-basics, ospf-basics, port-scanning]
+
+    gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
+
+    # Resolved via hostvars, not bare ansible_host: inside a `delegate_to: localhost`
+    # task ansible_host refers to the *delegation target*, so the bare form silently
+    # becomes "localhost" in exactly the tasks that need the VM's address.
+    vm_address: "{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}"
+    api_url: "http://{{ vm_address }}"
+
+  tasks:
+    - name: Check that a profile was given
+      ansible.builtin.assert:
+        that: profile is defined and profile | length > 0
+        fail_msg: >-
+          Set the profile, e.g. -e profile=pc-student
+          (one of pc-student, pc-staff, mac-student, mac-staff)
+        quiet: true
+
+    # check_mode: false on the read-only tasks — they must really run even in a dry run,
+    # or everything downstream has nothing to work from. The tasks that *change* things
+    # get gns3build.py's own --dry-run instead of being skipped, so `--check` reports
+    # what the build would actually do rather than a blank.
+    - name: Check the GNS3 controller API is up
+      ansible.builtin.uri:
+        url: "{{ api_url }}/v2/version"
+        return_content: true
+      register: gns3_version
+      delegate_to: localhost
+      check_mode: false
+      retries: 5
+      delay: 3
+      until: gns3_version is succeeded
+
+    - name: Report what we are building
+      ansible.builtin.debug:
+        msg: >-
+          profile={{ profile }} vm={{ api_url }}
+          gns3={{ (gns3_version.content | from_json).version }}
+          verify={{ verify }}
+
+    # ---------------------------------------------------------------- sync ----
+    # Sync only what the engine needs: the build tooling, docker contexts, templates and
+    # start-vnc.sh (server/), plus the node logos (images/symbols).
+    #
+    # No `mode:` below on purpose — rsync -a restores the source tree's permissions, so
+    # forcing a mode here just makes this task and the rsync flip-flop each other, and
+    # both then report "changed" forever on an otherwise unchanged system.
+    - name: Create the repo directories on the VM
+      ansible.builtin.file:
+        path: "{{ vm_repo_dir }}/{{ item }}"
+        state: directory
+      loop: [server, images]
+
+    - name: Build the rsync remote-shell command
+      ansible.builtin.set_fact:
+        # sshpass -e reads the password from $SSHPASS, so it never appears in ps output.
+        rsync_rsh: >-
+          {{ 'sshpass -e ' if use_password else '' }}ssh
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+          {{ '-i ' + ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else '' }}
+      vars:
+        use_password: "{{ ansible_password is defined and ansible_ssh_private_key_file is not defined }}"
+
+    # Plain rsync rather than ansible.posix.synchronize: that module lives in a collection
+    # ansible-core does not ship, and it does not carry ansible_password through to rsync's
+    # ssh — which is the default auth for a stock GNS3 VM. Doing it directly keeps this
+    # playbook working on a bare ansible-core with either auth mode.
+    - name: Sync the gns3 repo to the VM
+      # argv as a list expression so --dry-run can be added conditionally. Nothing else
+      # may be added to stdout: changed_when reads rsync's --itemize-changes output, and
+      # anything extra (e.g. --stats) would make it look permanently changed.
+      ansible.builtin.command:
+        argv: >-
+          {{ ['rsync', '--archive', '--delete', '--itemize-changes']
+             + (['--dry-run'] if ansible_check_mode else [])
+             + ['--exclude=.git', '--exclude=__pycache__', '--exclude=*.pyc',
+                '--exclude=ansible',
+                '--rsh=' ~ rsync_rsh,
+                item.src,
+                ansible_user ~ '@' ~ vm_address ~ ':' ~ item.dest] }}
+      environment:
+        SSHPASS: "{{ ansible_password | default('') }}"
+      register: gns3_sync
+      changed_when: gns3_sync.stdout | trim | length > 0
+      delegate_to: localhost
+      check_mode: false
+      loop:
+        - {src: "{{ gns3_repo }}/server/", dest: "{{ vm_repo_dir }}/server/"}
+        - {src: "{{ gns3_repo }}/images/", dest: "{{ vm_repo_dir }}/images/"}
+      loop_control:
+        label: "{{ item.dest }}"
+
+    - name: Make gns3build.py executable
+      ansible.builtin.file:
+        path: "{{ gns3build }}"
+        mode: "0755"
+
+    - name: Validate the manifest before building
+      ansible.builtin.command: "{{ gns3build }} validate"
+      register: gns3_validate
+      changed_when: false
+      check_mode: false
+
+    # --------------------------------------------------------------- build ----
+    # Everything except projects runs on the VM: docker builds must happen on the
+    # target architecture, and qemu/logos/novnc touch its filesystem.
+    - name: Run the build phases on the VM
+      ansible.builtin.command: >-
+        {{ gns3build }} build --profile {{ profile }} --skip projects
+        --server http://localhost {{ '--dry-run' if ansible_check_mode else '' }}
+      register: gns3_build
+      check_mode: false
+      changed_when: >-
+        'built 0,' not in gns3_build.stdout or
+        'installed 0,' not in gns3_build.stdout or
+        'copied 0,' not in gns3_build.stdout or
+        'registered 0,' not in gns3_build.stdout
+      failed_when: gns3_build.rc != 0
+
+    - name: Show the build summary
+      ansible.builtin.debug:
+        msg: "{{ gns3_build.stdout_lines[-8:] }}"
+
+    # ------------------------------------------------------------ projects ----
+    # From the control node, straight into the VM's API — see the header note.
+    - name: Import the projects from the control node
+      ansible.builtin.command: >-
+        {{ gns3_repo }}/server/build/gns3build.py projects
+        --profile {{ profile }}
+        --server {{ api_url }}
+        --roots {{ project_roots | join(',') }}
+        {{ '--dry-run' if ansible_check_mode else '' }}
+      register: gns3_projects
+      delegate_to: localhost
+      check_mode: false
+      changed_when: "'imported 0,' not in gns3_projects.stdout"
+
+    - name: Show the project import summary
+      ansible.builtin.debug:
+        msg: "{{ gns3_projects.stdout_lines[-6:] }}"
+
+    - name: Warn if a project resolved under more than one root
+      ansible.builtin.debug:
+        msg: >-
+          Duplicate project files were found — check the DUP lines above and the order of
+          project_roots. A stale copy sharing a project_id will shadow the good one.
+      when: "'WARN' in gns3_projects.stdout"
+
+    # -------------------------------------------------------------- verify ----
+    # failed_when: false so every activity runs even after one goes red — a pre-export
+    # gate should report the whole list of what is broken, not just the first thing.
+    # The assert below is the gate.
+    - name: Verify the appliance with gns3_autotest.py
+      ansible.builtin.command: >-
+        python3 {{ gns3_dev_repo }}/tools/gns3_autotest.py
+        {{ '--all' if verify == 'all' else item }}
+        --server {{ api_url }}
+      register: gns3_verify
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false
+      loop: "{{ [''] if verify == 'all' else verify_smoke_activities }}"
+      loop_control:
+        label: "{{ 'all activities' if verify == 'all' else item }}"
+      when: verify != 'none' and not ansible_check_mode
+
+    - name: Verification results
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'PASS' if (item.rc == 0 and 'FAIL' not in item.stdout) else 'FAIL' }}
+          {{ item.item | default('all') or 'all activities' }}
+          {{ '— ' + (item.stderr_lines | last) if item.rc != 0 and item.stderr_lines else '' }}
+      loop: "{{ gns3_verify.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item | default('all') or 'all' }}"
+      when: verify != 'none' and not ansible_check_mode
+
+    - name: Fail the build if verification went red
+      ansible.builtin.assert:
+        that: item.rc == 0 and 'FAIL' not in item.stdout
+        fail_msg: >-
+          verification failed for '{{ item.item | default('all') or 'all activities' }}'
+          (rc={{ item.rc }}) — the appliance is NOT fit to export
+        quiet: true
+      loop: "{{ gns3_verify.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item | default('all') or 'all' }}"
+      when: verify != 'none' and not ansible_check_mode
+
+    - name: Build complete
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'DRY RUN — nothing was changed. ' if ansible_check_mode else '' }}
+          {{ profile }} {{ 'would be built' if ansible_check_mode else 'built' }}
+          on {{ api_url }} — verification:
+          {{ 'skipped in check mode' if ansible_check_mode
+             else ('skipped' if verify == 'none' else verify + ' PASSED') }}.
+          {{ '' if ansible_check_mode else
+             'Snapshot the VM now, then export the appliance.' }}
