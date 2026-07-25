@@ -20,7 +20,9 @@ VMWare Fusion is for Apple Mac computers with M1, M2, ... chips (i.e., Apple Sil
 
 # Using VMWare with GNS3
 
-The existing .ova files provided for import into VirtualBox can also be imported into VMWare. However there are several changes you may need to make.
+The existing .ova files provided for import into VirtualBox can also be imported into VMWare **Workstation**, i.e. on an Intel or AMD machine. However there are several changes you may need to make.
+
+**On an Apple Silicon Mac this does not apply:** those .ova files are built for Intel/AMD chips and will not boot under Fusion, no matter which settings you change. A separate Mac appliance is provided instead — see [Getting Started with GNS3 on an Apple Mac](./getting-started-mac.md), and follow that page rather than the Windows steps below.
 
 From the *File* menu select *Open* and choose the .ova file (see [Getting Started with GNS3](./getting-started-pc.md) for the location of the .ova file). 
 

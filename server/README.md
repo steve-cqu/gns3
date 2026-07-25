@@ -51,6 +51,25 @@ platforms, since no arm64 Qemu images exist for them.
   **SDN-Basics-Template.gns3project is 729 MB** and is not in either repo — you must have
   it locally or that project is skipped (with a clear `MISSING` line, not a failure).
 
+### On a Mac build host
+
+Three things differ enough to waste an afternoon if you meet them by surprise:
+
+- **Install Homebrew's `rsync`.** macOS 14.4 and later ship openrsync as `/usr/bin/rsync`,
+  and the sync step reads `--itemize-changes` output to decide whether anything changed.
+  `brew install rsync`, then check `rsync --version` reports rsync 3.x, not openrsync.
+- **`vmrun` is not on the PATH.** It lives inside the app bundle:
+  `export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"`
+- **Do not go looking for `sshpass`** — Homebrew core omits it deliberately. Give the VM
+  your key instead (`ssh-copy-id gns3@<vm-ip>`), which the build prefers anyway.
+
+The rest is ordinary: `xcode-select --install`, then
+`brew install python@3.12 ansible` and `pip3 install pyyaml` (both `gns3build.py` and
+`gns3_autotest.py` need PyYAML on the build host).
+
+You can skip `infiles/` on a Mac. SDN-Basics-Template is 729 MB and amd64, so it cannot
+run there regardless — the build logs `MISSING` and carries on.
+
 **The VM:**
 
 - A stock GNS3 VM 2.2.54, running, with SSH reachable and the GNS3 API on **port 80**
@@ -232,7 +251,38 @@ also cross-checks that every disk a Qemu template names is one its node actually
 
 ---
 
-## Mac limitations
+## Mac builds
+
+Note the first argument differs by hypervisor: `pc-*` takes the VM **name**, `mac-*` takes
+a **path to the `.vmx`**.
+
+```sh
+./build.sh ~/VMs/GNS3.vmx mac-student
+GNS3_VM_IP=<ip> ./build.sh ~/VMs/GNS3.vmx mac-student   # if vmrun discovery misbehaves
+```
+
+Before building, confirm the VM is the one you think it is:
+
+```sh
+vmrun list                                    # running, and the .vmx path
+curl -s http://<vm-ip>/v2/version             # port 80, expect 2.2.54
+ssh gns3@<vm-ip> 'uname -m; df -h /opt'       # expect aarch64 and ~10 GB free
+```
+
+`aarch64` is the one that matters: the `mac` profile builds Docker images **on the VM** so
+they come out native, which only holds if the VM really is arm64.
+
+A correct `mac-student` build installs 14 Docker images, **3** Qemu disks and 18 templates
+— three rather than the PC build's four because FRR and NETem are Docker on both
+platforms. The disks should all be arm64 variants:
+
+```
+openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img
+OPNsense-24.1-ufs-efi-vm-aarch64.qcow2
+ubuntu-24.04-server-cloudimg-arm64.img
+```
+
+### Mac limitations
 
 The `mac` profile builds arm64 Docker images and downloads arm64 Qemu disks. FRR and NETem
 are Docker on both platforms (no arm64 Qemu images exist for them), so those activities
