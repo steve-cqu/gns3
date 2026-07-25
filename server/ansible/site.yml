@@ -290,10 +290,14 @@
 
     # pipefail again — see the build phase. Without it every activity would report rc=0
     # and the gate below would pass whatever happened.
+    #
+    # python3 -u: piping to tee makes python block-buffer stdout, so with `verify=all`
+    # (one process for the whole matrix) the log sits empty for hours and looks hung
+    # regardless of how the run is actually going. Unbuffered, it reports per activity.
     - name: Verify the appliance with gns3_autotest.py
       ansible.builtin.shell: >-
         set -o pipefail &&
-        python3 {{ gns3_dev_repo }}/tools/gns3_autotest.py
+        python3 -u {{ gns3_dev_repo }}/tools/gns3_autotest.py
         {{ '--all' if verify == 'all' else item }}
         --server {{ api_url }} 2>&1 | tee -a {{ verify_log }}
       args:
