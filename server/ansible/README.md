@@ -80,8 +80,11 @@ Apple Silicon — `vmrun getGuestIPAddress` in `build.sh` is the least-proven pa
 
 ## Requirements
 
-- `ansible-core` (no collections needed), `rsync`, and `sshpass` for the default
-  password login
+- `ansible-core` (no collections needed) and `rsync`
+- Either an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>`) or `sshpass` for the
+  password login. The playbook probes which one works and only requires `sshpass` if key
+  auth does not — if you already ssh to the VM without typing a password, you do not need
+  it at all.
 - The VM running, with SSH reachable and the GNS3 API on port 80
 - For `build.sh`: `VBoxManage` on the PATH for `pc-*`, or `vmrun` for `mac-*`. Set
   `GNS3_VM_IP=<ip>` to skip discovery.

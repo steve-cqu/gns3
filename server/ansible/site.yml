@@ -112,6 +112,53 @@
         state: directory
       loop: [server, images]
 
+    # Work out how rsync should authenticate. Do NOT assume "a password was supplied"
+    # means "use sshpass": build.sh always supplies one, but most build hosts already
+    # have a working key for the VM, and then sshpass is an unnecessary dependency whose
+    # absence fails deep inside rsync with a confusing "Failed to exec sshpass". Probe
+    # the same way ansible itself just connected, and only reach for sshpass if keys
+    # genuinely do not work.
+    - name: Check whether key-based ssh to the VM already works
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -o
+          - BatchMode=yes
+          - -o
+          - StrictHostKeyChecking=no
+          - -o
+          - UserKnownHostsFile=/dev/null
+          - -o
+          - ConnectTimeout=10
+          - "{{ ansible_user }}@{{ vm_address }}"
+          - "true"
+      register: ssh_key_probe
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      check_mode: false
+
+    - name: Look for sshpass on the control node
+      ansible.builtin.shell: command -v sshpass
+      register: sshpass_check
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      check_mode: false
+      when: ssh_key_probe.rc != 0
+
+    - name: Require sshpass only when there is no usable key
+      ansible.builtin.assert:
+        that: sshpass_check.rc == 0
+        fail_msg: >-
+          Key-based ssh to {{ ansible_user }}@{{ vm_address }} does not work, so rsync
+          would need sshpass for the password login — but sshpass is not installed.
+          Either install it (apt install sshpass, or brew install
+          hudochenkov/sshpass/sshpass) or, better, give the VM your key:
+          ssh-copy-id {{ ansible_user }}@{{ vm_address }}
+        quiet: true
+      when: ssh_key_probe.rc != 0
+
     - name: Build the rsync remote-shell command
       ansible.builtin.set_fact:
         # sshpass -e reads the password from $SSHPASS, so it never appears in ps output.
@@ -119,8 +166,13 @@
           {{ 'sshpass -e ' if use_password else '' }}ssh
           -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
           {{ '-i ' + ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else '' }}
+        rsync_auth: "{{ 'password (sshpass)' if use_password else 'ssh key' }}"
       vars:
-        use_password: "{{ ansible_password is defined and ansible_ssh_private_key_file is not defined }}"
+        use_password: "{{ ssh_key_probe.rc != 0 and ansible_password is defined }}"
+
+    - name: Report how the sync will authenticate
+      ansible.builtin.debug:
+        msg: "rsync to the VM will authenticate with {{ rsync_auth }}"
 
     # Plain rsync rather than ansible.posix.synchronize: that module lives in a collection
     # ansible-core does not ship, and it does not carry ansible_password through to rsync's

@@ -39,7 +39,10 @@ platforms, since no arm64 Qemu images exist for them.
 **On your machine (the build host):**
 
 - `ansible-core` (`pip install ansible-core` — no Galaxy collections needed), `rsync`,
-  `sshpass`, and `python3`
+  and `python3`
+- **Either** an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) **or**
+  `sshpass` for the password login. The build detects which you have and uses it; you
+  only need `sshpass` if key auth does not work.
 - `VBoxManage` on the PATH for `pc-*`, or `vmrun` + `ovftool` for `mac-*`
 - Both repos checked out side by side:
   - `gns3/` — this repo (public: build tooling, Dockerfiles, templates, logos)
@@ -272,6 +275,10 @@ file in `infiles/` or pass `-e extra_project_dir=...`.
 **The playbook reports no hosts matched.** `build.sh` refuses to continue in that case
 rather than reporting a successful build that did nothing. Check the VM name/`.vmx` path,
 or use `GNS3_VM_IP=`.
+
+**`rsync: Failed to exec sshpass`.** You have no SSH key for the VM and no `sshpass`.
+Either `ssh-copy-id gns3@<vm-ip>` (preferred) or install `sshpass`. The playbook now
+detects this before the sync and says so plainly.
 
 **Verification fails.** `-e verify=none` gets you a build for debugging, but do not export
 an appliance that has not passed `-e verify=all`.
