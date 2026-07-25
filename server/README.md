@@ -253,19 +253,25 @@ will run there. Everything else — all Docker-based activities — is fine.
 
 ---
 
-## Legacy scripts
+## The previous manual build
 
+Until July 2026 this directory held a set of shell scripts run by hand on the VM —
 `vm-install-nodes.sh`, `vm-install-containers.sh`, `vm-install-qemuvms.sh`,
-`vm-install-templates.sh`, `vm-install-logos.sh`, `vm-install-vnc.sh` and
-`vm-import-projects.sh` are the previous manual build, kept for reference. Every one of
-them is now covered by a `gns3build.py` phase, and the new path fixes several problems
-they had: no idempotency (`docker build --no-cache` every time, Qemu images re-downloaded),
-a hardcoded `python3.9` path for the logos, and hand-assembly of `gns3_controller.conf`
-with a `head -n -1` to strip a trailing comma. Prefer the tooling above.
+`vm-install-templates.sh`, `vm-install-logos.sh`, `vm-install-vnc.sh`,
+`vm-import-projects.sh` — driven by `nodelist-{pc,mac}.txt` and the
+`templates_*.conf` bundles. Every one of them is now a `gns3build.py` phase, so they were
+removed once both OVAs had been built and verified by the pipeline. `git log --diff-filter=D`
+finds them if you ever need to look.
 
-They are also missing things the manifest now has — notably `qemu-ubuntu`, which
-`nodelist-pc.txt` never installed even though SDN-Basics-Template's controller node needs
-it, so that node could not start on a VM built the old way.
+Nothing was lost in the move: every template in the old bundles is in `templates/`, and
+every node in the old nodelists is in `manifest.yml`. The manifest also carries nodes the
+nodelists lacked — notably `ubuntu-cloud`, whose absence meant SDN-Basics-Template's
+controller node could never start on a VM built the old way.
+
+The rewrite also fixed what the scripts got wrong: no idempotency (`docker build
+--no-cache` every time, Qemu images re-downloaded on every run), a hardcoded `python3.9`
+path for the logos, and hand-assembly of `gns3_controller.conf` with a `head -n -1` to
+strip a trailing comma, in place of the REST API.
 
 ---
 

@@ -2,11 +2,10 @@
 """
 gns3build.py — data-driven, idempotent GNS3 VM build.
 
-Reads build/manifest.yml and drives node/template installation, replacing the
-vm-install-*.sh scripts' 400-line case statement. Templates are registered through the
-GNS3 REST API (POST /v2/templates), which is additive and idempotent — existing
-template_ids are skipped — so there is no gns3_controller.conf text-assembly and no
-`systemctl stop/start gns3`.
+Reads build/manifest.yml and drives node/template installation. Templates are registered
+through the GNS3 REST API (POST /v2/templates), which is additive and idempotent —
+existing template_ids are skipped — so there is no gns3_controller.conf text-assembly and
+no `systemctl stop/start gns3`.
 
 Subcommands
   validate                  parse the manifest + every referenced template .conf; report issues

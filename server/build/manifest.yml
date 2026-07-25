@@ -1,7 +1,7 @@
 # GNS3 VM build manifest — single source of truth for node/template installation.
 #
-# Consumed by gns3build.py (Layer 0) and, later, the Ansible roles (Layer 1).
-# Node/template mapping and image sources were extracted from ../vm-install-nodes.sh.
+# Consumed by gns3build.py (the engine) and by the ansible/ wrapper that drives it.
+# This file is the only place node/template mapping and image sources are defined.
 #
 # Project audience mapping: the curated lists ../projects-student.txt and
 # ../projects-staff.txt are the source of truth. As a guideline, *-Template projects
@@ -186,7 +186,8 @@ nodes:
     templates: [qemu-opnsense]
   # Required by SDN-Basics-Template: its SDN controller node is a qcow2 *overlay* whose
   # backing file is this image at exactly this size, so the `resize` is not optional.
-  # (The legacy nodelist-pc.txt omitted qemu-ubuntu, which left that node unstartable.)
+  # (The superseded manual build never installed this image, so on a VM built that way
+  # the SDN controller node could not start at all.)
   ubuntu-cloud:
     kind: qemu
     file: ubuntu-24.04-server-cloudimg-amd64.img
