@@ -18,12 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # BusyBox). GNS3 applies the interfaces file at container start; ifupdown lets a
 # student re-apply edits at runtime without restarting the node.
 
-# Enable the routing daemons used in activities (zebra and staticd always run)
+# Pre-enable only the OSPF daemons (zebra and staticd always run). ospf-basics ships a
+# preconfigured OSPF topology, so ospfd/ospf6d must be on out of the box. bgpd is deliberately
+# left DISABLED: bgp-basics is a build-it-yourself lab where turning the BGP daemon on
+# (bgpd=yes in /etc/frr/daemons, then restart FRR) is an explicit student step. No activity
+# uses RIP, so ripd stays off as well; a future activity can enable it the same way as bgpd.
 RUN sed -i \
     -e 's/^ospfd=no/ospfd=yes/' \
     -e 's/^ospf6d=no/ospf6d=yes/' \
-    -e 's/^bgpd=no/bgpd=yes/' \
-    -e 's/^ripd=no/ripd=yes/' \
     /etc/frr/daemons
 
 # Use split per-daemon config files (ospfd.conf, bgpd.conf, …) like the FRR Qemu VM
