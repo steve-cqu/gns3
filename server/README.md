@@ -476,9 +476,30 @@ first three fail with **`HTTP 403 Forbidden`** — GNS3's response when it canno
 node's emulator or disk. It logs nothing server-side, so the bare 403 is all you get; if
 you see it on a Mac, this is why.
 
-Fixing them means rebuilding each project on a Mac against the `-mac` templates and
-exporting it under a separate name — not something the build can do for you. Everything
-else, which is every Docker-based activity, works normally.
+Fixing one means rebuilding it on a Mac against the `-mac` templates — not something the
+build can do for you. Everything else, which is every Docker-based activity, works normally.
+
+**Where a rebuild goes.** Keep the project's *name* identical (the audience lists and
+`export-check` match on it) and add `-arm64` to the *filename*:
+
+```
+activities/dhcp-client/DHCP-Client-Solution-arm64.gns3project
+```
+
+`platforms.mac.project_suffix` in the manifest makes both the `projects` phase and
+verification prefer `<Name>-arm64.gns3project` wherever one exists, falling back to the
+plain file otherwise — so only the projects that genuinely differ need a variant. To test a
+rebuild before wiring it into a build:
+
+```sh
+python3 -u gns3-dev/tools/gns3_autotest.py <slug> --project-suffix=-arm64 --server http://<vm-ip>
+```
+
+Note `--project-suffix=-arm64`, with the equals sign: a value starting with `-` is read as
+an option name if passed as a separate argument.
+
+Delete the project from the VM once exported. A hand-built copy is indistinguishable from a
+wrongly imported one, so leaving a staff project on a student VM fails `export-check`.
 
 ### Why the arm64 Qemu templates carry `options`
 
