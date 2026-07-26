@@ -46,14 +46,18 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/m
 kernel_modules: [wireguard, sch_netem]
 
 # ---------------------------------------------------------------------------
-# Profiles = platform (arch) x audience. The build host picks the platform
-# (Ubuntu -> pc/amd64, Apple Silicon -> mac/arm64); audience selects the project set.
+# Profiles = architecture x audience. The architecture is that of the GNS3 VM, not of the
+# build host, and is the only axis anything here varies on: Docker platform, Qemu images,
+# templates and project variants. The *hypervisor* is a separate concern and lives in
+# ansible/build.sh — VirtualBox and VMware Fusion both host amd64 or arm64 VMs, so binding
+# the two together (the old pc/mac naming) could not describe, say, an arm64 VM under
+# Hyper-V on a Windows-on-ARM machine.
 # ---------------------------------------------------------------------------
 profiles:
-  pc-student:  { platform: pc,  audience: student }
-  pc-staff:    { platform: pc,  audience: staff   }
-  mac-student: { platform: mac, audience: student }
-  mac-staff:   { platform: mac, audience: staff   }
+  amd64-student: { platform: amd64, audience: student }
+  amd64-staff:   { platform: amd64, audience: staff   }
+  arm64-student: { platform: arm64, audience: student }
+  arm64-staff:   { platform: arm64, audience: staff   }
 
 # Which ../projects-<list>.txt each audience installs, in order (names de-duplicated).
 # The staff VM is a superset: the manual build imported the student projects, exported the
@@ -66,21 +70,21 @@ audiences:
   staff:   [student, staff]
 
 # Nodes enabled per platform, in install order. Keys reference `nodes:` below.
-# NOTE: pc now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
-# Qemu ones — this bakes in the Qemu->Docker migration for the fresh PC VM.
+# NOTE: amd64 now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
+# Qemu ones — this bakes in the Qemu->Docker migration.
 platforms:
-  pc:
+  amd64:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
-  mac:
+  arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
-    qemu:   [openwrt-mac, opnsense-mac, ubuntu-cloud-mac]
+    qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
     # project exported on a PC is permanently amd64 — the arm64 templates installed here are
     # not consulted for an imported node. Such a project cannot start on this platform (GNS3
@@ -176,7 +180,7 @@ nodes:
   # resize: optional `qemu-img resize` argument, e.g. "+2G" (applied after md5 verify)
   # extra:  companion files the node's template also needs (same keys), e.g. a cdrom ISO
 
-  # --- Qemu images (amd64 / pc) ---
+  # --- Qemu images (amd64) ---
   openwrt:
     kind: qemu
     file: openwrt-23.05.0-x86-64-generic-ext4-combined.img
@@ -207,22 +211,22 @@ nodes:
         md5: 9a90ee8f88736204c756015b3cd86500
     templates: [qemu-ubuntu]
 
-  # --- Qemu images (arm64 / mac) ---
-  openwrt-mac:
+  # --- Qemu images (arm64) ---
+  openwrt-arm64:
     kind: qemu
     file: openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img
     url: https://archive.openwrt.org/releases/23.05.0/targets/armsr/armv8/openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img.gz
     unpack: gzip
     md5: bbb6191154e26079b19a1337d2545442
-    templates: [qemu-openwrt-mac]
-  opnsense-mac:
+    templates: [qemu-openwrt-arm64]
+  opnsense-arm64:
     kind: qemu
     file: OPNsense-24.1-ufs-efi-vm-aarch64.qcow2
     url: https://github.com/maurice-w/opnsense-vm-images/releases/download/24.1/OPNsense-24.1-ufs-efi-vm-aarch64.qcow2.bz2
     unpack: bzip2
     md5: 99c897037a166a7ffedb56a3621bd3d1
-    templates: [qemu-opnsense-mac]
-  ubuntu-cloud-mac:
+    templates: [qemu-opnsense-arm64]
+  ubuntu-cloud-arm64:
     kind: qemu
     file: ubuntu-24.04-server-cloudimg-arm64.img
     # cloud-images-archive.ubuntu.com does not serve https; integrity is verified by md5
@@ -234,7 +238,7 @@ nodes:
       - file: ubuntu-cloud-init-data.iso
         url: https://github.com/GNS3/gns3-registry/raw/master/cloud-init/ubuntu-cloud/ubuntu-cloud-init-data.iso
         md5: 9a90ee8f88736204c756015b3cd86500
-    templates: [qemu-ubuntu-mac]
+    templates: [qemu-ubuntu-arm64]
 
   # --- Qemu images available but not in the default platform lists ---
   # (kept for reference / opt-in; FRR & NETem are now Docker, ubuntu host is Docker)

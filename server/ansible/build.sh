@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # One command to build a GNS3 VM: find the VM's IP, then run the playbook.
 #
-#   ./build.sh <vm-name> <profile> [ansible-playbook args...]
+#   ./build.sh <vm> <profile> [ansible-playbook args...]
 #
-#   ./build.sh "GNS3 VM" pc-student              # VirtualBox (PC)
-#   ./build.sh ~/VMs/GNS3.vmx mac-staff          # VMware Fusion (Apple Silicon)
-#   ./build.sh "GNS3 VM" pc-student -e verify=all
+#   ./build.sh "GNS3 VM" amd64-student            # VirtualBox
+#   ./build.sh ~/VMs/GNS3.vmx arm64-staff         # VMware Fusion
+#   ./build.sh "GNS3 VM" amd64-student -e verify=all
 #
-# The hypervisor follows from the profile, which is the split the whole build uses:
-#   pc-*  -> VirtualBox  (VBoxManage guestproperty)   <vm-name> is the VM name
-#   mac-* -> VMware      (vmrun getGuestIPAddress)    <vm-name> is a path to the .vmx
-# Override with GNS3_VM_IP=<ip> to skip discovery entirely.
+# The profile names the GNS3 VM's ARCHITECTURE, which is all the build itself varies on.
+# The hypervisor is a separate axis and only matters here, for finding the VM's IP:
+#   vbox    VBoxManage guestproperty        <vm> is the VM name
+#   vmware  vmrun getGuestIPAddress         <vm> is a path to the .vmx
+# It defaults to vbox for amd64 and vmware for arm64, which covers the two setups in use.
+# Override with GNS3_HYPERVISOR=vbox|vmware when that guess is wrong — an arm64 VM under
+# VirtualBox on an Apple Silicon Mac, say. Anything else (Hyper-V on Windows-on-ARM, a
+# cloud VM) has no discovery support: pass GNS3_VM_IP=<ip> and it is never needed.
 #
 # Requires: ansible-playbook, rsync, and (for the default password login) sshpass.
 set -euo pipefail
 
 usage() {
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-1}"
 }
 
@@ -26,9 +30,18 @@ PROFILE=$2
 shift 2
 
 case "$PROFILE" in
-    pc-student|pc-staff|mac-student|mac-staff) ;;
+    amd64-student|amd64-staff|arm64-student|arm64-staff) ;;
     *) echo "error: unknown profile '$PROFILE'" >&2
-       echo "       expected one of pc-student, pc-staff, mac-student, mac-staff" >&2
+       echo "       expected one of amd64-student, amd64-staff, arm64-student, arm64-staff" >&2
+       exit 2 ;;
+esac
+
+ARCH=${PROFILE%%-*}
+HYPERVISOR=${GNS3_HYPERVISOR:-$([ "$ARCH" = amd64 ] && echo vbox || echo vmware)}
+case "$HYPERVISOR" in
+    vbox|vmware) ;;
+    *) echo "error: GNS3_HYPERVISOR='$HYPERVISOR' is not one of vbox, vmware" >&2
+       echo "       for anything else, set GNS3_VM_IP=<ip> and skip IP discovery" >&2
        exit 2 ;;
 esac
 
@@ -65,8 +78,8 @@ discover_vmware() {
 if [ -n "${GNS3_VM_IP:-}" ]; then
     VM_IP=$GNS3_VM_IP
     echo "==> using GNS3_VM_IP=$VM_IP"
-elif [ "${PROFILE%%-*}" = "pc" ]; then
-    need VBoxManage "VirtualBox is required for the pc profiles"
+elif [ "$HYPERVISOR" = vbox ]; then
+    need VBoxManage "VirtualBox is required for GNS3_HYPERVISOR=vbox"
     echo "==> asking VirtualBox for the IP of '$VM_NAME'"
     VM_IP=$(discover_virtualbox) || {
         echo "error: no IPv4 address from VirtualBox for '$VM_NAME'" >&2
@@ -75,7 +88,7 @@ elif [ "${PROFILE%%-*}" = "pc" ]; then
         exit 4
     }
 else
-    need vmrun "VMware Fusion is required for the mac profiles"
+    need vmrun "VMware Fusion is required for GNS3_HYPERVISOR=vmware"
     echo "==> asking VMware for the IP of '$VM_NAME'"
     VM_IP=$(discover_vmware) || true
     [ -n "$VM_IP" ] || {

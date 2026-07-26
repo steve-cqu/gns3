@@ -1,8 +1,8 @@
 ---
 # Host-driven GNS3 VM build — the Layer 1 wrapper around build/gns3build.py.
 #
-#   ansible-playbook site.yml -e profile=pc-student
-#   ansible-playbook -i 192.168.56.106, site.yml -e profile=pc-staff
+#   ansible-playbook site.yml -e profile=amd64-student
+#   ansible-playbook -i 192.168.56.106, site.yml -e profile=amd64-staff
 #
 # or, discovering the VM's IP from the hypervisor first, `./build.sh <vm-name> <profile>`.
 #
@@ -24,9 +24,9 @@
   gather_facts: true
 
   vars:
-    # Which profile to build: {pc,mac}-{student,staff}. No default — it decides the
+    # Which profile to build: {amd64,arm64}-{student,staff}. No default — it decides the
     # architecture and the project set, so it must be a conscious choice.
-    # profile: pc-student
+    # profile: amd64-student
 
     # Repo locations on the *control node*. Defaults assume the standard side-by-side
     # checkout: <workspace>/gns3 (public) and <workspace>/gns3-dev (private).
@@ -57,7 +57,8 @@
     # PC-exported project cannot run on arm64; where a rebuild exists as
     # <Name>-arm64.gns3project it is used instead, both when importing into the appliance
     # and when verifying. Projects without a Qemu node need no variant.
-    project_suffix: "{{ '-arm64' if profile.startswith('mac') else '' }}"
+    arch: "{{ profile.split('-')[0] }}"
+    project_suffix: "{{ '-arm64' if arch == 'arm64' else '' }}"
 
     gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
 
@@ -95,8 +96,8 @@
       ansible.builtin.assert:
         that: profile is defined and profile | length > 0
         fail_msg: >-
-          Set the profile, e.g. -e profile=pc-student
-          (one of pc-student, pc-staff, mac-student, mac-staff)
+          Set the profile, e.g. -e profile=amd64-student
+          (one of amd64-student, amd64-staff, arm64-student, arm64-staff)
         quiet: true
 
     # check_mode: false on the read-only tasks — they must really run even in a dry run,

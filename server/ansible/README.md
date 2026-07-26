@@ -4,8 +4,8 @@ One command, run from your own machine, that turns a fresh GNS3 VM into a config
 appliance:
 
 ```sh
-./build.sh "GNS3 VM" pc-student            # VirtualBox: the VM name
-./build.sh "$(gns3vmx)" mac-staff          # VMware Fusion: a path to the .vmx
+./build.sh "GNS3 VM" amd64-student            # VirtualBox: the VM name
+./build.sh "$(gns3vmx)" arm64-staff           # VMware Fusion: a path to the .vmx
 ```
 
 `gns3vmx` is the shell helper defined in [`../README.md`](../README.md) — it resolves the
@@ -16,8 +16,8 @@ rename would silently make it stale.
 playbook directly (IP already known):
 
 ```sh
-ansible-playbook -i 192.168.56.106, site.yml -e profile=pc-student
-ansible-playbook site.yml -e profile=pc-staff          # uses inventory.ini
+ansible-playbook -i 192.168.56.106, site.yml -e profile=amd64-student
+ansible-playbook site.yml -e profile=amd64-staff          # uses inventory.ini
 ```
 
 ## What it does
@@ -42,8 +42,8 @@ so it stays manual — see [`../README.md`](../README.md).
 Every phase is idempotent, so re-running is safe and cheap — a second run of an
 unchanged build reports `changed=0` and finishes in seconds.
 
-Docker builds run on the VM so images are built for its architecture (this is why `pc`
-and `mac` need no cross-building). Projects are imported from your machine instead of
+Docker builds run on the VM so images are built for its architecture (this is why `amd64`
+and `arm64` need no cross-building). Projects are imported from your machine instead of
 being copied to the VM first: SDN-Basics-Template alone is 729 MB, and syncing it would
 put that on the VM's disk *and* transfer it, for no benefit.
 
@@ -51,7 +51,7 @@ put that on the VM's disk *and* transfer it, for no benefit.
 
 | | |
 |---|---|
-| `-e profile=…` | **required** — `pc-student`, `pc-staff`, `mac-student`, `mac-staff` |
+| `-e profile=…` | **required** — `amd64-student`, `amd64-staff`, `arm64-student`, `arm64-staff` |
 | `-e verify=smoke` | default: four fast activities spanning docker, qemu and the custom images |
 | `-e verify=all` | every activity with a test manifest — slow, and what you want before exporting an OVA |
 | `-e verify=none` | skip verification (iterating on the build itself) |
@@ -85,16 +85,16 @@ Both are per-build records, gitignored, and worth keeping alongside the OVA:
   out-of-git projects were built from, since git cannot hold them.
 
 `build.sh` passes any extra arguments straight through, e.g.
-`./build.sh "GNS3 VM" pc-student -e verify=all`.
+`./build.sh "GNS3 VM" amd64-student -e verify=all`.
 
 ## Tested status
 
-The `pc` (VirtualBox) path is validated end to end for both audiences: build, idempotent
+The `amd64` (VirtualBox) path is validated end to end for both audiences: build, idempotent
 re-run (`changed=0`), `--check`, verification, export-check and provenance, through to an
 exported OVA.
 
-The `mac` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a clean run of
-`mac-student` finished green — Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu disks
+The `arm64` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a clean run of
+`arm64-student` finished green — Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu disks
 (md5s confirmed against real downloads for the first time), templates, logos, noVNC, 6 of 7
 student projects imported (the seventh, SDN-Basics-Template, deliberately absent), smoke
 verification passed, export-check clean, provenance written and fetched.
@@ -117,8 +117,9 @@ the PATH, and `ansible-core` must be installed in the same venv as PyYAML.
   first and only fall back to `sshpass`, so if you can already ssh to the VM without a
   password you do not need it at all.
 - The VM running, with SSH reachable and the GNS3 API on port 80
-- For `build.sh`: `VBoxManage` on the PATH for `pc-*`, or `vmrun` for `mac-*`. Set
-  `GNS3_VM_IP=<ip>` to skip discovery.
+- For `build.sh`: `VBoxManage` on the PATH for `amd64-*`, or `vmrun` for `arm64-*` — the
+  default guess, overridable with `GNS3_HYPERVISOR=vbox|vmware`. Set `GNS3_VM_IP=<ip>` to
+  skip discovery altogether, which is the only option for any other hypervisor.
 
 ## Credentials
 

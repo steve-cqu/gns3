@@ -7,28 +7,39 @@ Two appliances are produced from **one** VM, in this order:
 
 | | Profile | Projects | Exported as |
 |---|---|---|---|
-| Student | `pc-student` / `mac-student` | the 7 in `projects-student.txt` | `GNS3-CQU-v<version>-student.ova` |
-| Staff | `pc-staff` / `mac-staff` | those 7 **plus** the 17 in `projects-staff.txt` | `GNS3-CQU-v<version>-staff.ova` |
+| Student | `amd64-student` / `arm64-student` | the 7 in `projects-student.txt` | `GNS3-CQU-v<version>-student.ova` |
+| Staff | `amd64-staff` / `arm64-staff` | those 7 **plus** the 17 in `projects-staff.txt` | `GNS3-CQU-v<version>-staff.ova` |
 
 Staff is a superset of student — build the student VM, export it, then add the staff
 projects to the same VM and export again. Never the other way round: a student OVA must
 not contain solutions, and `export-check` (below) refuses to bless one that does.
 
-Two platforms, chosen by the profile prefix:
+**The profile names the GNS3 VM's architecture**, which is the only axis the build itself
+varies on:
 
-| | Hypervisor | Arch | Images |
+| Profile prefix | Docker | Qemu disks | Usual hypervisor |
 |---|---|---|---|
-| `pc-*` | VirtualBox | amd64 | amd64 Docker images, amd64 Qemu disks |
-| `mac-*` | VMware Fusion | arm64 | arm64 Docker images, the `-mac` Qemu disks |
+| `amd64-*` | `linux/amd64` | amd64 | VirtualBox, on Windows or Linux |
+| `arm64-*` | `linux/arm64/v8` | arm64 (`-arm64` templates) | VMware Fusion, on Apple Silicon |
+
+The hypervisor is a **separate** concern and matters in exactly one place: `build.sh`
+discovering the VM's IP. It defaults to VirtualBox for `amd64-*` and Fusion for `arm64-*`,
+which covers the two setups in use, and `GNS3_HYPERVISOR=vbox|vmware` overrides that guess.
+Anything else — Hyper-V on a Windows-on-ARM machine, a VM you reach over the network — needs
+no support beyond `GNS3_VM_IP=<ip>`, since discovery is all that differs.
+
+Naming the profiles by architecture rather than by machine (they were `pc-*`/`mac-*` until
+July 2026) is what makes that separation expressible: nothing about an arm64 appliance is
+Apple-specific.
 
 The Docker images are always built **on the VM**, so they come out native for its
 architecture — there is no cross-building. FRR and NETem are Docker nodes on both
-platforms, since no arm64 Qemu images exist for them.
+architectures, since no arm64 Qemu images exist for them.
 
-> **Tested status.** Both paths are validated live. `pc` on VirtualBox through to exported
-> student and staff OVAs; `mac` on Apple Silicon through to a green `mac-student` build and
+> **Tested status.** Both paths are validated live. `amd64` on VirtualBox through to exported
+> student and staff OVAs; `arm64` on Apple Silicon through to a green `arm64-student` build and
 > OVA, including `vmrun` IP discovery. Not yet exercised on a Mac: `verify=all` and a
-> `mac-staff` build.
+> `arm64-staff` build.
 
 ---
 
@@ -43,7 +54,7 @@ platforms, since no arm64 Qemu images exist for them.
 - **Either** an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) **or**
   `sshpass` for the password login. The build and the verification tooling both probe for a
   working key first, so a key means you need `sshpass` nowhere.
-- `VBoxManage` on the PATH for `pc-*`, or `vmrun` + `ovftool` for `mac-*`
+- `VBoxManage` on the PATH for `amd64-*`, or `vmrun` + `ovftool` for `arm64-*`
 - Both repos checked out side by side:
   - `gns3/` — this repo (public: build tooling, Dockerfiles, templates, logos)
   - `gns3-dev/` — the private repo (the `.gns3project` files and `tools/gns3_autotest.py`)
@@ -177,8 +188,8 @@ resolves it each time, preferring a running VM and falling back to a disk search
 works whether the VM is up (building) or shut down (exporting). Keep the quotes:
 
 ```sh
-./build.sh "$(gns3vmx)" mac-student
-./build.sh "$(gns3vmx v029-staff)" mac-staff
+./build.sh "$(gns3vmx)" arm64-student
+./build.sh "$(gns3vmx v029-staff)" arm64-staff
 ```
 
 If your VMs live somewhere other than `~/Virtual Machines.localized` or `~/VMs`, add that
@@ -222,15 +233,15 @@ From your own machine, not the VM:
 
 ```sh
 cd gns3/server/ansible
-./build.sh "GNS3 VM" pc-student            # VirtualBox (PC)
-./build.sh "$(gns3vmx)" mac-student        # VMware Fusion (Apple Silicon)
+./build.sh "GNS3 VM" amd64-student            # VirtualBox (PC)
+./build.sh "$(gns3vmx)" arm64-student        # VMware Fusion (Apple Silicon)
 ```
 
 `build.sh` finds the VM's IP from the hypervisor and runs the playbook. If discovery
 fails or you already know the address, skip it:
 
 ```sh
-GNS3_VM_IP=192.168.56.106 ./build.sh "GNS3 VM" pc-student
+GNS3_VM_IP=192.168.56.106 ./build.sh "GNS3 VM" amd64-student
 ```
 
 That syncs this repo to the VM, builds every Docker image and downloads every Qemu disk,
@@ -271,7 +282,7 @@ Run these from your machine — they are also run automatically at the end of ev
 so a green build has already passed them.
 
 ```sh
-ssh gns3@<vm-ip> '~/git/gns3/server/build/gns3build.py export-check --profile pc-student'
+ssh gns3@<vm-ip> '~/git/gns3/server/build/gns3build.py export-check --profile amd64-student'
 ```
 
 It fails (exit 1) if the VM carries anything the audience must not ship, and reports:
@@ -355,8 +366,8 @@ are imported — everything else is already in place and skips:
 
 ```sh
 cd gns3/server/ansible
-./build.sh "GNS3 VM" pc-staff -e verify=all              # VirtualBox
-./build.sh "$(gns3vmx)" mac-staff -e verify=all          # VMware Fusion
+./build.sh "GNS3 VM" amd64-staff -e verify=all              # VirtualBox
+./build.sh "$(gns3vmx)" arm64-staff -e verify=all          # VMware Fusion
 ```
 
 Then repeat step 2's checks with the staff profile and step 3's export, naming it
@@ -371,16 +382,16 @@ the VM (`cd ~/git/gns3/server/build`):
 
 ```sh
 ./gns3build.py validate                       # check the manifest and every template
-./gns3build.py plan      --profile pc-staff   # show what would be installed, change nothing
-./gns3build.py build     --profile pc-staff   # all six phases below, in order
-./gns3build.py templates --profile pc-staff   # register templates via the GNS3 API
-./gns3build.py docker    --profile pc-staff   # build the Docker node images
-./gns3build.py qemu      --profile pc-staff   # download + verify the Qemu disks
+./gns3build.py plan      --profile amd64-staff   # show what would be installed, change nothing
+./gns3build.py build     --profile amd64-staff   # all six phases below, in order
+./gns3build.py templates --profile amd64-staff   # register templates via the GNS3 API
+./gns3build.py docker    --profile amd64-staff   # build the Docker node images
+./gns3build.py qemu      --profile amd64-staff   # download + verify the Qemu disks
 ./gns3build.py logos                          # install the CQU node symbols
 ./gns3build.py novnc                          # install noVNC + start-vnc.sh
-./gns3build.py projects  --profile pc-staff   # import the audience's projects
-./gns3build.py export-check --profile pc-staff
-./gns3build.py provenance   --profile pc-staff
+./gns3build.py projects  --profile amd64-staff   # import the audience's projects
+./gns3build.py export-check --profile amd64-staff
+./gns3build.py provenance   --profile amd64-staff
 ```
 
 Common options:
@@ -419,14 +430,14 @@ also cross-checks that every disk a Qemu template names is one its node actually
 
 ## Mac builds
 
-Note the first argument differs by hypervisor: `pc-*` takes the VM **name**, `mac-*` takes
+Note the first argument differs by hypervisor: `amd64-*` takes the VM **name**, `arm64-*` takes
 a **path to the `.vmx`**.
 
 ```sh
 source ~/gns3-build/bin/activate                        # every new shell — see setup above
 cd ~/git/gns3/server/ansible
-./build.sh "$(gns3vmx)" mac-student
-GNS3_VM_IP=<ip> ./build.sh "$(gns3vmx)" mac-student   # if vmrun discovery misbehaves
+./build.sh "$(gns3vmx)" arm64-student
+GNS3_VM_IP=<ip> ./build.sh "$(gns3vmx)" arm64-student   # if vmrun discovery misbehaves
 ```
 
 Before building, confirm the VM is the one you think it is:
@@ -437,10 +448,10 @@ curl -s http://<vm-ip>/v2/version             # port 80, expect 2.2.54
 ssh gns3@<vm-ip> 'uname -m; df -h /opt'       # expect aarch64 and ~10 GB free
 ```
 
-`aarch64` is the one that matters: the `mac` profile builds Docker images **on the VM** so
+`aarch64` is the one that matters: the `arm64` profile builds Docker images **on the VM** so
 they come out native, which only holds if the VM really is arm64.
 
-A correct `mac-student` build installs 14 Docker images, **3** Qemu disks and 18 templates
+A correct `arm64-student` build installs 14 Docker images, **3** Qemu disks and 18 templates
 — three rather than the PC build's four because FRR and NETem are Docker on both
 platforms. The disks should all be arm64 variants:
 
@@ -452,7 +463,7 @@ ubuntu-24.04-server-cloudimg-arm64.img
 
 ### Mac limitations
 
-The `mac` profile builds arm64 Docker images and downloads arm64 Qemu disks. FRR and NETem
+The `arm64` profile builds arm64 Docker images and downloads arm64 Qemu disks. FRR and NETem
 are Docker on both platforms (no arm64 Qemu images exist for them), so those activities
 work everywhere and the templates keep the same names — activity instructions are
 unchanged.
@@ -476,7 +487,7 @@ first three fail with **`HTTP 403 Forbidden`** — GNS3's response when it canno
 node's emulator or disk. It logs nothing server-side, so the bare 403 is all you get; if
 you see it on a Mac, this is why.
 
-Fixing one means rebuilding it on a Mac against the `-mac` templates — not something the
+Fixing one means rebuilding it on a Mac against the arm64 templates — not something the
 build can do for you. Everything else, which is every Docker-based activity, works normally.
 
 **Where a rebuild goes.** Keep the project's *name* identical (the audience lists and
@@ -486,7 +497,7 @@ build can do for you. Everything else, which is every Docker-based activity, wor
 activities/dhcp-client/DHCP-Client-Solution-arm64.gns3project
 ```
 
-`platforms.mac.project_suffix` in the manifest makes both the `projects` phase and
+`platforms.arm64.project_suffix` in the manifest makes both the `projects` phase and
 verification prefer `<Name>-arm64.gns3project` wherever one exists, falling back to the
 plain file otherwise — so only the projects that genuinely differ need a variant. To test a
 rebuild before wiring it into a build:
@@ -503,7 +514,7 @@ wrongly imported one, so leaving a staff project on a student VM fails `export-c
 
 ### Why the arm64 Qemu templates carry `options`
 
-Building topologies by hand from the `-mac` Qemu templates does work, but only because
+Building topologies by hand from the arm64 Qemu templates does work, but only because
 those templates set things their x86 counterparts can leave empty:
 
 ```
@@ -513,7 +524,7 @@ hda_disk_interface: virtio
 
 Three reasons, each of which stops the node dead within seconds if missed:
 
-- **`-machine virt`** — `qemu-system-x86_64` defaults to machine `pc`, but
+- **`-machine virt`** — `qemu-system-x86_64` defaults to machine `amd64`, but
   `qemu-system-aarch64` has *no* default and exits with "No machine specified, and there is
   no default for this architecture".
 - **`-bios …`** — every arm64 image here boots via UEFI (OpenWrt `armsr` is ARM
@@ -530,7 +541,7 @@ Fusion on Apple Silicon also gives the guest no nested virtualisation — there 
 
 **Editing a template is not enough on its own.** The `templates` phase keys on
 `template_id`, so a changed `.conf` is skipped on a controller that already has it; push it
-with `gns3build.py templates --profile mac-student --force`. Existing *nodes* keep whatever
+with `gns3build.py templates --profile arm64-student --force`. Existing *nodes* keep whatever
 they were created with, so delete and re-add any node made before the change.
 
 All three were booted on Apple Silicon on 2026-07-26 — the first time the arm64 Qemu path
