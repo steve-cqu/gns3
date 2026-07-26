@@ -344,7 +344,7 @@
         set -o pipefail &&
         {{ local_python }} -u {{ gns3_dev_repo }}/tools/gns3_autotest.py
         {{ '--all' if verify == 'all' else item }}
-        --project-suffix='{{ project_suffix }}'
+        --arch={{ arch }} --project-suffix='{{ project_suffix }}'
         --server {{ api_url }} 2>&1 | tee -a {{ verify_log }}
       args:
         executable: /bin/bash
