@@ -589,6 +589,28 @@ rebuilt with `--force` — an existing image is skipped by design.
 **`projects` reports MISSING for SDN-Basics-Template.** It is not in git; put the 729 MB
 file in `infiles/` or pass `-e extra_project_dir=...`.
 
+**`projects` fails with `HTTP 409 ... invalid zip`.** The controller could not extract the
+archive. The phase then tests the file locally and tells you which side is at fault: a
+corrupt or unreadable local copy, or a clean file and therefore a server-side problem
+(usually no space on the VM — these projects expand to several times their stored size).
+
+The out-of-git projects in `infiles/` are the ones this happens to, because nothing checks
+their integrity between builds. Every successful build records their size and sha256 in
+`ansible/provenance-<profile>.json`, so compare against that:
+
+```sh
+sha256sum infiles/SDN-Basics-Template.gns3project
+python3 -c "
+import json,glob
+for f in glob.glob('ansible/provenance-*.json'):
+    for s in json.load(open(f)).get('sources',[]):
+        print(f, s['name'], s['bytes'], s['sha256'])
+"
+```
+
+That record is the only durable statement of what those files should be — which is the
+reason it exists.
+
 **The playbook reports no hosts matched.** `build.sh` refuses to continue in that case
 rather than reporting a successful build that did nothing. Check the VM name/`.vmx` path,
 or use `GNS3_VM_IP=`.

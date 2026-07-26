@@ -816,6 +816,26 @@ def read_project_list(m, audience):
     return files, names
 
 
+def local_zip_verdict(path):
+    """Say whether a .gns3project is readable here, for when the controller rejects it.
+
+    The oversized projects are too big for git, so nothing checks their integrity between
+    builds; a damaged file is indistinguishable from a server-side failure until tested.
+    Only called after an import has already failed, so the CRC pass is worth its cost.
+    """
+    try:
+        with zipfile.ZipFile(str(path)) as z:
+            bad = z.testzip()
+    except Exception as e:                           # noqa: BLE001
+        return (f"local file is NOT a readable zip ({type(e).__name__}: {e}) — "
+                f"replace it and compare sha256 against provenance-*.json")
+    if bad:
+        return (f"local file is CORRUPT (first bad member: {bad}) — replace it and compare "
+                f"sha256 against provenance-*.json")
+    return ("local file verifies clean, so the fault is server-side — check free space on "
+            "the VM (this project expands to several times its stored size)")
+
+
 def find_project_files(name, roots, suffix=""):
     """Every <name>.gns3project under roots, in root order — the first one is used.
 
@@ -919,7 +939,14 @@ def cmd_projects(args):
             existing.add(pid)
             imported += 1
         except urllib.error.HTTPError as e:
-            print(f"  ERROR  {name}: HTTP {e.code} {e.read().decode(errors='replace')[:200]}")
+            body = e.read().decode(errors="replace")[:200]
+            print(f"  ERROR  {name}: HTTP {e.code} {body}")
+            # "invalid zip" names the symptom, not the cause, and arrives only after the
+            # whole file has been uploaded — for SDN-Basics-Template that is 729 MB. Say
+            # which side is at fault, since the answer decides what to do next.
+            if "invalid zip" in body.lower():
+                print(f"         checking {path} locally ...")
+                print("         " + local_zip_verdict(path))
             failures.append(name)
         except Exception as e:
             print(f"  ERROR  {name}: {e}")
