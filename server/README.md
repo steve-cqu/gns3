@@ -38,11 +38,10 @@ platforms, since no arm64 Qemu images exist for them.
 
 **On your machine (the build host):**
 
-- `ansible-core` (`pip install ansible-core` — no Galaxy collections needed), `rsync`,
-  and `python3`
+- `ansible-core` (no Galaxy collections needed), `rsync`, and `python3` with PyYAML
 - **Either** an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) **or**
-  `sshpass` for the password login. The build detects which you have and uses it; you
-  only need `sshpass` if key auth does not work.
+  `sshpass` for the password login. The build and the verification tooling both probe for a
+  working key first, so a key means you need `sshpass` nowhere.
 - `VBoxManage` on the PATH for `pc-*`, or `vmrun` + `ovftool` for `mac-*`
 - Both repos checked out side by side:
   - `gns3/` — this repo (public: build tooling, Dockerfiles, templates, logos)
@@ -51,21 +50,116 @@ platforms, since no arm64 Qemu images exist for them.
   **SDN-Basics-Template.gns3project is 729 MB** and is not in either repo — you must have
   it locally or that project is skipped (with a clear `MISSING` line, not a failure).
 
-### On a Mac build host
+### Setting up a PC build host
 
-Three things differ enough to waste an afternoon if you meet them by surprise:
+Ubuntu or another Debian derivative, from a fresh account:
 
-- **Install Homebrew's `rsync`.** macOS 14.4 and later ship openrsync as `/usr/bin/rsync`,
-  and the sync step reads `--itemize-changes` output to decide whether anything changed.
-  `brew install rsync`, then check `rsync --version` reports rsync 3.x, not openrsync.
-- **`vmrun` is not on the PATH.** It lives inside the app bundle:
-  `export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"`
-- **Do not go looking for `sshpass`** — Homebrew core omits it deliberately. Give the VM
-  your key instead (`ssh-copy-id gns3@<vm-ip>`), which the build prefers anyway.
+```sh
+# 1. Base tools. Ubuntu's rsync is the real thing, so nothing special is needed here.
+#    sshpass is only a fallback for step 4 — harmless to install, unnecessary with a key.
+sudo apt update
+sudo apt install -y git rsync python3 python3-venv sshpass
 
-The rest is ordinary: `xcode-select --install`, then
-`brew install python@3.12 ansible` and `pip3 install pyyaml` (both `gns3build.py` and
-`gns3_autotest.py` need PyYAML on the build host).
+# 2. VirtualBox, for VBoxManage (VM-IP discovery and the OVA export).
+sudo apt install -y virtualbox
+
+# 3. Build tooling in a venv, so ansible-core and PyYAML are not fighting apt's python.
+python3 -m venv ~/gns3-build
+source ~/gns3-build/bin/activate          # needed in every shell you build from
+pip install ansible-core pyyaml
+
+# 4. Give the VM your SSH key. With this, nothing in the build needs sshpass.
+ssh-keygen -t ed25519                     # skip if the account already has a key
+ssh-copy-id gns3@<vm-ip>
+
+# 5. The repos, side by side.
+mkdir -p ~/git && cd ~/git
+git clone https://github.com/steve-cqu/gns3.git
+git clone <gns3-dev remote>               # private: needs GitHub auth on this account
+
+# 6. The oversized projects that git cannot hold, beside the repos.
+mkdir -p ~/git/infiles                    # put SDN-Basics-Template.gns3project (729 MB) here
+```
+
+Check it took:
+
+```sh
+rsync --version | head -1
+ansible --version | head -1
+VBoxManage list runningvms
+command -v sshpass
+python3 -c 'import yaml; print("pyyaml ok")'
+```
+
+Two things worth knowing:
+
+- **An SSH key makes `sshpass` unnecessary.** Both the playbook and `gns3_autotest.py` probe
+  for a working key and only fall back to the password login. Step 1 installs `sshpass`
+  anyway because it is one apt package and covers you if the key is not in place yet.
+- **On Windows, build from WSL2**, not from PowerShell: Ansible does not support Windows as
+  a control node. Follow the Ubuntu steps inside WSL, but note that `VBoxManage` there is the
+  Windows executable — call it as `VBoxManage.exe`, or sidestep discovery altogether with
+  `GNS3_VM_IP=<ip> ./build.sh …`. This has not been tested; the validated PC host is Ubuntu.
+
+### Setting up a Mac build host
+
+From a completely fresh macOS account, in order:
+
+```sh
+# 1. Command line tools (git, compilers). Opens a GUI installer; wait for it to finish.
+xcode-select --install
+
+# 2. Homebrew. On Apple Silicon it installs to /opt/homebrew, which is NOT on the PATH
+#    until you add it — the installer prints this too, and skipping it is the usual
+#    "brew: command not found" straight after a successful install.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# 3. rsync and python. See the note below on why Homebrew's rsync is not optional.
+brew install rsync python@3.12
+
+# 4. Build tooling in a venv. Homebrew's python refuses `pip install` into itself
+#    (PEP 668, "externally-managed-environment"), and a venv is cleaner than fighting it.
+python3 -m venv ~/gns3-build
+source ~/gns3-build/bin/activate          # needed in every shell you build from
+pip install ansible-core pyyaml
+
+# 5. vmrun, which lives inside the Fusion app bundle rather than on the PATH.
+echo 'export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"' >> ~/.zprofile
+export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"
+
+# 6. Give the VM your SSH key. Do this and you never need sshpass, which matters more on
+#    macOS than elsewhere — see the note below.
+ssh-keygen -t ed25519                     # skip if the account already has a key
+ssh-copy-id gns3@<vm-ip>
+
+# 7. The repos, side by side.
+mkdir -p ~/git && cd ~/git
+git clone https://github.com/steve-cqu/gns3.git
+git clone <gns3-dev remote>               # private: needs GitHub auth on this account
+```
+
+Check it took:
+
+```sh
+rsync --version | head -1     # must be rsync 3.x, NOT openrsync
+ansible --version | head -1
+vmrun list
+python3 -c 'import yaml; print("pyyaml ok")'
+```
+
+Three things about macOS specifically:
+
+- **Homebrew's `rsync` is not optional.** macOS 14.4 and later ship openrsync as
+  `/usr/bin/rsync`, and the sync step reads `--itemize-changes` output to decide whether
+  anything changed. Step 2 must come before step 3 for `/opt/homebrew/bin` to win the PATH.
+- **`vmrun` is not on the PATH** by default, hence step 5. Without it `build.sh` cannot
+  discover the VM's IP, though `GNS3_VM_IP=<ip>` works around that.
+- **Use the SSH key and skip `sshpass` entirely.** Homebrew core omits `sshpass`
+  deliberately, so getting it means a third-party tap
+  (`brew install hudochenkov/sshpass/sshpass`). Step 6 avoids the question: the playbook and
+  `gns3_autotest.py` both probe for a working key before falling back to a password login.
 
 You can skip `infiles/` on a Mac. SDN-Basics-Template is 729 MB and amd64, so it cannot
 run there regardless — the build logs `MISSING` and carries on.
@@ -257,6 +351,8 @@ Note the first argument differs by hypervisor: `pc-*` takes the VM **name**, `ma
 a **path to the `.vmx`**.
 
 ```sh
+source ~/gns3-build/bin/activate                        # every new shell — see setup above
+cd ~/git/gns3/server/ansible
 ./build.sh ~/VMs/GNS3.vmx mac-student
 GNS3_VM_IP=<ip> ./build.sh ~/VMs/GNS3.vmx mac-student   # if vmrun discovery misbehaves
 ```

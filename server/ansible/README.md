@@ -97,11 +97,11 @@ hard requirement there, and `vmrun` is not on the PATH by default.
 
 ## Requirements
 
-- `ansible-core` (no collections needed) and `rsync`
-- Either an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>`) or `sshpass` for the
-  password login. The playbook probes which one works and only requires `sshpass` if key
-  auth does not — if you already ssh to the VM without typing a password, you do not need
-  it at all.
+- `ansible-core` (no collections needed), `rsync`, and `python3` with PyYAML
+- Either an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) or `sshpass`
+  for the password login. Both this playbook and `gns3_autotest.py` probe for a working key
+  first and only fall back to `sshpass`, so if you can already ssh to the VM without a
+  password you do not need it at all.
 - The VM running, with SSH reachable and the GNS3 API on port 80
 - For `build.sh`: `VBoxManage` on the PATH for `pc-*`, or `vmrun` for `mac-*`. Set
   `GNS3_VM_IP=<ip>` to skip discovery.

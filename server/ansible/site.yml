@@ -153,15 +153,17 @@
       failed_when: false
       delegate_to: localhost
       check_mode: false
-      when: ssh_key_probe.rc != 0
 
-    - name: Require sshpass only when there is no usable key
+    # Without a key this stops the run now rather than an hour in: the same gap would also
+    # break verification, where gns3_autotest.py needs the VM's shell to configure
+    # shell-less Open vSwitch nodes. It makes the same key-first decision this play does.
+    - name: Require sshpass when there is no usable key
       ansible.builtin.assert:
         that: sshpass_check.rc == 0
         fail_msg: >-
-          Key-based ssh to {{ ansible_user }}@{{ vm_address }} does not work, so rsync
-          would need sshpass for the password login — but sshpass is not installed.
-          Either install it (apt install sshpass, or brew install
+          Key-based ssh to {{ ansible_user }}@{{ vm_address }} does not work, so rsync and
+          the Open vSwitch activities would both need sshpass for the password login — but
+          sshpass is not installed. Either install it (apt install sshpass, or brew install
           hudochenkov/sshpass/sshpass) or, better, give the VM your key:
           ssh-copy-id {{ ansible_user }}@{{ vm_address }}
         quiet: true
