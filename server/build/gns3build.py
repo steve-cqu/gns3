@@ -227,6 +227,11 @@ class Controller:
     def add_template(self, body):
         return self._req("POST", "/templates", body=body)
 
+    def update_template(self, template_id, body):
+        # template_id is immutable and rejected in the body of a PUT.
+        return self._req("PUT", f"/templates/{template_id}",
+                         body={k: v for k, v in body.items() if k != "template_id"})
+
     def projects(self):
         return self._req("GET", "/projects")
 
@@ -366,17 +371,25 @@ def cmd_templates(args):
             failed += 1
             continue
         tid = body.get("template_id")
-        if tid in existing:
+        # Registration is keyed on template_id, so an edited .conf does NOT reach a
+        # controller that already has that id — the phase would report "skip" and leave the
+        # old definition in place. --force pushes the file over the top instead.
+        if tid in existing and not args.force:
             print(f"  skip   {name:22} (already registered: {body.get('name')})")
             skipped += 1
             continue
         if args.dry_run:
-            print(f"  +POST  {name:22} (would register '{body.get('name')}' {tid})")
+            verb = "update" if tid in existing else "register"
+            print(f"  +{verb.upper()[:5]:5} {name:22} (would {verb} '{body.get('name')}' {tid})")
             created += 1
             continue
         try:
-            ctrl.add_template(body)
-            print(f"  create {name:22} ('{body.get('name')}')")
+            if tid in existing:
+                ctrl.update_template(tid, body)
+                print(f"  update {name:22} ('{body.get('name')}')")
+            else:
+                ctrl.add_template(body)
+                print(f"  create {name:22} ('{body.get('name')}')")
             created += 1
         except urllib.error.HTTPError as e:
             print(f"  ERROR  {name}: HTTP {e.code} {e.read().decode(errors='replace')[:200]}")
@@ -384,6 +397,9 @@ def cmd_templates(args):
 
     verb = "would register" if args.dry_run else "registered"
     print(f"\n{verb} {created}, skipped {skipped}, failed {failed}")
+    if created and not args.dry_run:
+        print("  note: existing nodes keep the settings they were created with — "
+              "a changed template only affects nodes made after it")
     return 1 if failed else 0
 
 
@@ -1245,6 +1261,9 @@ def main():
     tp = sub.add_parser("templates")
     tp.add_argument("--profile", required=True)
     tp.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
+    tp.add_argument("--force", action="store_true",
+                    help="overwrite templates already registered (needed after editing a "
+                         "templates/*.conf; without it an existing template_id is skipped)")
     tp.add_argument("--dry-run", action="store_true")
 
     dk = sub.add_parser("docker", help="build node images (run on the VM)")

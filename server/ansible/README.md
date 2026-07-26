@@ -4,9 +4,13 @@ One command, run from your own machine, that turns a fresh GNS3 VM into a config
 appliance:
 
 ```sh
-./build.sh "GNS3 VM" pc-student            # VirtualBox, student VM
-./build.sh ~/VMs/GNS3.vmx mac-staff        # VMware Fusion, staff VM
+./build.sh "GNS3 VM" pc-student            # VirtualBox: the VM name
+./build.sh "$(gns3vmx)" mac-staff          # VMware Fusion: a path to the .vmx
 ```
+
+`gns3vmx` is the shell helper defined in [`../README.md`](../README.md) — it resolves the
+VM's `.vmx` path each time rather than pinning one in your profile, where a rebuild or
+rename would silently make it stale.
 
 `build.sh` finds the VM's IP from the hypervisor and hands off to `site.yml`. To run the
 playbook directly (IP already known):

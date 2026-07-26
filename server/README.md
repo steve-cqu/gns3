@@ -25,12 +25,10 @@ The Docker images are always built **on the VM**, so they come out native for it
 architecture — there is no cross-building. FRR and NETem are Docker nodes on both
 platforms, since no arm64 Qemu images exist for them.
 
-> **Tested status.** The `pc` path is validated end to end against a VirtualBox GNS3 VM:
-> full build, idempotent re-run, verification, export-check and provenance. The `mac` path
-> shares all of that code and its profile has been checked in dry-run (correct
-> `linux/arm64/v8` platform and arm64 image URLs), but **it has never been run on Apple
-> Silicon**. Expect to shake out VMware-specific issues on the first Mac build — the most
-> likely spot is `vmrun getGuestIPAddress` in `build.sh`; `GNS3_VM_IP=<ip>` bypasses it.
+> **Tested status.** Both paths are validated live. `pc` on VirtualBox through to exported
+> student and staff OVAs; `mac` on Apple Silicon through to a green `mac-student` build and
+> OVA, including `vmrun` IP discovery. Not yet exercised on a Mac: `verify=all` and a
+> `mac-staff` build.
 
 ---
 
@@ -130,9 +128,24 @@ python3 -m venv ~/gns3-build
 source ~/gns3-build/bin/activate          # needed in every shell you build from
 pip install ansible-core pyyaml
 
-# 5. vmrun, which lives inside the Fusion app bundle rather than on the PATH.
-echo 'export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"' >> ~/.zprofile
-export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"
+# 5. Fusion's two command-line tools. Neither is on the PATH, and they live in different
+#    directories inside the app bundle: vmrun in Contents/Public, ovftool one level over
+#    in Contents/Library. Add both, plus a helper that finds the VM you mean (see below).
+cat >> ~/.zprofile <<'PROFILE'
+export PATH="/Applications/VMware Fusion.app/Contents/Public:/Applications/VMware Fusion.app/Contents/Library/VMware OVF Tool:$PATH"
+
+# Print the path of a VM's .vmx: a running one if there is a match, else search on disk.
+# Usage: gns3vmx            -> first VM whose path contains "gns3"
+#        gns3vmx v029-staff -> narrow it when several match
+gns3vmx() {
+    local pat="${1:-gns3}"
+    { vmrun list | tail -n +2
+      find "$HOME/Virtual Machines.localized" "$HOME/VMs" -maxdepth 3 \
+           -name '*.vmx' 2>/dev/null
+    } | grep -i -- "$pat" | head -1
+}
+PROFILE
+source ~/.zprofile
 
 # 6. Give the VM your SSH key, and install sshpass as a fallback. See the note below —
 #    the key alone is enough, but sshpass is cheap insurance and Homebrew hides it in a tap.
@@ -152,9 +165,24 @@ Check it took — from the shell you will build in, with the venv active:
 rsync --version | head -1                 # must be rsync 3.x, NOT openrsync
 which ansible-playbook                    # must be ~/gns3-build/bin/ansible-playbook
 ansible --version | grep -i 'python version'   # that interpreter is the one that needs PyYAML
-vmrun list
+which vmrun ovftool
+gns3vmx                                   # should print your VM's .vmx path
 python3 -c 'import yaml; print("pyyaml ok")'
 ```
+
+**Why a function and not `export GNS3VMX=…`.** Fusion's default paths contain spaces and
+the VM's name changes — new version, student vs staff, a clone made for an export — so a
+path fixed in your profile goes stale silently and you build the wrong VM. `gns3vmx`
+resolves it each time, preferring a running VM and falling back to a disk search, so it
+works whether the VM is up (building) or shut down (exporting). Keep the quotes:
+
+```sh
+./build.sh "$(gns3vmx)" mac-student
+./build.sh "$(gns3vmx v029-staff)" mac-staff
+```
+
+If your VMs live somewhere other than `~/Virtual Machines.localized` or `~/VMs`, add that
+directory to the `find` line in the function.
 
 Three things about macOS specifically:
 
@@ -195,7 +223,7 @@ From your own machine, not the VM:
 ```sh
 cd gns3/server/ansible
 ./build.sh "GNS3 VM" pc-student            # VirtualBox (PC)
-./build.sh ~/VMs/GNS3.vmx mac-student      # VMware Fusion (Apple Silicon)
+./build.sh "$(gns3vmx)" mac-student        # VMware Fusion (Apple Silicon)
 ```
 
 `build.sh` finds the VM's IP from the hypervisor and runs the playbook. If discovery
@@ -294,19 +322,19 @@ Note the order is the **reverse** of VirtualBox: `ovftool` will not export a VM 
 snapshots, so export first and snapshot afterwards.
 
 ```sh
-vmrun stop ~/VMs/GNS3.vmx soft                    # graceful; `vmrun list` must not show it
-ovftool --compress=9 ~/VMs/GNS3.vmx GNS3-CQU-v<version>-student-arm64.ova
-vmrun snapshot ~/VMs/GNS3.vmx "v<version>-student"
+vmrun stop "$(gns3vmx)" soft                    # graceful; `vmrun list` must not show it
+ovftool --compress=9 "$(gns3vmx)" GNS3-CQU-v<version>-student-arm64.ova
+vmrun snapshot "$(gns3vmx)" "v<version>-student"
 ```
 
 To export a state you already snapshotted, clone it out rather than reverting — the clone
 has no snapshots, and the original keeps its history:
 
 ```sh
-vmrun listSnapshots ~/VMs/GNS3.vmx
-vmrun clone ~/VMs/GNS3.vmx ~/VMs/GNS3-export.vmx full \
+vmrun listSnapshots "$(gns3vmx)"
+vmrun clone "$(gns3vmx)" ~/VMs/GNS3-export.vmx full \
       -snapshot="v<version>-student" -cloneName="GNS3-export"
-ovftool --compress=9 ~/VMs/GNS3-export.vmx GNS3-CQU-v<version>-student-arm64.ova
+ovftool --compress=9 "$(gns3vmx GNS3-export)" GNS3-CQU-v<version>-student-arm64.ova
 rm -rf ~/VMs/GNS3-export.vmwarevm                 # or delete it from Fusion
 ```
 
@@ -328,7 +356,7 @@ are imported — everything else is already in place and skips:
 ```sh
 cd gns3/server/ansible
 ./build.sh "GNS3 VM" pc-staff -e verify=all              # VirtualBox
-./build.sh ~/VMs/GNS3.vmx mac-staff -e verify=all        # VMware Fusion
+./build.sh "$(gns3vmx)" mac-staff -e verify=all          # VMware Fusion
 ```
 
 Then repeat step 2's checks with the staff profile and step 3's export, naming it
@@ -397,8 +425,8 @@ a **path to the `.vmx`**.
 ```sh
 source ~/gns3-build/bin/activate                        # every new shell — see setup above
 cd ~/git/gns3/server/ansible
-./build.sh ~/VMs/GNS3.vmx mac-student
-GNS3_VM_IP=<ip> ./build.sh ~/VMs/GNS3.vmx mac-student   # if vmrun discovery misbehaves
+./build.sh "$(gns3vmx)" mac-student
+GNS3_VM_IP=<ip> ./build.sh "$(gns3vmx)" mac-student   # if vmrun discovery misbehaves
 ```
 
 Before building, confirm the VM is the one you think it is:
@@ -429,17 +457,60 @@ are Docker on both platforms (no arm64 Qemu images exist for them), so those act
 work everywhere and the templates keep the same names — activity instructions are
 unchanged.
 
-What does **not** work on a Mac VM: projects containing **amd64 Qemu** nodes. On the
-current student list that is:
+What does **not** work on a Mac VM: projects containing **amd64 Qemu** nodes. A
+`.gns3project` stores each Qemu node's emulator and disk by name, so a project exported on
+a PC carries `qemu_path: /usr/bin/qemu-system-x86_64` and an `…amd64.img` disk — neither of
+which exists on an arm64 VM, whatever the templates say. Every project holding a Qemu node
+is affected; all five currently do:
 
-- **SDN-Basics-Template** — its SDN controller disk is a qcow2 overlay backed by
-  `ubuntu-24.04-server-cloudimg-amd64.img`
-- **Small-Internet-Demo** — contains an amd64 OpenWrt node
-- **DHCP-Client-Solution** (staff) — likewise
+| Project | Qemu node(s) | Autotest |
+|---|---|---|
+| DHCP-Client-Solution | amd64 OpenWrt | `dhcp-client` |
+| IPsec-Site-to-Site-Solution | 2 × amd64 OPNsense | `ipsec-site-to-site` |
+| OPNsense-Firewall-Solution | amd64 OPNsense | `opnsense-firewall` |
+| Small-Internet-Demo | amd64 OpenWrt | skipped (manual) |
+| SDN-Basics-Template | amd64 Ubuntu cloud image | skipped (GUI) |
 
-`export-check` reports these as `BROKEN` on a Mac build. That is expected, not a bug in
-the build: those projects must be rebuilt on a Mac using its own templates before they
-will run there. Everything else — all Docker-based activities — is fine.
+`export-check` reports these as `BROKEN` on a Mac build, and under `-e verify=all` the
+first three fail with **`HTTP 403 Forbidden`** — GNS3's response when it cannot resolve a
+node's emulator or disk. It logs nothing server-side, so the bare 403 is all you get; if
+you see it on a Mac, this is why.
+
+Fixing them means rebuilding each project on a Mac against the `-mac` templates and
+exporting it under a separate name — not something the build can do for you. Everything
+else, which is every Docker-based activity, works normally.
+
+### Why the arm64 Qemu templates carry `options`
+
+Building topologies by hand from the `-mac` Qemu templates does work, but only because
+those templates set things their x86 counterparts can leave empty:
+
+```
+options: -machine virt -cpu cortex-a72 -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd
+hda_disk_interface: virtio
+```
+
+Three reasons, each of which stops the node dead within seconds if missed:
+
+- **`-machine virt`** — `qemu-system-x86_64` defaults to machine `pc`, but
+  `qemu-system-aarch64` has *no* default and exits with "No machine specified, and there is
+  no default for this architecture".
+- **`-bios …`** — every arm64 image here boots via UEFI (OpenWrt `armsr` is ARM
+  SystemReady, the OPNsense file is `…-ufs-efi-vm-aarch64`, and Ubuntu's arm64 cloud images
+  have no legacy path). Without firmware Qemu runs with nothing to execute: a blank console
+  and no error at all. The GNS3 VM already ships the firmware; if a future one does not,
+  `apt install qemu-efi-aarch64`.
+- **`virtio` disks** — the `virt` machine has no IDE controller, so the x86 templates'
+  `hda_disk_interface: ide` fails with "machine type does not support if=ide".
+
+Fusion on Apple Silicon also gives the guest no nested virtualisation — there is no
+`/dev/kvm` — so these run under TCG emulation, slower than their PC equivalents. Set
+`enable_kvm = false` in `gns3_server.conf` if a node complains about KVM.
+
+**Editing a template is not enough on its own.** The `templates` phase keys on
+`template_id`, so a changed `.conf` is skipped on a controller that already has it; push it
+with `gns3build.py templates --profile mac-student --force`. Existing *nodes* keep whatever
+they were created with, so delete and re-add any node made before the change.
 
 ---
 
@@ -485,5 +556,19 @@ or use `GNS3_VM_IP=`.
 Either `ssh-copy-id gns3@<vm-ip>` (preferred) or install `sshpass`. The playbook now
 detects this before the sync and says so plainly.
 
+**`HTTP 403 Forbidden` from a Qemu node, on a Mac.** GNS3 could not resolve that node's
+emulator or disk image, and logs nothing about it. Almost always the project was exported
+on a PC and holds `qemu_path: /usr/bin/qemu-system-x86_64`; see **Mac limitations**. Check
+with:
+
+```sh
+python3 -c 'import zipfile,json,sys; z=zipfile.ZipFile(sys.argv[1]); \
+  d=json.loads(z.read([n for n in z.namelist() if n.endswith("project.gns3")][0])); \
+  print([(n["name"], n["properties"].get("platform")) for n in d["topology"]["nodes"] \
+  if n["node_type"]=="qemu"])' <file>.gns3project
+```
+
 **Verification fails.** `-e verify=none` gets you a build for debugging, but do not export
-an appliance that has not passed `-e verify=all`.
+an appliance that has not passed `-e verify=all`. On a Mac, `dhcp-client`,
+`ipsec-site-to-site` and `opnsense-firewall` fail inherently — see above — so `verify=all`
+cannot go green there until those projects are rebuilt for arm64.
