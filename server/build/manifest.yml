@@ -81,6 +81,13 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
     qemu:   [openwrt-mac, opnsense-mac, ubuntu-cloud-mac]
+    # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
+    # project exported on a PC is permanently amd64 — the arm64 templates installed here are
+    # not consulted for an imported node. Such a project cannot start on this platform (GNS3
+    # answers 403 and logs nothing). Where an arm64 rebuild exists it is named
+    # <Name>-arm64.gns3project and picked up automatically; projects with no Qemu node are
+    # unaffected and need no variant.
+    project_suffix: "-arm64"
 
 # ---------------------------------------------------------------------------
 # Node definitions. `templates` lists the templates/<name>.conf files to register

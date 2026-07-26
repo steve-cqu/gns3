@@ -52,6 +52,13 @@
     verify: smoke
     verify_smoke_activities: [ping-basics, stp-basics, ospf-basics, port-scanning]
 
+    # Platform variant for project files, mirroring platforms.<p>.project_suffix in the
+    # manifest. A .gns3project bakes in each Qemu node's emulator and disk, so a
+    # PC-exported project cannot run on arm64; where a rebuild exists as
+    # <Name>-arm64.gns3project it is used instead, both when importing into the appliance
+    # and when verifying. Projects without a Qemu node need no variant.
+    project_suffix: "{{ '-arm64' if profile.startswith('mac') else '' }}"
+
     gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
 
     # The interpreter running ansible-playbook, used for every control-node script rather
@@ -336,6 +343,7 @@
         set -o pipefail &&
         {{ local_python }} -u {{ gns3_dev_repo }}/tools/gns3_autotest.py
         {{ '--all' if verify == 'all' else item }}
+        --project-suffix '{{ project_suffix }}'
         --server {{ api_url }} 2>&1 | tee -a {{ verify_log }}
       args:
         executable: /bin/bash

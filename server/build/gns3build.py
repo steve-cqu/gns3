@@ -816,7 +816,7 @@ def read_project_list(m, audience):
     return files, names
 
 
-def find_project_files(name, roots):
+def find_project_files(name, roots, suffix=""):
     """Every <name>.gns3project under roots, in root order — the first one is used.
 
     All matches are returned, not just the winner, because copies of one project can
@@ -824,18 +824,25 @@ def find_project_files(name, roots):
     a rebuilt project in activities/). Identical ids make the skip-if-exists check blind
     to the difference, so importing the stale copy silently shadows the good one. Put the
     authoritative root first, and heed the warning when this returns more than one.
+
+    `suffix` names a platform variant (see platforms.<p>.project_suffix). <name><suffix>
+    wins wherever it exists, and only the plain name is looked for otherwise — so a
+    platform needs a rebuilt file only for the projects that actually differ.
     """
-    hits = []
-    for root in roots:
-        root = Path(os.path.expanduser(str(root)))
-        if not root.is_dir():
-            continue
-        direct = root / f"{name}.gns3project"
-        if direct.is_file():
-            hits.append(direct)
-            continue
-        hits.extend(sorted(root.rglob(f"{name}.gns3project")))
-    return hits
+    def _hits(stem):
+        out = []
+        for root in roots:
+            root = Path(os.path.expanduser(str(root)))
+            if not root.is_dir():
+                continue
+            direct = root / f"{stem}.gns3project"
+            if direct.is_file():
+                out.append(direct)
+                continue
+            out.extend(sorted(root.rglob(f"{stem}.gns3project")))
+        return out
+
+    return (suffix and _hits(f"{name}{suffix}")) or _hits(name)
 
 
 def project_id_of(path):
@@ -853,6 +860,8 @@ def cmd_projects(args):
     list_files, names = read_project_list(m, audience)
     roots = ([r.strip() for r in args.roots.split(",") if r.strip()] if args.roots
              else m.get("project_roots", ["/home/gns3/projects"]))
+    platform = profile_platform(m, args.profile)
+    suffix = m.get("platforms", {}).get(platform, {}).get("project_suffix", "")
 
     ctrl = Controller(args.server)
     try:
@@ -862,13 +871,14 @@ def cmd_projects(args):
     print(f"controller {args.server} — GNS3 {ver}")
     print(f"profile {args.profile}  (audience: {audience}) — "
           f"{', '.join(f.name for f in list_files)}, {len(names)} project(s)")
-    print(f"roots: {', '.join(str(r) for r in roots)}\n")
+    print(f"roots: {', '.join(str(r) for r in roots)}"
+          + (f"   (preferring *{suffix}.gns3project)" if suffix else "") + "\n")
 
     existing = {p["project_id"] for p in ctrl.projects()}
     imported = skipped = 0
     notfound, failures, shadowed, records = [], [], [], []
     for name in names:
-        hits = find_project_files(name, roots)
+        hits = find_project_files(name, roots, suffix)
         if not hits:
             print(f"  MISSING {name:34} (not under any root — skipped)")
             notfound.append(name)
