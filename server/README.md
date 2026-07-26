@@ -283,10 +283,40 @@ VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>-student.ova
 
 **VMware Fusion (Mac):**
 
+`ovftool` ships with Fusion but is not on the PATH, and lives in a different directory from
+`vmrun`:
+
 ```sh
-vmrun stop ~/VMs/GNS3.vmx soft
-ovftool ~/VMs/GNS3.vmx GNS3-CQU-v<version>-student.ova
+export PATH="/Applications/VMware Fusion.app/Contents/Library/VMware OVF Tool:$PATH"
 ```
+
+Note the order is the **reverse** of VirtualBox: `ovftool` will not export a VM that has
+snapshots, so export first and snapshot afterwards.
+
+```sh
+vmrun stop ~/VMs/GNS3.vmx soft                    # graceful; `vmrun list` must not show it
+ovftool --compress=9 ~/VMs/GNS3.vmx GNS3-CQU-v<version>-student-arm64.ova
+vmrun snapshot ~/VMs/GNS3.vmx "v<version>-student"
+```
+
+To export a state you already snapshotted, clone it out rather than reverting — the clone
+has no snapshots, and the original keeps its history:
+
+```sh
+vmrun listSnapshots ~/VMs/GNS3.vmx
+vmrun clone ~/VMs/GNS3.vmx ~/VMs/GNS3-export.vmx full \
+      -snapshot="v<version>-student" -cloneName="GNS3-export"
+ovftool --compress=9 ~/VMs/GNS3-export.vmx GNS3-CQU-v<version>-student-arm64.ova
+rm -rf ~/VMs/GNS3-export.vmwarevm                 # or delete it from Fusion
+```
+
+`--compress=9` roughly halves a ~10 GB appliance and costs several minutes.
+
+**Name Mac appliances distinctly** — `-arm64`, as above. They import happily on an Intel
+machine and then never boot, so a student who grabs the wrong file sees a broken download
+rather than an obvious mismatch. The student instructions in
+[`../vm/getting-started-mac.md`](../vm/getting-started-mac.md) tell them to look for the Mac
+appliance; the filename is what makes that possible.
 
 ---
 
@@ -297,11 +327,12 @@ are imported — everything else is already in place and skips:
 
 ```sh
 cd gns3/server/ansible
-./build.sh "GNS3 VM" pc-staff -e verify=all
+./build.sh "GNS3 VM" pc-staff -e verify=all              # VirtualBox
+./build.sh ~/VMs/GNS3.vmx mac-staff -e verify=all        # VMware Fusion
 ```
 
-Then repeat step 2's checks with `--profile pc-staff` and step 3's export, naming it
-`GNS3-CQU-v<version>-staff.ova`.
+Then repeat step 2's checks with the staff profile and step 3's export, naming it
+`GNS3-CQU-v<version>-staff.ova` (or `-staff-arm64.ova` on a Mac).
 
 ---
 
