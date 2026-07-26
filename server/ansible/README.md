@@ -95,10 +95,11 @@ The `mac` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a cle
 student projects imported (the seventh, SDN-Basics-Template, deliberately absent), smoke
 verification passed, export-check clean, provenance written and fetched.
 
-Two things there remain unproven. **`vmrun getGuestIPAddress` has still never run** — that
-build used `GNS3_VM_IP=<ip>`, which bypasses discovery entirely, so `build.sh`'s VMware
-branch is the last untested code in the pipeline. And no Mac **OVA has been cut** with
-`ovftool`. Before building, read **Setting up a Mac build host** and **Mac builds** in
+That build passed `GNS3_VM_IP=<ip>`, so discovery was bypassed; `vmrun getGuestIPAddress`
+was confirmed separately on the same day and returns the reachable host-only address, not
+the NAT one. Both hypervisor branches of `build.sh` are therefore exercised.
+
+Before building, read **Setting up a Mac build host** and **Mac builds** in
 [`../README.md`](../README.md): Homebrew's rsync is a hard requirement, `vmrun` is not on
 the PATH, and `ansible-core` must be installed in the same venv as PyYAML.
 
