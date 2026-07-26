@@ -54,6 +54,15 @@
 
     gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
 
+    # The interpreter running ansible-playbook, used for every control-node script rather
+    # than letting `#!/usr/bin/env python3` pick one off PATH. Those are not always the
+    # same python: install ansible-core and PyYAML into a venv, run build.sh from a shell
+    # where that venv is not active, and the engine resolves to a system python with no
+    # PyYAML — an hour into the build, at the first task that runs here rather than on the
+    # VM. Tying the scripts to ansible's own interpreter removes the guess; the setup in
+    # ../README.md pip-installs ansible-core and pyyaml together, so it always has both.
+    local_python: "{{ ansible_playbook_python }}"
+
     # The projects phase runs on the control node, so its record of each source file's
     # size + sha256 lands here and is copied to the VM for `provenance` to fold in. Git
     # cannot hold the oversized projects, so this is the only durable statement of which
@@ -106,6 +115,32 @@
           - "The build phase is long and ansible prints nothing while it runs. Watch it:"
           - "  ssh {{ ansible_user }}@{{ vm_address }} 'tail -F {{ build_log }}'"
           - "  tail -F {{ verify_log }}    # once it reaches verification"
+
+    # The control node runs gns3build.py too — the projects phase — but not until the build
+    # is done, which on a fresh VM is an hour in. Everything before that runs on the VM, so
+    # a control node that cannot run the engine at all (no PyYAML, script not executable)
+    # stays invisible until the expensive work has already been paid for. `validate` does
+    # the same imports and manifest parse as `projects`, so it is a faithful precheck.
+    - name: Check the control node can run gns3build.py
+      ansible.builtin.command:
+        argv: ["{{ local_python }}", "{{ gns3_repo }}/server/build/gns3build.py", "validate"]
+      register: local_engine_check
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      check_mode: false
+
+    - name: Require a working engine on the control node
+      ansible.builtin.assert:
+        that: local_engine_check.rc == 0
+        fail_msg: >-
+          {{ local_python }} cannot run {{ gns3_repo }}/server/build/gns3build.py, and the
+          projects and verify phases both need it later. Almost always PyYAML is missing
+          from that interpreter — install it there:
+          {{ local_python }} -m pip install pyyaml
+          The error was:
+          {{ (local_engine_check.stdout | default('') ~ ' ' ~ local_engine_check.stderr | default('')) | trim }}
+        quiet: true
 
     # ---------------------------------------------------------------- sync ----
     # Sync only what the engine needs: the build tooling, docker contexts, templates and
@@ -255,7 +290,7 @@
     # From the control node, straight into the VM's API — see the header note.
     - name: Import the projects from the control node
       ansible.builtin.command: >-
-        {{ gns3_repo }}/server/build/gns3build.py projects
+        {{ local_python }} {{ gns3_repo }}/server/build/gns3build.py projects
         --profile {{ profile }}
         --server {{ api_url }}
         --roots {{ project_roots | join(',') }}
@@ -299,7 +334,7 @@
     - name: Verify the appliance with gns3_autotest.py
       ansible.builtin.shell: >-
         set -o pipefail &&
-        python3 -u {{ gns3_dev_repo }}/tools/gns3_autotest.py
+        {{ local_python }} -u {{ gns3_dev_repo }}/tools/gns3_autotest.py
         {{ '--all' if verify == 'all' else item }}
         --server {{ api_url }} 2>&1 | tee -a {{ verify_log }}
       args:

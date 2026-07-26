@@ -97,7 +97,9 @@ hard requirement there, and `vmrun` is not on the PATH by default.
 
 ## Requirements
 
-- `ansible-core` (no collections needed), `rsync`, and `python3` with PyYAML
+- `ansible-core` (no collections needed) and `rsync`, with **PyYAML in the same python as
+  `ansible-core`** — control-node scripts run under `ansible_playbook_python`, not whatever
+  `#!/usr/bin/env python3` happens to find
 - Either an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) or `sshpass`
   for the password login. Both this playbook and `gns3_autotest.py` probe for a working key
   first and only fall back to `sshpass`, so if you can already ssh to the VM without a

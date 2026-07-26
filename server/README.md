@@ -38,7 +38,10 @@ platforms, since no arm64 Qemu images exist for them.
 
 **On your machine (the build host):**
 
-- `ansible-core` (no Galaxy collections needed), `rsync`, and `python3` with PyYAML
+- `ansible-core` (no Galaxy collections needed) and `rsync`. **PyYAML must be installed in
+  the same python as `ansible-core`** — the playbook runs the control-node scripts with
+  ansible's own interpreter, so a venv holding both (as below) always works, while
+  `ansible` from a package manager plus `pip install pyyaml` somewhere else does not.
 - **Either** an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) **or**
   `sshpass` for the password login. The build and the verification tooling both probe for a
   working key first, so a key means you need `sshpass` nowhere.
