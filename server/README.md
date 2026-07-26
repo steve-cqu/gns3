@@ -512,6 +512,15 @@ Fusion on Apple Silicon also gives the guest no nested virtualisation — there 
 with `gns3build.py templates --profile mac-student --force`. Existing *nodes* keep whatever
 they were created with, so delete and re-add any node made before the change.
 
+All three were booted on Apple Silicon on 2026-07-26 — the first time the arm64 Qemu path
+had ever run. Logins:
+
+| Node | Login | Notes |
+|---|---|---|
+| OpenWRT | none | boots straight to a shell |
+| Ubuntu VM | `ubuntu` / `ubuntu` | set by the cloud-init ISO. `systemd-networkd-wait-online` stalls for its full timeout on an unconnected interface, then boot continues — not a fault |
+| OPNsense | `root` / `opnsense` | slow under TCG. Boot ends at the interface assignments and the GUI certificate fingerprint; the console then goes quiet because the interactive menu is on a video tty the `virt` machine has no equivalent for. Configure it through the web GUI on the LAN address instead |
+
 ---
 
 ## The previous manual build
