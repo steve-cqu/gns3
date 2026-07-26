@@ -124,6 +124,8 @@ brew install rsync python@3.12
 
 # 4. Build tooling in a venv. Homebrew's python refuses `pip install` into itself
 #    (PEP 668, "externally-managed-environment"), and a venv is cleaner than fighting it.
+#    Install ansible-core HERE rather than with brew: the playbook runs the control-node
+#    scripts under ansible's own interpreter, so ansible and PyYAML must share one.
 python3 -m venv ~/gns3-build
 source ~/gns3-build/bin/activate          # needed in every shell you build from
 pip install ansible-core pyyaml
@@ -132,10 +134,11 @@ pip install ansible-core pyyaml
 echo 'export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"' >> ~/.zprofile
 export PATH="/Applications/VMware Fusion.app/Contents/Public:$PATH"
 
-# 6. Give the VM your SSH key. Do this and you never need sshpass, which matters more on
-#    macOS than elsewhere — see the note below.
+# 6. Give the VM your SSH key, and install sshpass as a fallback. See the note below —
+#    the key alone is enough, but sshpass is cheap insurance and Homebrew hides it in a tap.
 ssh-keygen -t ed25519                     # skip if the account already has a key
 ssh-copy-id gns3@<vm-ip>
+brew install hudochenkov/sshpass/sshpass
 
 # 7. The repos, side by side.
 mkdir -p ~/git && cd ~/git
@@ -143,11 +146,12 @@ git clone https://github.com/steve-cqu/gns3.git
 git clone <gns3-dev remote>               # private: needs GitHub auth on this account
 ```
 
-Check it took:
+Check it took — from the shell you will build in, with the venv active:
 
 ```sh
-rsync --version | head -1     # must be rsync 3.x, NOT openrsync
-ansible --version | head -1
+rsync --version | head -1                 # must be rsync 3.x, NOT openrsync
+which ansible-playbook                    # must be ~/gns3-build/bin/ansible-playbook
+ansible --version | grep -i 'python version'   # that interpreter is the one that needs PyYAML
 vmrun list
 python3 -c 'import yaml; print("pyyaml ok")'
 ```
@@ -159,10 +163,16 @@ Three things about macOS specifically:
   anything changed. Step 2 must come before step 3 for `/opt/homebrew/bin` to win the PATH.
 - **`vmrun` is not on the PATH** by default, hence step 5. Without it `build.sh` cannot
   discover the VM's IP, though `GNS3_VM_IP=<ip>` works around that.
-- **Use the SSH key and skip `sshpass` entirely.** Homebrew core omits `sshpass`
-  deliberately, so getting it means a third-party tap
-  (`brew install hudochenkov/sshpass/sshpass`). Step 6 avoids the question: the playbook and
-  `gns3_autotest.py` both probe for a working key before falling back to a password login.
+- **`sshpass` hides in a third-party tap.** Homebrew core omits it deliberately. The
+  playbook and `gns3_autotest.py` both probe for a working ssh key first, so step 6's
+  `ssh-copy-id` is what actually matters — but install `sshpass` too. It costs nothing, and
+  a `gns3-dev` checkout predating the key probe still calls it for Open vSwitch nodes.
+
+**Run `build.sh` from a shell with the venv active.** Forgetting it is the failure this
+setup is most prone to, and it surfaces late: everything up to the project import runs on
+the VM, so a control node with the wrong python gets an hour into the build before
+complaining. The playbook now checks for this up front, but the check is only as good as the
+shell you launched it from.
 
 You can skip `infiles/` on a Mac. SDN-Basics-Template is 729 MB and amd64, so it cannot
 run there regardless — the build logs `MISSING` and carries on.

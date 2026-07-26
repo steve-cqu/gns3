@@ -89,11 +89,14 @@ The `pc` (VirtualBox) path is validated end to end for both audiences: build, id
 re-run (`changed=0`), `--check`, verification, export-check and provenance, through to an
 exported OVA.
 
-The `mac` (VMware Fusion) path shares the same code and has been dry-run checked, but has
-never been run on Apple Silicon — `vmrun getGuestIPAddress` in `build.sh` is the
-least-proven part, and `GNS3_VM_IP=<ip>` bypasses it. Before trying it, read **On a Mac
-build host** and **Mac builds** in [`../README.md`](../README.md): Homebrew's rsync is a
-hard requirement there, and `vmrun` is not on the PATH by default.
+The `mac` (VMware Fusion, Apple Silicon) path was first run on 2026-07-26 and reached
+project import: `vmrun` discovery, Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu
+disks (md5s confirmed against real downloads for the first time), templates, logos, noVNC,
+and 6 of 7 student projects imported — the seventh being SDN-Basics-Template, deliberately
+absent. **Verification, export-check, provenance and the OVA export are still unproven
+there.** Before trying it, read **Setting up a Mac build host** and **Mac builds** in
+[`../README.md`](../README.md): Homebrew's rsync is a hard requirement, `vmrun` is not on
+the PATH, and `ansible-core` must be installed in the same venv as PyYAML.
 
 ## Requirements
 
