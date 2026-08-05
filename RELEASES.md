@@ -65,6 +65,11 @@ appliance — a renamed `.ova` proves nothing, and the shell shows the same line
 
 ## Cutting a release
 
+The steps below are the release itself. For the surrounding cycle — when in the term each
+step is safe, what has to land before a build, and how to handle a fix to an appliance
+already in students' hands — see `gns3-dev/notes/term-rollover-runbook.md` in the private
+repo.
+
 1. Commit everything in both repositories. The build warns if either work tree is dirty,
    because a dirty tree cannot be pointed back at a tag.
 2. Build with the release label:
