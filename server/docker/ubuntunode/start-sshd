@@ -1,0 +1,46 @@
+#!/bin/sh
+# Start the SSH server on this node. Safe to run more than once.
+#
+# Host keys are generated here rather than baked into the image on purpose: a host key is
+# a host's identity, so every node must have its own. /etc/ssh is a GNS3 volume, so the
+# keys generated on the first run persist for the life of the node.
+#
+# Ubuntu's openssh-server package generates host keys in its postinst, which runs during
+# `docker build` — so without the rm below every node would ship the build sandbox's keys
+# and every Ubuntu Host in every project would present the same fingerprint. That would
+# make the host-key prompt the SSH activities teach meaningless. The rm is skipped once
+# this node has generated its own, which is what keeps re-running safe.
+[ -f /etc/ssh/.gns3-host-keys-generated ] || rm -f /etc/ssh/ssh_host_*
+
+# ssh-keygen -A generates only the key types this build of OpenSSH supports, and only the
+# ones that do not already exist. Do not replace it with explicit `ssh-keygen -f <path>`
+# calls: those prompt "Overwrite (y/n)?" on a second run, which stops this script before
+# sshd ever starts.
+ssh-keygen -A
+touch /etc/ssh/.gns3-host-keys-generated
+
+# sshd refuses to start without its privilege-separation directory, which is not part of
+# the image.
+mkdir -p /run/sshd
+
+# Root login with a password is a lab convenience, not a practice to copy.
+#
+# This deliberately edits sshd_config rather than dropping a file into sshd_config.d. The
+# Include line sits ABOVE PermitRootLogin in the shipped config, and sshd takes the FIRST
+# value it obtains — so a drop-in would silently override a student who edits sshd_config,
+# which is exactly what ssh-hardening asks them to do. Their hardening would appear to be
+# ignored with nothing to show why.
+#
+# Delete-then-append instead of substituting in place: the old `sed s/#PermitRootLogin
+# prohibit-password/.../` depended on that exact comment existing and quietly did nothing
+# if it ever changed. This form is idempotent and leaves exactly one active directive.
+#
+# chpasswd prints "BAD PASSWORD: The password is shorter than 8 characters" here — this
+# image has libpam-pwquality, which warns but does not enforce for root. The password IS
+# set (verified: `ssh root@<node>` with gns3 logs in). Do NOT silence it with 2>/dev/null;
+# that would hide real failures, and password-hashing teaches this exact pwquality message.
+echo 'root:gns3' | chpasswd
+sed -i '/^#*PermitRootLogin/d' /etc/ssh/sshd_config
+echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+
+/usr/sbin/sshd && echo "sshd started, listening on port 22"

@@ -34,32 +34,23 @@ RUN mkdir -p /usr/share/wordlists \
       https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt \
  && test -s /usr/share/wordlists/rockyou.txt
 
-# Copy GitHub helper scripts
-ADD setup-github.sh /bin/setup-github.sh
-ADD reset-github.sh /bin/reset-github.sh
-RUN chmod +x /bin/setup-github.sh /bin/reset-github.sh
+# Helper scripts. COPY, not ADD: these are plain local files, and ADD additionally
+# unpacks archives and fetches URLs, which is not wanted here.
+COPY setup-github.sh /bin/setup-github.sh
+COPY reset-github.sh /bin/reset-github.sh
+COPY start-sshd      /bin/start-sshd
+RUN chmod +x /bin/setup-github.sh /bin/reset-github.sh /bin/start-sshd
 
-# Add a group for the class and a student user (groupadd/useradd replace busybox addgroup/adduser)
+# A class group and a student user. The account is what ssh-hardening restricts logins to
+# with AllowUsers. It ships with NO SSH keys: a single private key copied into every node
+# of every image is the exact practice the SSH activities teach against, and students
+# create their own with ssh-keygen and ssh-copy-id. /home/student/.ssh is deliberately not
+# created here either — ssh-copy-id creates it with the right ownership and mode, and
+# watching that happen is part of the lesson.
 RUN groupadd --gid 20001 class \
  && useradd --create-home --home-dir /home/student --shell /bin/bash \
             --gid class --uid 10001 --comment "" student \
- && mkdir -p /home/student/.ssh \
  && echo 'student:gns3' | chpasswd
 
 # Persistent volumes
 VOLUME /root/.ssh /etc/ssh /data /home/student
-
-# Add SSH starter script and SSH keys (same shared student keys as alpinenode)
-ADD start-ssh.sh /bin/start-ssh.sh
-ADD gns3_student_rsa_key.prv /home/student/.ssh/id_rsa
-ADD gns3_student_rsa_key.pub /home/student/.ssh/id_rsa.pub
-ADD gns3_student_ed25519_key.prv /home/student/.ssh/id_ed25519
-ADD gns3_student_ed25519_key.pub /home/student/.ssh/id_ed25519.pub
-ADD gns3_student_rsa_key.pub /home/student/.ssh/authorized_keys
-RUN cat /home/student/.ssh/id_ed25519.pub >> /home/student/.ssh/authorized_keys \
- && chown -R student:class /home/student/.ssh \
- && chmod u=rwX,go= /home/student/.ssh \
- && chmod u=rw,go= /home/student/.ssh/id_rsa /home/student/.ssh/id_ed25519 \
- && chmod u=rw,go=r /home/student/.ssh/id_rsa.pub /home/student/.ssh/id_ed25519.pub \
- && chmod u=rwX,go= /home/student/.ssh/authorized_keys \
- && chmod +x /bin/start-ssh.sh

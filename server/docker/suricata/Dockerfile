@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.24
 
 # Add community repository
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | cut -d "." -f 1,2 | tr -d \")/community" \

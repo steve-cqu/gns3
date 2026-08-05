@@ -4,7 +4,7 @@
 # via a simple console menu.
 # Note: requires the sch_netem kernel module on the GNS3 VM host (listed under
 # kernel_modules in build/manifest.yml and loaded by gns3build.py's `docker` phase).
-FROM alpine:latest
+FROM alpine:3.24
 
 RUN apk add --no-cache \
     bash \

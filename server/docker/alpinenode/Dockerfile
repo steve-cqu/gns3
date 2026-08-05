@@ -1,9 +1,14 @@
 # Create a lightweight Alpine Linux-based Docker image with various networking tools and a pre-configured user.
-FROM alpine:latest
+#
+# The base is pinned. On `alpine:latest` a rebuild months later silently moves the whole
+# userland — that is how OpenSSH 10 arrived and removed DSA, breaking a key-generation step
+# that three activities then had to apologise for. A pinned base makes the release tags in
+# RELEASES.md mean something: the same tag builds the same userland.
+FROM alpine:3.24
 
 # Add community repository to access more packages
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | cut -d "." -f 1,2 | tr -d \")/community" \
-    >> /etc/apk/repositories  
+    >> /etc/apk/repositories
 
 # Add packages
 RUN apk add --no-cache \
@@ -29,52 +34,31 @@ openssl \
 nginx \
 fail2ban \
 wireguard-tools \
-whois
+whois \
+ && update-ca-certificates
 
-# Update CA certificates
-RUN update-ca-certificates
+# Helper scripts. COPY, not ADD: these are plain local files, and ADD additionally
+# unpacks archives and fetches URLs, which is not wanted here.
+COPY setup-github.sh /bin/setup-github.sh
+COPY reset-github.sh /bin/reset-github.sh
+COPY start-sshd      /bin/start-sshd
+RUN chmod +x /bin/setup-github.sh /bin/reset-github.sh /bin/start-sshd
 
-# Copy GitHub helper scripts
-ADD setup-github.sh /bin/setup-github.sh
-ADD reset-github.sh /bin/reset-github.sh
-RUN chmod +x /bin/setup-github.sh
-RUN chmod +x /bin/reset-github.sh
-
-# Add a group for the class
-RUN addgroup \
-    --gid "20001" \
-    "class"
-
-# Add a student user to the class group
-RUN adduser \
+# A class group and a student user. The account is what ssh-hardening restricts logins to
+# with AllowUsers. It ships with NO SSH keys: a single private key copied into every node
+# of every image is the exact practice the SSH activities teach against, and students
+# create their own with ssh-keygen and ssh-copy-id. /home/student/.ssh is deliberately not
+# created here either — ssh-copy-id creates it with the right ownership and mode, and
+# watching that happen is part of the lesson.
+RUN addgroup --gid "20001" "class" \
+ && adduser \
     --disabled-password \
     --gecos "" \
     --home "/home/student" \
     --ingroup "class" \
     --uid "10001" \
-    student
-
-# Set password for student user
-RUN mkdir -p /home/student/.ssh
-RUN echo 'student:gns3' | chpasswd
+    student \
+ && echo 'student:gns3' | chpasswd
 
 # Persistent volumes
 VOLUME /root/.ssh /etc/ssh /data /home/student
-
-# Add SSH starter script and SSH keys
-ADD start-ssh.sh /bin/start-ssh.sh
-ADD gns3_student_rsa_key.prv /home/student/.ssh/id_rsa
-ADD gns3_student_rsa_key.pub /home/student/.ssh/id_rsa.pub
-ADD gns3_student_ed25519_key.prv /home/student/.ssh/id_ed25519
-ADD gns3_student_ed25519_key.pub /home/student/.ssh/id_ed25519.pub
-ADD gns3_student_rsa_key.pub /home/student/.ssh/authorized_keys
-RUN cat /home/student/.ssh/id_ed25519.pub >> /home/student/.ssh/authorized_keys
-RUN chown -R student:class /home/student/.ssh
-RUN chmod u=rwX,go= /home/student/.ssh  
-RUN chmod u=rw,go= /home/student/.ssh/id_rsa
-RUN chmod u=rw,go=r /home/student/.ssh/id_rsa.pub
-RUN chmod u=rw,go= /home/student/.ssh/id_ed25519
-RUN chmod u=rw,go=r /home/student/.ssh/id_ed25519.pub
-RUN chmod u=rwX,go= /home/student/.ssh/authorized_keys
-RUN chmod +x /bin/start-ssh.sh
-

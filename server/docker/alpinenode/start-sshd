@@ -1,0 +1,29 @@
+#!/bin/sh
+# Start the SSH server on this node. Safe to run more than once.
+#
+# Host keys are generated here rather than baked into the image on purpose: a host key is
+# a host's identity, so every node must have its own. /etc/ssh is a GNS3 volume, so the
+# keys generated on the first run persist for the life of the node.
+#
+# ssh-keygen -A generates only the key types this build of OpenSSH supports, and only the
+# ones that do not already exist — which is what makes re-running this harmless. Do not
+# replace it with explicit `ssh-keygen -f <path>` calls: those prompt "Overwrite (y/n)?"
+# on a second run, and they name key types (dsa) that current OpenSSH has removed.
+ssh-keygen -A
+
+# Root login with a password is a lab convenience, not a practice to copy.
+#
+# This deliberately edits sshd_config rather than dropping a file into sshd_config.d. The
+# Include line sits ABOVE PermitRootLogin in the shipped config, and sshd takes the FIRST
+# value it obtains — so a drop-in would silently override a student who edits sshd_config,
+# which is exactly what ssh-hardening asks them to do. Their hardening would appear to be
+# ignored with nothing to show why.
+#
+# Delete-then-append instead of substituting in place: the old `sed s/#PermitRootLogin
+# prohibit-password/.../` depended on that exact comment existing and quietly did nothing
+# if it ever changed. This form is idempotent and leaves exactly one active directive.
+echo 'root:gns3' | chpasswd
+sed -i '/^#*PermitRootLogin/d' /etc/ssh/sshd_config
+echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+
+/usr/sbin/sshd && echo "sshd started, listening on port 22"
