@@ -79,6 +79,13 @@
     import_record_remote: /home/gns3/.gns3build-imports.json
     provenance_path: /home/gns3/gns3-build-provenance.json
 
+    # Set with -e release=v030 only when this build is the one going out to students.
+    # It labels the provenance manifest, stamps /etc/gns3-cqu-release on the appliance so
+    # it can name itself, and files a copy of the manifest under server/releases/<release>/
+    # where it is committed rather than gitignored. Leave unset for a test build.
+    release: ""
+    releases_dir: "{{ playbook_dir }}/../releases"
+
     # Ansible shows nothing while a task runs, and the build phase is half an hour of
     # docker builds. Tee the two long, silent phases to logs you can tail. Stable paths,
     # truncated per run, so the tail command never changes (use `tail -F`).
@@ -414,6 +421,7 @@
       ansible.builtin.command: >-
         {{ gns3build }} provenance --profile {{ profile }}
         --imports {{ import_record_remote }} --out {{ provenance_path }}
+        {{ ('--release ' + release) if release | length > 0 else '' }}
       register: gns3_provenance
       changed_when: not ansible_check_mode
       failed_when: false
@@ -429,6 +437,26 @@
         dest: "{{ playbook_dir }}/provenance-{{ profile }}.json"
         flat: true
       when: not ansible_check_mode
+
+    # A released build's manifest is the durable record of what students are running, so
+    # it lands in the repo rather than in the gitignored working copy above. One file per
+    # profile — a release is up to four OVAs and they do not contain the same things.
+    - name: File the provenance manifest under the release
+      ansible.builtin.fetch:
+        src: "{{ provenance_path }}"
+        dest: "{{ releases_dir }}/{{ release }}/provenance-{{ profile }}.json"
+        flat: true
+      when:
+        - release | length > 0
+        - not ansible_check_mode
+
+    - name: Say what still has to be done by hand for this release
+      ansible.builtin.debug:
+        msg:
+          - "Release {{ release }} recorded for profile {{ profile }}."
+          - "Still to do by hand: cut the OVA (section 3 of server/README.md), then add"
+          - "the row to RELEASES.md with the OVA name, size and sha256, and tag both repos."
+      when: release | length > 0
 
     - name: Build complete
       ansible.builtin.debug:

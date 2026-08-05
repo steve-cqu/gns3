@@ -297,10 +297,36 @@ It fails (exit 1) if the VM carries anything the audience must not ship, and rep
 
 The build also writes a provenance manifest to `/home/gns3/gns3-build-provenance.json` on
 the VM (and fetches a copy to `ansible/provenance-<profile>.json`). It records the date,
-profile, GNS3 and kernel versions, every Docker image ID, every Qemu disk md5, every
-template and project, and the size + sha256 of each source `.gns3project` — including the
-out-of-git 729 MB one, which nothing else records. Keep the fetched copy with the OVA:
-without it, two `GNS3-CQU-*.ova` files are indistinguishable months later.
+profile, GNS3 and kernel versions, the commit of **both** repositories, every Docker image
+ID, every Qemu disk md5, every template and project, and the size + sha256 of each source
+`.gns3project` — including the out-of-git 729 MB one, which nothing else records. Keep the
+fetched copy with the OVA: without it, two `GNS3-CQU-*.ova` files are indistinguishable
+months later.
+
+The two commits are read in different places, because the phases run in different places —
+this repository on the VM, and each projects root (`gns3-dev`) on the control node during
+`projects --record`. Either one showing `DIRTY` in the phase output means that tree had
+uncommitted changes, so the recorded commit does not describe what was built.
+
+### Releasing a build
+
+A build becomes a *release* when it goes out to students. Add `-e release=<version>`:
+
+```sh
+./build.sh "GNS3 VM" amd64-student -e release=v030
+```
+
+That labels the provenance manifest, files a copy under `releases/<version>/` where it is
+committed rather than gitignored, and stamps `/etc/gns3-cqu-release` (plus the motd) on the
+appliance so it can name itself — the check to give a student who has been told "use v030
+this term, not v027". It also warns if either work tree was dirty.
+
+Leave the flag off for a test build. Not every build is released: version numbers count
+builds, so the released sequence has gaps.
+
+The full checklist — including tagging both repositories, which the build cannot do for you
+— is in [`RELEASES.md`](../RELEASES.md), along with the record of what each cohort was
+given.
 
 ---
 

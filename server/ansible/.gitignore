@@ -1,4 +1,8 @@
 # Build artifacts produced by a run — records of a specific build, not source.
+#
+# This ignores the working copy only. A build that is *released* to students also files
+# its manifest under ../releases/<version>/, which is deliberately tracked: that copy is
+# the durable statement of what a cohort is running. See ../../RELEASES.md.
 .gns3build-imports.json
 provenance-*.json
 gns3build-verify.log

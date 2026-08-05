@@ -13,3 +13,4 @@ If you have completed the above quick start but want to know more or have issues
 - [VirtualBox for GNS3](./vm/virtualbox.md)
 - [VMWare for GNS3](./vm/vmware.md)
 - [Building the CQU GNS3 VM](./server/README.md) (only for staff)
+- [GNS3 VM releases](./RELEASES.md) — which appliance each term was given, and what is in it (only for staff)

@@ -57,6 +57,11 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_MANIFEST = HERE / "manifest.yml"
+REPO_ROOT = HERE.parents[1]          # <repo>/server/build/gns3build.py -> <repo>
+
+# Written to the VM by `provenance --release`, so the appliance can say which release it
+# is without opening a JSON file. os-release format: readable, and `. ` -sourceable.
+RELEASE_FILE = "/etc/gns3-cqu-release"
 
 
 # --------------------------------------------------------------------------- #
@@ -953,7 +958,7 @@ def cmd_projects(args):
             failures.append(name)
 
     if args.record and not args.dry_run:
-        write_import_record(args.record, args.profile, audience, records)
+        write_import_record(args.record, args.profile, audience, records, roots)
         print(f"\n  record {args.record} ({len(records)} source file(s))")
 
     verb = "would import" if args.dry_run else "imported"
@@ -1091,15 +1096,17 @@ def cmd_export_check(args):
 # --------------------------------------------------------------------------- #
 # Phase: provenance — record what this appliance actually contains
 # --------------------------------------------------------------------------- #
-PROVENANCE_SCHEMA = "gns3build-provenance/1"
+PROVENANCE_SCHEMA = "gns3build-provenance/2"   # /2 added `release` and `git`
 
 
-def write_import_record(path, profile, audience, records):
+def write_import_record(path, profile, audience, records, roots=None):
     """Source-side record written by `projects`, merged into the provenance manifest."""
     p = Path(os.path.expanduser(path))
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"profile": profile, "audience": audience,
-                             "sources": records}, indent=2, sort_keys=True) + "\n")
+    doc = {"profile": profile, "audience": audience, "sources": records}
+    if roots:
+        doc["roots"] = [{"path": str(r), "git": git_info(r)} for r in roots]
+    p.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
 
 
 def _cmd_out(cmd):
@@ -1109,6 +1116,67 @@ def _cmd_out(cmd):
         return r.stdout.strip() if r.returncode == 0 else None
     except OSError:
         return None
+
+
+def git_info(path):
+    """Identify the commit a work tree was built from; None if it is not one.
+
+    Two of these pin a build, and they are read in different places because the phases run
+    in different places: this repo, read on the VM where the engine runs, and each projects
+    root (gns3-dev), read on the control node by `projects --record`. A release tag means
+    nothing if the tree was dirty when the OVA was cut, so `dirty` is recorded rather than
+    assumed — None there means the question could not be answered, which is not the same
+    as clean.
+    """
+    d = str(path)
+    head = _cmd_out(["git", "-C", d, "rev-parse", "HEAD"])
+    if not head:
+        return None
+    status = _cmd_out(["git", "-C", d, "status", "--porcelain"])
+    return {
+        "commit": head,
+        "describe": _cmd_out(["git", "-C", d, "describe", "--tags", "--always", "--dirty"]),
+        "branch": _cmd_out(["git", "-C", d, "rev-parse", "--abbrev-ref", "HEAD"]),
+        "origin": _cmd_out(["git", "-C", d, "remote", "get-url", "origin"]),
+        "dirty": None if status is None else bool(status),
+    }
+
+
+def stamp_release(prov):
+    """Write /etc/gns3-cqu-release so the appliance can name its own release.
+
+    A renamed .ova tells you nothing, and `gns3-build-provenance.json` answers the question
+    only if you know to look for it. This is the two-second check a student or a tutor at a
+    lab machine can run when told "use v030 this term, not v027".
+    """
+    git = (prov.get("git") or {}).get("gns3") or {}
+    lines = [
+        "# CQUniversity GNS3 appliance — written at build time, do not edit.",
+        f"GNS3_CQU_RELEASE={prov['release']}",
+        f"GNS3_CQU_PROFILE={prov['profile']}",
+        f"GNS3_CQU_AUDIENCE={prov['audience']}",
+        f"GNS3_CQU_PLATFORM={prov['platform']}",
+        f"GNS3_CQU_BUILT={prov['generated_utc']}",
+        f"GNS3_CQU_GNS3={prov['gns3']['controller_version']}",
+        f"GNS3_CQU_COMMIT={(git.get('commit') or '')[:12]}",
+    ]
+    text = "\n".join(lines) + "\n"
+    try:
+        changed = sudo_write(RELEASE_FILE, text)
+    except subprocess.CalledProcessError as e:
+        print(f"  WARN   could not write {RELEASE_FILE} ({e}) — appliance will not "
+              f"self-identify")
+        return
+    print(f"  release {RELEASE_FILE} ({'written' if changed else 'unchanged'})")
+
+    # Also greet the shell, since that is where students are sent (Shell from the VM menu)
+    # and nobody reads a file they were not told about.
+    banner = f"\nCQUniversity GNS3 appliance — release {prov['release']} " \
+             f"({prov['profile']}, built {prov['generated_utc'][:10]})\n"
+    try:
+        sudo_write("/etc/motd", banner)
+    except subprocess.CalledProcessError:
+        print("  WARN   could not write /etc/motd")
 
 
 def cmd_provenance(args):
@@ -1133,9 +1201,16 @@ def cmd_provenance(args):
     prov = {
         "schema": PROVENANCE_SCHEMA,
         "generated_utc": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # Set only when the build is actually being released to students. An unreleased
+        # build is a build; a release is the one students are told to download, and only
+        # those get a tag, a RELEASES.md row and a stamp on the appliance.
+        "release": args.release or None,
         "profile": args.profile,
         "platform": platform,
         "audience": prof["audience"],
+        # What built this. The projects roots are filled in from the import record below,
+        # because that phase runs on the control node and this one runs on the VM.
+        "git": {"gns3": git_info(REPO_ROOT), "project_roots": []},
         "gns3": {"controller_version": gns3_version,
                  "manifest_expects": m.get("gns3_version")},
         "system": {
@@ -1195,7 +1270,9 @@ def cmd_provenance(args):
     # Source checksums recorded by `projects --record`, if that record reached us.
     record = Path(os.path.expanduser(args.imports)) if args.imports else None
     if record and record.is_file():
-        prov["sources"] = json.loads(record.read_text()).get("sources", [])
+        rec = json.loads(record.read_text())
+        prov["sources"] = rec.get("sources", [])
+        prov["git"]["project_roots"] = rec.get("roots", [])
     else:
         prov["sources"] = []
         if args.imports:
@@ -1223,6 +1300,28 @@ def cmd_provenance(args):
     print(f"  projects     {len(projects)} "
           f"({human(sum(p['bytes'] or 0 for p in projects))} on disk)")
     print(f"  sources      {len(prov['sources'])} file(s) with checksums")
+
+    dirty = []
+    for label, g in [("gns3", prov["git"]["gns3"])] + \
+                    [(r["path"], r["git"]) for r in prov["git"]["project_roots"]]:
+        if not g:
+            print(f"  git          {label}: not a work tree — commit NOT recorded")
+            continue
+        print(f"  git          {label}: {g['describe'] or g['commit'][:12]}"
+              f" ({g['branch']})" + ("  DIRTY" if g["dirty"] else ""))
+        if g["dirty"]:
+            dirty.append(label)
+
+    if args.release:
+        print(f"  release      {args.release}")
+        stamp_release(prov)
+        if dirty:
+            # Not fatal — you may be mid-fix and cutting a test OVA — but a release whose
+            # tree is dirty cannot be pointed back at a tag, which is the whole point.
+            print(f"\n  WARNING  releasing {args.release} from a DIRTY tree "
+                  f"({', '.join(dirty)}). Commit and tag before cutting the OVA, or the "
+                  f"recorded commit will not describe what shipped.")
+
     return 1 if (missing_imgs or missing_disks) else 0
 
 
@@ -1347,6 +1446,10 @@ def main():
     pv.add_argument("--profile", required=True)
     pv.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
     pv.add_argument("--out", default="~/gns3-build-provenance.json")
+    pv.add_argument("--release", help="release label for a build you are shipping to "
+                                      "students, e.g. v030. Records it in the manifest, "
+                                      f"stamps {RELEASE_FILE} and the motd, and warns if "
+                                      "either work tree is dirty. Omit for a test build.")
     pv.add_argument("--imports", help="import record from `projects --record`")
     pv.add_argument("--images-dir", help="override the manifest's qemu_images_dir")
     pv.add_argument("--projects-dir", default="/opt/gns3/projects")
