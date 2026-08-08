@@ -567,7 +567,7 @@
      inkscape:label="Layer 1">
     <text
        xml:space="preserve"
-       style="font-size:9px;text-align:center;letter-spacing:0px;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#0078d4;fill-opacity:1;stroke-width:1.00157;stroke-dasharray:none"
+       style="font-size:10px;text-align:center;letter-spacing:0px;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#ffffff;fill-opacity:1;stroke-width:1.00157;stroke-dasharray:none"
        x="31.8"
        y="22"
        id="text1"><tspan
@@ -575,6 +575,6 @@
          id="tspan1"
          x="31.8"
          y="22"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:9px;font-family:Arial;-inkscape-font-specification:'Arial Bold';letter-spacing:0px;fill:#0078d4;fill-opacity:1">Windows</tspan></text>
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:10px;font-family:Arial;-inkscape-font-specification:'Arial Bold';letter-spacing:0px;fill:#ffffff;fill-opacity:1">Win11</tspan></text>
   </g>
 </svg>
