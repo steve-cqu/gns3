@@ -1,0 +1,57 @@
+<!--
+  Sysmon configuration for the GNS3 Windows Host — deliberately small.
+
+  Install with:   Sysmon64.exe -accepteula -i sysmon-lab.xml
+  Change later:   Sysmon64.exe -c sysmon-lab.xml
+  Remove:         Sysmon64.exe -u
+
+  Read the results with no extra software at all:
+      Get-WinEvent -LogName Microsoft-Windows-Sysmon/Operational -MaxEvents 20
+      Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Sysmon/Operational'; Id=3}
+
+  WHY THIS IS SHORT. The well-known community configurations run to thousands of lines. They
+  are better at catching real intrusions and useless for teaching, because no student can read
+  one. This logs three event types, and a student can hold all of it in their head:
+
+      Event ID 1   process created      — with the full command line and its parent
+      Event ID 3   network connection   — with the process that owns it, and inbound vs outbound
+      Event ID 22  DNS query            — with the process that asked
+
+  Event 3 is the one with no native Windows equivalent. TCPView shows connections happening
+  now; this shows the ones that already happened, and which program made them.
+
+  READING THE RULES. Sysmon's filtering reads backwards from most people's expectations:
+      onmatch="exclude"  with no rules inside  ->  log ALL events of this type
+      onmatch="include"  with no rules inside  ->  log NO events of this type
+  So the three below are on, and everything after them is off.
+-->
+<Sysmon schemaversion="4.90">
+  <EventFiltering>
+
+    <!-- ON: the three that earn their place -->
+    <ProcessCreate  onmatch="exclude" />
+    <NetworkConnect onmatch="exclude" />
+
+    <!-- ON, minus Sysmon's own chatter. Sysmon does a reverse-DNS lookup on the addresses it
+         reports, so without this exclusion the DNS log fills with in-addr.arpa queries made by
+         Sysmon64.exe itself. Also the one worked example of an exclusion rule in this file. -->
+    <DnsQuery onmatch="exclude">
+      <Image condition="end with">Sysmon64.exe</Image>
+    </DnsQuery>
+
+    <!-- OFF: everything else, to keep the log readable -->
+    <ProcessTerminate     onmatch="include" />
+    <DriverLoad           onmatch="include" />
+    <ImageLoad            onmatch="include" />
+    <CreateRemoteThread   onmatch="include" />
+    <RawAccessRead        onmatch="include" />
+    <ProcessAccess        onmatch="include" />
+    <FileCreate           onmatch="include" />
+    <RegistryEvent        onmatch="include" />
+    <FileCreateStreamHash onmatch="include" />
+    <PipeEvent            onmatch="include" />
+    <WmiEvent             onmatch="include" />
+    <FileDelete           onmatch="include" />
+
+  </EventFiltering>
+</Sysmon>
