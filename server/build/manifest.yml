@@ -45,6 +45,20 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/m
 #   sch_netem  - netem qdisc used by the NETem docker node
 kernel_modules: [wireguard, sch_netem]
 
+# The lab NIC — the GNS3 VM's third adapter, on an isolated hypervisor network shared with a
+# Windows VM running beside it. The "Windows Host" Cloud template binds to it.
+#
+# The appliance's own 80_gns3vm_default_netcfg.yaml already declares eth2..eth8 and brings
+# them up, but with `dhcp4: yes`. The `labnic` phase overrides that for this one interface,
+# because a Cloud node bridges the *topology* onto it: leave DHCP on and the GNS3 VM takes a
+# lease from the student's own lab the moment an activity runs a DHCP server. The filename
+# must sort after the appliance's 80_/90_ files — netplan merges in order, last one wins.
+#
+# Absent on a VM with only two adapters, which the phase reports and tolerates.
+lab_nic:
+  interface: eth2
+  netplan_file: /etc/netplan/95-cqu-lab-nic.yaml
+
 # ---------------------------------------------------------------------------
 # Profiles = architecture x audience. The architecture is that of the GNS3 VM, not of the
 # build host, and is the only axis anything here varies on: Docker platform, Qemu images,
@@ -79,12 +93,14 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
+    builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
+    builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
     # project exported on a PC is permanently amd64 — the arm64 templates installed here are
     # not consulted for an imported node. Such a project cannot start on this platform (GNS3
@@ -173,6 +189,20 @@ nodes:
     image: cqugns3/netemnode:latest
     source: {type: local, path: netemnode}
     templates: [docker-netem]
+
+  # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
+  # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
+  # beside the GNS3 VM is reachable. There is no image: the template IS the node. It is
+  # listed here so `templates` and `validate` pick it up; `docker` and `qemu` select by kind
+  # and ignore it.
+  #
+  # Note for anyone editing cloud-windowshost.conf: cloud templates reject a `usage` field
+  # (qemu and docker templates accept one), so the node's explanation lives in the student
+  # guide rather than in the GNS3 UI. Adding one back fails the templates phase with
+  # "Additional properties are not allowed ('usage' was unexpected)".
+  windowshost:
+    kind: builtin
+    templates: [cloud-windowshost]
 
   # --- Qemu images ---
   # file:   name under qemu_images_dir (post-unpack); md5 is of *this* file

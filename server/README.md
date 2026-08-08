@@ -409,12 +409,13 @@ the VM (`cd ~/git/gns3/server/build`):
 ```sh
 ./gns3build.py validate                       # check the manifest and every template
 ./gns3build.py plan      --profile amd64-staff   # show what would be installed, change nothing
-./gns3build.py build     --profile amd64-staff   # all six phases below, in order
+./gns3build.py build     --profile amd64-staff   # all seven phases below, in order
 ./gns3build.py templates --profile amd64-staff   # register templates via the GNS3 API
 ./gns3build.py docker    --profile amd64-staff   # build the Docker node images
 ./gns3build.py qemu      --profile amd64-staff   # download + verify the Qemu disks
 ./gns3build.py logos                          # install the CQU node symbols
 ./gns3build.py novnc                          # install noVNC + start-vnc.sh
+./gns3build.py labnic                         # the Windows Host lab NIC (eth2)
 ./gns3build.py projects  --profile amd64-staff   # import the audience's projects
 ./gns3build.py export-check --profile amd64-staff
 ./gns3build.py provenance   --profile amd64-staff
@@ -453,6 +454,48 @@ a node means editing that file, not the code. `./gns3build.py validate` checks i
 also cross-checks that every disk a Qemu template names is one its node actually installs.
 
 ---
+
+## The Windows Host
+
+Windows runs as a **separate VM on the student's own hypervisor**, not as a node inside the
+GNS3 VM — Fusion on Apple Silicon has no nested virtualisation, and `/opt` has nowhere near
+the space for a Windows disk. It joins a topology through an isolated hypervisor network and
+a GNS3 Cloud node. The reasoning and the spike results are in
+`gns3-dev/notes/windows-host-node.md`; the student-facing setup is
+[`windows/README.md`](windows/README.md).
+
+The build contributes three things, all automatic:
+
+| Piece | Where |
+|---|---|
+| The **Windows Host** template — a Cloud node locked to `eth2` | `templates/cloud-windowshost.conf`, registered by `templates` |
+| The `computer-windows.svg` symbol | `../images/symbols/`, installed by `logos` |
+| DHCP turned **off** on `eth2` | the `labnic` phase, `lab_nic:` in the manifest |
+
+**Why `labnic` exists.** The stock appliance already declares `eth2`–`eth8` in
+`80_gns3vm_default_netcfg.yaml` and brings them up — but with `dhcp4: yes`. A Cloud node
+bridges the *topology* onto `eth2`, so the moment an activity runs a DHCP server
+(`dhcp-server-basics`, `dhcp-client`, any OpenWrt LAN) the GNS3 VM itself takes a lease from
+the student's lab: an unexplained extra host, holding an address the student thinks is free
+and answering ARP for it. The phase writes `/etc/netplan/95-cqu-lab-nic.yaml`, which netplan
+merges over the appliance's own file — hence the `95-` prefix, since netplan merges in
+lexical order and the last definition wins. Check the merged result with:
+
+```sh
+sudo netplan get ethernets.eth2      # expect dhcp4: false, dhcp6: false, optional: true
+```
+
+It deliberately does **not** run `netplan apply`: that can bounce every interface, and the
+phase runs over ssh on `eth0`, so applying would kill the connection driving the build. The
+file covers every future boot; `ip link set eth2 up` covers the current one.
+
+On a VM with only two adapters the phase writes the file, reports that `eth2` is absent and
+exits 0 — nothing is wrong, the interface appears when a third adapter is attached.
+
+**Editing the template:** cloud templates reject a `usage` field, unlike qemu and docker
+ones, so the node cannot carry its own explanation in the GNS3 UI; that lives in the student
+guide. Adding one fails the `templates` phase with `Additional properties are not allowed
+('usage' was unexpected)`.
 
 ## Mac builds
 

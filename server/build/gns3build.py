@@ -81,9 +81,15 @@ def profile_platform(m, profile):
 
 
 def node_keys(m, platform):
-    """Docker then Qemu node keys for a platform, in manifest order."""
+    """Docker, Qemu then builtin node keys for a platform, in manifest order.
+
+    `builtin` nodes install nothing — they are a template over a GNS3 built-in node type
+    (the Windows Host is a Cloud node bound to the lab NIC). They appear here so the
+    `templates` phase and `validate` pick their templates up; the `docker` and `qemu`
+    phases select by kind and so ignore them.
+    """
     p = m["platforms"][platform]
-    return list(p.get("docker", [])) + list(p.get("qemu", []))
+    return list(p.get("docker", [])) + list(p.get("qemu", [])) + list(p.get("builtin", []))
 
 
 def template_names(m, platform):
@@ -348,6 +354,11 @@ def cmd_plan(args):
     for key in m["platforms"][platform].get("qemu", []):
         n = m["nodes"][key]
         print(f"  {n['file']:48} md5={n.get('md5','-')}")
+    builtin = m["platforms"][platform].get("builtin", [])
+    if builtin:
+        print("\nBuilt-in nodes (template only, nothing to install):")
+        for key in builtin:
+            print(f"  {key}")
     print("\nTemplates to register:")
     for name in template_names(m, platform):
         print(f"  {name}")
@@ -759,6 +770,93 @@ def apt_installed(pkg):
                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                        universal_newlines=True)
     return r.returncode == 0 and "install ok installed" in (r.stdout or "")
+
+
+def cmd_labnic(args):
+    """Stop the GNS3 VM being a DHCP client on the lab network.
+
+    The VM's third adapter sits on an isolated hypervisor network shared with a Windows VM
+    running beside it, and a Cloud node bound to that interface bridges it into a topology.
+
+    The stock appliance already declares eth2..eth8 in 80_gns3vm_default_netcfg.yaml, so the
+    interface comes up on its own — but with `dhcp4: yes`. That is wrong here, and quietly so:
+    the Cloud node bridges the *topology* onto this interface, so the moment an activity runs
+    a DHCP server (dhcp-server-basics, dhcp-client, any OpenWrt LAN) the GNS3 VM itself takes
+    a lease from the student's lab. It then shows up as an unexplained extra host, consumes an
+    address the student believes is free, and answers ARP for it.
+
+    So this phase writes a later-sorting netplan file that turns DHCP off for that one
+    interface. Netplan merges files in lexical order, last definition winning, which is why
+    the name must sort after the appliance's own 80_/90_ files.
+
+    `optional: true` is kept from the stock config: without it systemd-networkd-wait-online
+    blocks boot for its full timeout whenever the adapter is not connected to anything.
+    """
+    m = load_manifest(args.manifest)
+    cfg = m.get("lab_nic") or {}
+    iface = args.interface or cfg.get("interface", "eth2")
+    path = args.netplan_file or cfg.get("netplan_file", "/etc/netplan/95-cqu-lab-nic.yaml")
+
+    text = (
+        "# Installed by gns3build.py (labnic phase) — do not edit by hand.\n"
+        "#\n"
+        "# The lab NIC: an isolated hypervisor network shared with a Windows VM running\n"
+        "# beside this one. A GNS3 Cloud node binds this interface raw, so it carries the\n"
+        "# topology's own addressing and must NOT have an address of its own here.\n"
+        "#\n"
+        "# This overrides 80_gns3vm_default_netcfg.yaml, which sets dhcp4: yes on eth2..eth8.\n"
+        "# Left alone, the GNS3 VM takes a DHCP lease from the student's own topology as soon\n"
+        "# as an activity runs a DHCP server. The filename must keep sorting AFTER the\n"
+        "# appliance's own netplan files — netplan merges in lexical order, last one wins.\n"
+        "network:\n"
+        "  version: 2\n"
+        "  ethernets:\n"
+        f"    {iface}:\n"
+        "      dhcp4: false\n"
+        "      dhcp6: false\n"
+        "      optional: true\n"
+    )
+
+    print(f"lab NIC {iface}  ->  {path}")
+
+    if args.dry_run:
+        print(f"  [dry-run] write {path}")
+        print(f"  [dry-run] ip link set {iface} up")
+        return 0
+
+    if sudo_write(path, text):
+        # 0644, matching the appliance's own netplan files. NOT 0600: sudo_write compares the
+        # file's current contents by reading it as the build user, so a root-only file is
+        # unreadable, every run looks like a change, and the phase stops being idempotent.
+        # These files hold no secrets, so there is nothing to protect by tightening them.
+        subprocess.run(["sudo", "chmod", "644", path], check=False)
+        print(f"  write  {path}")
+    else:
+        print(f"  skip   {path} (already correct)")
+
+    # Deliberately NOT `netplan apply`: it can bounce every interface, and this phase runs
+    # over ssh on eth0 — taking that down mid-build would kill the connection driving it.
+    # Writing the file covers every future boot; `ip link set … up` covers this one.
+    if not Path(f"/sys/class/net/{iface}").exists():
+        print(f"  INFO   {iface} is not present on this VM")
+        print(f"         Nothing is wrong: the appliance ships the config, and the interface")
+        print(f"         appears once a third adapter is attached to the VM. See the Windows")
+        print(f"         Host section of server/README.md.")
+        return 0
+
+    rc = subprocess.run(["sudo", "ip", "link", "set", iface, "up"]).returncode
+    if rc != 0:
+        print(f"  WARN   could not bring {iface} up (rc={rc})")
+        return 1
+
+    # `ip -br link show eth2` -> "eth2  UP  08:00:27:b9:99:3f <BROADCAST,MULTICAST,UP,...>"
+    fields = (_cmd_out(["ip", "-br", "link", "show", iface]) or "").split()
+    link_state = fields[1] if len(fields) > 1 else "?"
+    mac = fields[2] if len(fields) > 2 else "?"
+    print(f"  link   {iface} {link_state}  mac {mac}")
+    print(f"  note   DHCP is off for {iface} from the next boot; a Cloud node bound to it "
+          f"carries the topology's own addressing")
+    return 0
 
 
 def cmd_novnc(args):
@@ -1328,7 +1426,7 @@ def cmd_provenance(args):
 # --------------------------------------------------------------------------- #
 # Phase: build — run every phase in order
 # --------------------------------------------------------------------------- #
-BUILD_PHASES = ["templates", "docker", "qemu", "logos", "novnc", "projects"]
+BUILD_PHASES = ["templates", "docker", "qemu", "logos", "novnc", "labnic", "projects"]
 
 
 def cmd_build(args):
@@ -1349,7 +1447,8 @@ def cmd_build(args):
         phases = [p for p in phases if p not in skip]
 
     handlers = {"templates": cmd_templates, "docker": cmd_docker, "qemu": cmd_qemu,
-                "logos": cmd_logos, "novnc": cmd_novnc, "projects": cmd_projects}
+                "logos": cmd_logos, "novnc": cmd_novnc, "labnic": cmd_labnic,
+                "projects": cmd_projects}
     # Every phase reads its options off this one namespace, so it must carry a default
     # for every option any phase's sub-parser defines — a missing one is an AttributeError
     # at run time, not a parse error. Add new phase options here too.
@@ -1358,7 +1457,7 @@ def cmd_build(args):
         dry_run=args.dry_run, force=args.force, only=None, skip=None, verify=False,
         images_dir=None, symbols_dir=None, dest=None, roots=args.roots,
         record=None, imports=None, out=None, projects_dir="/opt/gns3/projects",
-        strict=False)
+        strict=False, interface=None, netplan_file=None)
 
     print(f"build profile {args.profile}: {' -> '.join(phases)}\n")
     results = []
@@ -1426,6 +1525,11 @@ def main():
     nv = sub.add_parser("novnc", help="install noVNC + start-vnc.sh (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
 
+    ln = sub.add_parser("labnic", help="bring up the Windows Host lab NIC (run on the VM)")
+    ln.add_argument("--interface", help="override the manifest's lab_nic.interface")
+    ln.add_argument("--netplan-file", help="override the manifest's lab_nic.netplan_file")
+    ln.add_argument("--dry-run", action="store_true")
+
     pr = sub.add_parser("projects", help="import the audience's .gns3project files")
     pr.add_argument("--profile", required=True)
     pr.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
@@ -1473,7 +1577,8 @@ def main():
         pass
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
             "docker": cmd_docker, "qemu": cmd_qemu, "logos": cmd_logos,
-            "novnc": cmd_novnc, "projects": cmd_projects, "build": cmd_build,
+            "novnc": cmd_novnc, "labnic": cmd_labnic,
+            "projects": cmd_projects, "build": cmd_build,
             "export-check": cmd_export_check,
             "provenance": cmd_provenance}[args.cmd](args)
 
