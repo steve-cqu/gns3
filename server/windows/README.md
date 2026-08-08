@@ -112,7 +112,22 @@ network (step 1). ARP requests going out with no reply means Windows is not answ
 check its firewall and that its lab adapter really holds the address. Requests arriving but
 replies never reaching the GNS3 node means promiscuous mode (step 2).
 
-**Windows licensing.** Students download the Windows 11 ISO themselves from Microsoft — x64
-and ARM64 are both free direct downloads. A key from CQU's Azure account is optional:
-unactivated Windows 11 runs indefinitely, with a desktop watermark and no personalisation,
-neither of which matters for lab work.
+## Windows licensing, and which edition you get
+
+Students download the Windows 11 ISO themselves from Microsoft — x64 and ARM64 are both free
+direct downloads. A key from CQU's Azure account is optional: unactivated Windows 11 runs
+indefinitely, with a desktop watermark and no personalisation, neither of which matters for
+lab work.
+
+**Choose Pro at the edition screen.** After clicking *I don't have a product key*, Windows
+Setup shows a list of editions. Every one of them installs unactivated, so Pro costs nothing
+over Home — and **Home has no Remote Desktop server**, so nothing can RDP into it. Pro is
+also the edition students meet at work. (An Azure Education key, for anyone who wants to
+activate, upgrades the machine to Education, which is equivalent for our purposes.)
+
+`configure-windows-host.ps1` detects a Home edition and reports Remote Desktop as
+unavailable rather than opening port 3389 in front of a service that is not there.
+
+Either way, **`ssh` is the access path activities should be built on**: it works on every
+edition, it is what a GNS3 Linux node uses to reach this machine, and it is what the staff
+check script depends on.

@@ -231,6 +231,30 @@ foreach ($rule in $icmpRules) {
 Write-Host ""
 Write-Host "Remote Desktop"
 
+# Windows Home has no Remote Desktop *server* - it can only be a client. Setting the
+# registry key and opening port 3389 on Home therefore achieves nothing, and leaves a
+# firewall hole in front of a port nothing listens on. Detect it and say so instead.
+#
+# Get-WindowsEdition returns DISM's edition ID, which is not localised: Core / CoreN /
+# CoreSingleLanguage / CoreCountrySpecific are the Home family. A multi-edition ISO
+# installed with no product key gives Home, which is exactly what students will do unless
+# they use an Azure Education key.
+$edition = $null
+try { $edition = (Get-WindowsEdition -Online -ErrorAction Stop).Edition } catch { }
+
+if ($edition -and $edition -like 'Core*') {
+    Report-Ok "remote desktop" "not available on Windows Home (edition: $edition)"
+    Write-Host "           Use ssh instead - it works on every edition. Remote Desktop"  -ForegroundColor Yellow
+    Write-Host "           needs Pro, Education or Enterprise. Pick Pro at the edition"   -ForegroundColor Yellow
+    Write-Host "           list during Windows Setup next time: it installs unactivated"  -ForegroundColor Yellow
+    Write-Host "           just like Home, so it costs nothing extra."                    -ForegroundColor Yellow
+    $skipRdp = $true
+} else {
+    $skipRdp = $false
+}
+
+if (-not $skipRdp) {
+
 $tsKey = 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
 $denied = (Get-ItemProperty -Path $tsKey -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections
 if ($denied -eq 0) {
@@ -289,6 +313,8 @@ if ($rdpRules.Count -gt 0) {
         }
     }
 }
+
+}  # end if (-not $skipRdp)
 
 # --------------------------------------------------------------------------- #
 # 4. OpenSSH server, so a GNS3 node can log in
@@ -418,7 +444,7 @@ Write-Host ""
 Write-Host "This machine is ready to use as the GNS3 Windows Host." -ForegroundColor Green
 Write-Host "  lab adapter : $($adapter.Name)"
 Write-Host "  lab address : $(if ($labIp) { $labIp } else { 'none yet - waiting on the topology DHCP server' })"
-Write-Host "  reachable by: ping, ssh $env:USERNAME@<address>, and Remote Desktop"
+Write-Host "  reachable by: ping, ssh $env:USERNAME@<address>$(if (-not $skipRdp) { ', and Remote Desktop' })"
 if ($script:Restart) {
     Write-Host ""
     Write-Host "Restart Windows for the new computer name to take effect." -ForegroundColor Yellow
