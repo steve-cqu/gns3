@@ -18,7 +18,52 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 
 | File | Runs on | What |
 |---|---|---|
-| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | Turns a fresh Windows 11 install into a usable lab node: allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop, marks the lab adapter Private, optionally sets a static address and hostname, and stops the machine sleeping. Idempotent; `-DryRun` reports without changing. |
+| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
+| `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
+| `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
+
+Both are idempotent, take `-DryRun`, and are safe to re-run after a part-finished attempt.
+
+## The tools script
+
+```powershell
+.\setup-windows-tools.ps1 -List                  # what is already here, change nothing
+.\setup-windows-tools.ps1 -DryRun -All           # what would change
+.\setup-windows-tools.ps1 -All                   # everything except Sysmon
+.\setup-windows-tools.ps1 -Sysinternals -Sysmon  # Sysmon needs the suite it lives in
+```
+
+| Switch | Installs | Notes |
+|---|---|---|
+| `-Sysinternals` | The suite to `C:\Tools\Sysinternals`, on the system PATH | 185 MB. Pre-accepts the licence for ~160 tools, or each one stops on a dialog — which over ssh means it hangs with no clue why |
+| `-WebServer` | IIS | A Windows feature, nothing to download. Serves on port 80 **after a restart** |
+| `-Python` | Python 3, machine-wide | Also deletes the Windows stub that opens the Microsoft Store instead of running Python |
+| `-Iperf` | iperf3 | Pairs with the Linux nodes for throughput exercises |
+| `-Telnet` | The telnet client | **After a restart** |
+| `-Sysmon` | Sysmon with `sysmon-lab.xml` | Installs a driver, so it is deliberately **not** in `-All` |
+| `-All` | Everything except `-Sysmon` | |
+
+Three things learned the hard way, all handled by the script but worth knowing if you edit it:
+
+- **`--source winget` is not optional.** The `msstore` source fails on a stock Windows 11 with
+  `0x8a15005e` (server certificate mismatch), and that aborts the whole `winget install` even
+  when the package is available from the working source.
+- **Verify winget package IDs before using them.** They are version-pinned
+  (`Python.Python.3.12`, not `Python.Python.3`) and a wrong one reports "No packages were
+  found", which reads like a network fault. Check with `winget search <name> --source winget`.
+- **Windows features need a restart.** IIS and the telnet client report `Enabled` immediately,
+  but `W3SVC` and `telnet.exe` do not exist until the machine reboots. The script says so.
+
+Reading what Sysmon collects needs no extra software:
+
+```powershell
+Get-WinEvent -LogName Microsoft-Windows-Sysmon/Operational -MaxEvents 20
+Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Sysmon/Operational'; Id=3}
+```
+
+Event ID 3 records each network connection with the process that owns it and whether it was
+inbound or outbound — something Windows does not log natively, and the retrospective
+counterpart to TCPView.
 
 ## Still to come
 
