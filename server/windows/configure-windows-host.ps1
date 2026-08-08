@@ -119,8 +119,23 @@ if ($LabAdapter) {
     if ($candidates.Count -eq 1) {
         $adapter = $candidates[0]
     } elseif ($candidates.Count -eq 0 -and $up.Count -eq 1) {
-        # Single-adapter VM: that adapter is the lab adapter, gateway or not.
+        # One adapter, and it has a default gateway - so it is almost certainly the NAT
+        # adapter that gives this VM its internet, and the lab adapter has not been added
+        # yet. Proceed, because a single lab adapter behind a topology router legitimately
+        # looks the same, but say so loudly: configuring the NAT adapter and then wondering
+        # why nothing pings is exactly the trap this warning exists to close (found on the
+        # first spike run, 8 Aug 2026).
         $adapter = $up[0]
+        Write-Host ""
+        Write-Host "  WARNING  this VM has only ONE network adapter, and it has a default" -ForegroundColor Yellow
+        Write-Host "           gateway - so it is probably the NAT adapter that gives this"  -ForegroundColor Yellow
+        Write-Host "           machine its internet, NOT a lab adapter."                     -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "           A Windows Host normally has two adapters: one NAT for the"    -ForegroundColor Yellow
+        Write-Host "           internet, and one on the isolated lab network shared with"    -ForegroundColor Yellow
+        Write-Host "           the GNS3 VM. If nothing on the lab network can ping this"     -ForegroundColor Yellow
+        Write-Host "           machine, add that second adapter and run this script again."  -ForegroundColor Yellow
+        Write-Host ""
     } else {
         Report-Failed "lab adapter" "cannot tell which adapter is the lab one"
         Write-Host ""
@@ -229,17 +244,50 @@ if ($denied -eq 0) {
     }
 }
 
-try {
-    $rdpRules = @(Get-NetFirewallRule -Group '@FirewallAPI.dll,-28752' -ErrorAction Stop)
+# Match on rule NAME, not on the group. The group resource string '@FirewallAPI.dll,-28752'
+# is what most guides use, but no rule carries it on Windows 11 - a spike run on 8 Aug 2026
+# failed here with "No MSFT_NetFirewallRule objects found". Rule names are stable across
+# releases and are not localised, unlike the display names shown in the firewall UI.
+$rdpRuleNames = @('RemoteDesktop-UserMode-In-TCP', 'RemoteDesktop-UserMode-In-UDP')
+$rdpRules = @(foreach ($name in $rdpRuleNames) {
+    Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
+})
+
+if ($rdpRules.Count -gt 0) {
     $off = @($rdpRules | Where-Object Enabled -ne 'True')
     if ($off.Count -eq 0) {
         Report-Ok "remote desktop firewall" "already allowed"
     } else {
-        if (-not $DryRun) { $off | Enable-NetFirewallRule }
-        Report-Changed "remote desktop firewall" "$($off.Count) rule(s) enabled"
+        try {
+            if (-not $DryRun) { $off | Enable-NetFirewallRule }
+            Report-Changed "remote desktop firewall" "$($off.Count) built-in rule(s) enabled"
+        } catch {
+            Report-Failed "remote desktop firewall" $_.Exception.Message
+        }
     }
-} catch {
-    Report-Failed "remote desktop firewall" $_.Exception.Message
+} else {
+    # No built-in rules at all (a stripped image, or Microsoft renames them again). Our own
+    # rule does the same job and is obvious in the firewall UI.
+    $ownRule = Get-NetFirewallRule -Name 'CQU-Lab-RDP-In' -ErrorAction SilentlyContinue
+    if ($ownRule -and $ownRule.Enabled -eq 'True') {
+        Report-Ok "remote desktop firewall" "inbound 3389 already allowed"
+    } else {
+        try {
+            if (-not $DryRun) {
+                if ($ownRule) {
+                    Set-NetFirewallRule -Name 'CQU-Lab-RDP-In' -Enabled True
+                } else {
+                    New-NetFirewallRule -Name 'CQU-Lab-RDP-In' `
+                                        -DisplayName 'CQU Lab - Allow Remote Desktop' `
+                                        -Direction Inbound -Action Allow -Enabled True `
+                                        -Protocol TCP -LocalPort 3389 -Profile Any | Out-Null
+                }
+            }
+            Report-Changed "remote desktop firewall" "inbound 3389 allowed (no built-in rule found)"
+        } catch {
+            Report-Failed "remote desktop firewall" $_.Exception.Message
+        }
+    }
 }
 
 # --------------------------------------------------------------------------- #

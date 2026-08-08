@@ -35,15 +35,25 @@ is the one piece a student can always fall back to running by hand.
 ## Using it now, before the installers exist
 
 Install Windows 11 into a VM yourself, give it two adapters (one NAT for the internet, one
-on the lab network), then in an Administrator PowerShell inside that VM:
+on the lab network), then open PowerShell **as Administrator** inside that VM:
 
 ```powershell
-# see what it would do
-.\configure-windows-host.ps1 -DryRun
+cd $HOME
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/steve-cqu/gns3/refs/heads/main/server/windows/configure-windows-host.ps1" -OutFile .\configure-windows-host.ps1
 
-# do it
-.\configure-windows-host.ps1 -ComputerName WinHost
+# see what it would do, then do it
+powershell -ExecutionPolicy Bypass -File .\configure-windows-host.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File .\configure-windows-host.ps1 -ComputerName WinHost
 ```
+
+Two things bite here, both found on the first real run:
+
+- **Run it via `powershell -ExecutionPolicy Bypass -File`.** A downloaded `.ps1` will not run
+  otherwise — PowerShell refuses with "running scripts is disabled on this system". This is
+  better than `Set-ExecutionPolicy Bypass`, which prompts and changes a machine setting.
+- **`Invoke-WebRequest` can fail the first time** with "The remote name could not be
+  resolved". The VM's network is usually still settling just after install. Wait a few
+  seconds and run it again.
 
 Leave `-IPAddress` off if the topology runs a DHCP server. To set an address by hand:
 
@@ -53,6 +63,54 @@ Leave `-IPAddress` off if the topology runs a DHCP server. To set an address by 
 
 The script picks the lab adapter automatically as the one with no default gateway, and
 prints every adapter's name if it cannot decide.
+
+## If nothing on the lab network can ping Windows
+
+Work down this list. The first two are what a first run gets wrong.
+
+**1. Does the Windows VM have a lab adapter at all?** A VM built by clicking through
+VirtualBox has one NAT adapter, which is what gives it internet. That adapter is not on the
+lab network, and putting a lab address on it changes nothing. Windows needs **two**: NAT for
+the internet, and a second on the same isolated network as the GNS3 VM's third adapter.
+
+```
+VBoxManage showvminfo "<windows-vm>" --machinereadable | findstr /i "nic"
+VBoxManage modifyvm  "<windows-vm>" --nic2 intnet --intnet2 cqulab --cableconnected2 on
+```
+
+The internal network name (`cqulab` above) must match the GNS3 VM's third adapter
+**exactly** — VirtualBox creates a new, separate network for any name it has not seen, with
+no warning. Then set the lab address on that second adapter, not the first:
+
+```powershell
+.\configure-windows-host.ps1 -LabAdapter "Ethernet 2" -IPAddress 10.10.1.20
+```
+
+**2. Is the GNS3 VM's lab adapter in promiscuous mode?** It must be. A Cloud node forwards
+frames carrying the *GNS3 node's* MAC address, not the VM adapter's own, and VirtualBox
+drops those unless the adapter is allowed to receive them.
+
+```
+VBoxManage modifyvm "GNS3 VM" --nic3 intnet --intnet3 cqulab --nicpromisc3 allow-all
+```
+
+**3. Is `eth2` up on the GNS3 VM?** It has no address by design, but it must be `UP`:
+
+```sh
+ip -br link show eth2          # want: eth2  UP
+sudo ip link set eth2 up       # until the appliance brings it up at boot
+```
+
+**4. Watch the wire.** This says exactly where frames stop. On the GNS3 VM:
+
+```sh
+sudo tcpdump -ni eth2 arp or icmp
+```
+
+Then ping from each side in turn. Nothing at all means the two VMs are not on the same
+network (step 1). ARP requests going out with no reply means Windows is not answering —
+check its firewall and that its lab adapter really holds the address. Requests arriving but
+replies never reaching the GNS3 node means promiscuous mode (step 2).
 
 **Windows licensing.** Students download the Windows 11 ISO themselves from Microsoft — x64
 and ARM64 are both free direct downloads. A key from CQU's Azure account is optional:
