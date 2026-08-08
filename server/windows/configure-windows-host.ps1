@@ -158,9 +158,16 @@ if ($LabAdapter) {
 }
 Report-Ok "lab adapter" "$($adapter.Name)  ($($adapter.InterfaceDescription))"
 
-# Private, not Public. A Public profile blocks nearly all inbound traffic, so a lab node
-# cannot reach this machine at all - and Windows chooses Public for any network it cannot
-# identify, which an isolated lab network never is.
+# Private, not Public. Windows files any network it cannot identify as Public, and an isolated
+# lab network - no gateway, no DNS - is never identifiable.
+#
+# This is a courtesy, NOT what makes the machine reachable. Windows re-classifies these
+# networks as Public again on the next boot, and confirmed on a real machine on 8 Aug 2026:
+# after a reboot BOTH adapters were back to Public. What actually keeps ssh and ping working
+# is that every firewall rule this script creates is -Profile Any, so it does not care.
+#
+# Setting it still helps anything that does care about the profile - network discovery and
+# file sharing - so it is worth doing. Just never rely on it holding.
 # Not $profile - that is an automatic PowerShell variable holding the profile script path.
 $connProfile = Get-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
 if ($connProfile -and $connProfile.NetworkCategory -ne 'Private') {
@@ -410,20 +417,30 @@ if (-not $DryRun -and $sshInstalled) {
     Report-Changed "sshd" "would be set to Automatic and started"
 }
 
-# The OpenSSH capability normally adds its own firewall rule. Add ours if it did not.
+# Always ensure OUR rule exists, even when the OpenSSH capability added one of its own.
+#
+# The capability's rule is scoped to the Private and Domain profiles. The lab network has no
+# gateway and no DNS, so Windows files it as an "unidentified network" and puts it in the
+# PUBLIC profile — and re-does that after a reboot, even once it has been set to Private,
+# because it treats it as a network it has not seen before. The symptom is nasty: ping keeps
+# working (our ICMP rules are -Profile Any) while ssh silently stops answering.
+#
+# Ours is -Profile Any, so it survives the profile flipping back.
 $sshRule = Get-NetFirewallRule -Name 'CQU-Lab-SSH-In' -ErrorAction SilentlyContinue
-$anySsh  = Get-NetFirewallRule -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -like '*OpenSSH*' -and $_.Enabled -eq 'True' }
-if ($sshRule -or $anySsh) {
-    Report-Ok "ssh firewall" "inbound 22 already allowed"
+if ($sshRule -and $sshRule.Enabled -eq 'True') {
+    Report-Ok "ssh firewall" "inbound 22 allowed on every profile"
 } else {
     try {
         if (-not $DryRun) {
-            New-NetFirewallRule -Name 'CQU-Lab-SSH-In' -DisplayName 'CQU Lab - Allow SSH' `
-                                -Direction Inbound -Action Allow -Enabled True `
-                                -Protocol TCP -LocalPort 22 -Profile Any | Out-Null
+            if ($sshRule) {
+                Set-NetFirewallRule -Name 'CQU-Lab-SSH-In' -Enabled True
+            } else {
+                New-NetFirewallRule -Name 'CQU-Lab-SSH-In' -DisplayName 'CQU Lab - Allow SSH' `
+                                    -Direction Inbound -Action Allow -Enabled True `
+                                    -Protocol TCP -LocalPort 22 -Profile Any | Out-Null
+            }
         }
-        Report-Changed "ssh firewall" "inbound 22 allowed"
+        Report-Changed "ssh firewall" "inbound 22 allowed on every profile"
     } catch {
         Report-Failed "ssh firewall" $_.Exception.Message
     }
