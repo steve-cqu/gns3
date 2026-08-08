@@ -119,15 +119,40 @@ direct downloads. A key from CQU's Azure account is optional: unactivated Window
 indefinitely, with a desktop watermark and no personalisation, neither of which matters for
 lab work.
 
-**Choose Pro at the edition screen.** After clicking *I don't have a product key*, Windows
-Setup shows a list of editions. Every one of them installs unactivated, so Pro costs nothing
-over Home — and **Home has no Remote Desktop server**, so nothing can RDP into it. Pro is
-also the edition students meet at work. (An Azure Education key, for anyone who wants to
-activate, upgrades the machine to Education, which is equivalent for our purposes.)
+**Expect to end up on Windows Home.** Installing Windows 11 25H2 with *I don't have a
+product key* offered no edition list and produced Home — `Get-WindowsEdition -Online`
+reports `Core` — even from an ISO believed to be Education. Assume Home unless you check.
 
-`configure-windows-host.ps1` detects a Home edition and reports Remote Desktop as
-unavailable rather than opening port 3389 in front of a service that is not there.
+Home matters in exactly one way: it has no Remote Desktop **server**, so nothing can RDP
+into the machine. `ssh` is unaffected and works on every edition, which is why activities
+should be built on it. `configure-windows-host.ps1` detects Home and reports Remote Desktop
+as unavailable rather than opening port 3389 in front of a service that is not there.
+
+To get Education, enter an Azure Education key after installing — Settings → System →
+Activation → Change product key. That changes the edition in place and brings the RDP server
+with it.
 
 Either way, **`ssh` is the access path activities should be built on**: it works on every
 edition, it is what a GNS3 Linux node uses to reach this machine, and it is what the staff
 check script depends on.
+
+## Reaching the machine over ssh
+
+From any Linux node in the topology:
+
+```sh
+ssh gns3@10.10.1.20
+```
+
+The shell you land in is **`cmd.exe`** — the Windows OpenSSH default — so the classic tools
+all work directly, either interactively or as a one-shot command:
+
+```sh
+ssh gns3@10.10.1.20 ipconfig
+ssh gns3@10.10.1.20 "route print"
+ssh gns3@10.10.1.20 "powershell -Command Get-NetIPAddress"
+```
+
+The default shell is deliberately left as `cmd.exe`. It is what Windows ships, it is what
+students expect from a Windows command line, and `ipconfig` / `ping` / `tracert` /
+`route print` / `netstat` / `nslookup` are the tools an activity is going to use anyway.

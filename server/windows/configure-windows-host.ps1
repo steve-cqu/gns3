@@ -37,6 +37,16 @@
 .PARAMETER PrefixLength
     Netmask length for -IPAddress. Defaults to 24.
 
+.PARAMETER LabGateway
+    Address of the router that reaches the rest of the lab, e.g. 10.10.1.1. Only needed
+    when the topology has more than one subnet. Without it Windows sends anything outside
+    its own subnet out of the NAT adapter, where it dies - the machine can ping its
+    immediate neighbours and nothing beyond them.
+
+.PARAMETER LabNetwork
+    The address block -LabGateway routes to, in CIDR form. Defaults to 10.10.0.0/16, which
+    covers the usual lab addressing. Ignored unless -LabGateway is given.
+
 .PARAMETER ComputerName
     Rename the machine, e.g. WinHost. Takes effect after a restart.
 
@@ -58,6 +68,8 @@ param(
     [string] $LabAdapter,
     [string] $IPAddress,
     [int]    $PrefixLength = 24,
+    [string] $LabGateway,
+    [string] $LabNetwork = '10.10.0.0/16',
     [string] $ComputerName,
     [switch] $DryRun
 )
@@ -185,6 +197,35 @@ if ($IPAddress) {
     }
 }
 
+# Route to the rest of the lab, if the topology has more than one subnet.
+#
+# Measured on the spike machine: the only default route is 0.0.0.0/0 -> 10.0.2.2 out of the
+# NAT adapter, and the lab adapter contributes only its own on-link /24. So Windows can
+# reach its immediate neighbours and nothing behind a lab router - those packets go out of
+# NAT and are dropped. A persistent route for the lab block fixes it.
+if ($LabGateway) {
+    $haveRoute = Get-NetRoute -DestinationPrefix $LabNetwork -ErrorAction SilentlyContinue |
+                 Where-Object { $_.NextHop -eq $LabGateway }
+    if ($haveRoute) {
+        Report-Ok "lab route" "$LabNetwork via $LabGateway already set"
+    } else {
+        try {
+            if (-not $DryRun) {
+                # Both stores: ActiveStore takes effect now, PersistentStore survives a reboot.
+                foreach ($store in 'ActiveStore', 'PersistentStore') {
+                    New-NetRoute -DestinationPrefix $LabNetwork `
+                                 -InterfaceIndex $adapter.ifIndex `
+                                 -NextHop $LabGateway `
+                                 -PolicyStore $store -ErrorAction Stop | Out-Null
+                }
+            }
+            Report-Changed "lab route" "$LabNetwork via $LabGateway"
+        } catch {
+            Report-Failed "lab route" $_.Exception.Message
+        }
+    }
+}
+
 # --------------------------------------------------------------------------- #
 # 2. Firewall: let the lab ping this machine
 #
@@ -236,9 +277,12 @@ Write-Host "Remote Desktop"
 # firewall hole in front of a port nothing listens on. Detect it and say so instead.
 #
 # Get-WindowsEdition returns DISM's edition ID, which is not localised: Core / CoreN /
-# CoreSingleLanguage / CoreCountrySpecific are the Home family. A multi-edition ISO
-# installed with no product key gives Home, which is exactly what students will do unless
-# they use an Azure Education key.
+# CoreSingleLanguage / CoreCountrySpecific are the Home family.
+#
+# This is defensive rather than expected. CQU's Azure ISO is single-edition Education, and
+# the consumer multi-edition ISO offers an edition list at install time - so a student only
+# ends up on Home by choosing it. The check costs nothing and turns a silently useless
+# firewall rule into a clear message.
 $edition = $null
 try { $edition = (Get-WindowsEdition -Online -ErrorAction Stop).Edition } catch { }
 
@@ -438,9 +482,35 @@ if ($script:Failed) {
     exit 1
 }
 
-$labIp = (Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 `
-                           -ErrorAction SilentlyContinue).IPAddress -join ', '
+$labIps = @(Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 `
+                             -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty IPAddress)
+$labIp = $labIps -join ', '
+
+# 169.254.x.x is APIPA: Windows invented it because nothing gave the adapter an address.
+# The machine looks configured and is not reachable at any lab address, so say so rather
+# than printing the APIPA address as if it were usable.
+$apipaOnly = $labIps.Count -gt 0 -and -not ($labIps | Where-Object { $_ -notlike '169.254.*' })
+
 Write-Host ""
+if ($apipaOnly) {
+    Write-Host "Almost - this machine has NO LAB ADDRESS." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  $($adapter.Name) has only $labIp, which Windows makes up when nothing" -ForegroundColor Yellow
+    Write-Host "  assigns it an address. Nothing on the lab network can reach it."       -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Either the topology has no DHCP server, in which case set the address"  -ForegroundColor Yellow
+    Write-Host "  yourself:"                                                              -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "      .\configure-windows-host.ps1 -LabAdapter `"$($adapter.Name)`" -IPAddress 10.10.1.20"
+    Write-Host ""
+    Write-Host "  or this adapter is not on the lab network at all - check that its"      -ForegroundColor Yellow
+    Write-Host "  VirtualBox internal network name matches the GNS3 VM's exactly."        -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Everything else above was applied."
+    exit 0
+}
+
 Write-Host "This machine is ready to use as the GNS3 Windows Host." -ForegroundColor Green
 Write-Host "  lab adapter : $($adapter.Name)"
 Write-Host "  lab address : $(if ($labIp) { $labIp } else { 'none yet - waiting on the topology DHCP server' })"
