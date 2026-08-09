@@ -157,6 +157,41 @@ network (step 1). ARP requests going out with no reply means Windows is not answ
 check its firewall and that its lab adapter really holds the address. Requests arriving but
 replies never reaching the GNS3 node means promiscuous mode (step 2).
 
+### On a Mac — the same list, in Fusion's words
+
+Proven on Apple Silicon 9 Aug 2026. Steps 1, 3 and 4 above are unchanged; steps 2 and the internal
+network name work differently.
+
+| VirtualBox | Fusion |
+|---|---|
+| Internal Network `cqulab` | A custom vmnet with *NAT*, *Connect the host Mac* and *DHCP* all off, renamed `cqulab` |
+| Adapter → Advanced → *Promiscuous Mode: Allow All* | **No per-adapter setting.** Fusion → Settings → Network → *Require authentication to enter promiscuous mode* |
+
+Left ticked (the default), macOS prompts for the Mac password when the Cloud node starts. That prompt
+appearing is the sign promiscuous mode is being requested at all; never being asked usually means the
+Cloud node is bound to the wrong interface.
+
+**Two Mac-only traps, both of which look like a firewall problem:**
+
+- **The third adapter is not reliably `eth2`.** Fusion's PCI slot numbers do not sort in the order
+  adapters appear in the UI — on the spike machine the adapter added third came up as `eth1`. Check
+  by MAC: `ip -br link show` in the VM against the `generatedAddress` of the `.vmx` block whose
+  `connectionType` is `custom`. Fix by swapping which network Adapters 2 and 3 attach to in the GUI;
+  the slot number belongs to the *position*, not the network.
+
+  ```sh
+  grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx
+  ```
+
+- **Windows 11 ARM64 has no network until VMware Tools is installed.** Fusion presents a `vmxnet3`
+  adapter and Windows on ARM has no in-box driver for it, so a fresh install cannot even download
+  this script. It is also why Setup's *Let's connect you to a network* screen has to be bypassed —
+  `Fn + Shift + F10`, then `start ms-cxh:localonly` (`oobe\bypassnro` on builds before 24H2).
+
+The `10.10.1.2/24`-on-`eth2` test in step 4 is the fastest way to split these apart: it uses `eth2`'s
+own MAC, so it proves the two VMs share a wire **without** involving promiscuous mode or the Cloud
+node. Remove the address afterwards — `eth2` must carry none.
+
 ## Windows licensing, and which edition you get
 
 Students download the Windows 11 ISO themselves from Microsoft — x64 and ARM64 are both free
