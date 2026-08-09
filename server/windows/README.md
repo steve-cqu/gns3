@@ -179,6 +179,19 @@ Cloud node is bound to the wrong interface.
   `connectionType` is `custom`. Fix by swapping which network Adapters 2 and 3 attach to in the GUI;
   the slot number belongs to the *position*, not the network.
 
+  The arrangement that tested working, which is **not** the intuitive one — the lab network sits in
+  the middle and the internet adapter last:
+
+  | Fusion adapter | Attached to | Guest |
+  |---|---|---|
+  | Network Adapter | *Private to my Mac* | `eth0` |
+  | Network Adapter 2 | `cqulab` | **`eth2`** |
+  | Network Adapter 3 | *Share with my Mac* | `eth1` |
+
+  Adapters present when the VM is created take low sequential slots; one added later through *Add
+  Device* takes a high bridge-encoded slot that enumerates earlier. Verified on one machine only, so
+  check rather than assume.
+
   ```sh
   grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx
   ```
