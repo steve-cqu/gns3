@@ -15,11 +15,11 @@ Subcommands
   qemu      --profile P     download + unpack the profile's Qemu images   [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
   novnc                     install noVNC + start-vnc.sh                  [run on the VM]
-  projects  --profile P     import the audience's .gns3project files
+  projects  --profile P     import the .gns3project files named in projects.txt
   build     --profile P     every phase above, in order
 
 Before cutting an OVA:
-  export-check --profile P  fail if the VM carries another audience's projects
+  export-check --profile P  fail unless the VM carries exactly projects.txt
   provenance   --profile P  record what this appliance actually contains
 
 `validate`/`plan`/`templates`/`projects` work from anywhere (they take --server URL,
@@ -27,8 +27,9 @@ default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `logos` and `novnc`
 local docker daemon and filesystem, so they run **on the GNS3 VM** — the Ansible wrapper
 syncs this tree there and invokes them over SSH.
 
-Profiles are {pc,mac}-{student,staff}: the platform picks the arch (pc -> amd64 images and
-amd64 Qemu disks, mac -> arm64), the audience picks the project set.
+Profiles are amd64 and arm64, naming the architecture of the GNS3 VM: that picks the Docker
+platform, the Qemu disks, the templates and any project variants. It is the only axis the
+build varies on — one appliance per architecture goes to staff and students alike.
 
 Every phase is idempotent: an image that already exists (docker) or a verified disk image
 already in place (qemu) is skipped, so re-running is cheap. --force rebuilds/re-downloads,
@@ -894,29 +895,25 @@ def cmd_novnc(args):
 
 
 # --------------------------------------------------------------------------- #
-# Phase: projects — import the audience's .gns3project files via the API
+# Phase: projects — import the .gns3project files named in projects.txt via the API
 # --------------------------------------------------------------------------- #
-def read_project_list(m, audience):
-    """Project names for an audience, from every list the manifest maps it to.
+def read_project_list(m):
+    """The project names the appliance ships, in order, from ../projects.txt.
 
-    `audiences:` decides which projects-<list>.txt files apply; staff maps to
-    [student, staff] because the staff VM is the student VM plus the solutions. Order is
-    preserved and names de-duplicated. The files have no trailing newline, which
-    splitlines() handles.
+    One list for one appliance — there is no per-audience variation any more. Blank lines
+    and `#` comments are skipped and names de-duplicated; a file with no trailing newline
+    is fine, which splitlines() handles.
     """
-    lists = (m.get("audiences") or {}).get(audience, [audience])
-    files, names, seen = [], [], set()
-    for which in lists:
-        f = (m["_dir"] / m["paths"].get("lists_dir", "..") / f"projects-{which}.txt").resolve()
-        if not f.exists():
-            sys.exit(f"project list not found: {f}")
-        files.append(f)
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and line not in seen:
-                seen.add(line)
-                names.append(line)
-    return files, names
+    f = (m["_dir"] / m["paths"].get("project_list", "../projects.txt")).resolve()
+    if not f.exists():
+        sys.exit(f"project list not found: {f}")
+    names, seen = [], set()
+    for line in f.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and line not in seen:
+            seen.add(line)
+            names.append(line)
+    return f, names
 
 
 def local_zip_verdict(path):
@@ -979,8 +976,7 @@ def cmd_projects(args):
     m = load_manifest(args.manifest)
     if args.profile not in m["profiles"]:
         sys.exit(f"unknown profile '{args.profile}' (have: {', '.join(m['profiles'])})")
-    audience = m["profiles"][args.profile]["audience"]
-    list_files, names = read_project_list(m, audience)
+    list_file, names = read_project_list(m)
     roots = ([r.strip() for r in args.roots.split(",") if r.strip()] if args.roots
              else m.get("project_roots", ["/home/gns3/projects"]))
     platform = profile_platform(m, args.profile)
@@ -992,8 +988,7 @@ def cmd_projects(args):
     except urllib.error.URLError as e:
         sys.exit(f"cannot reach controller at {args.server}: {e}")
     print(f"controller {args.server} — GNS3 {ver}")
-    print(f"profile {args.profile}  (audience: {audience}) — "
-          f"{', '.join(f.name for f in list_files)}, {len(names)} project(s)")
+    print(f"profile {args.profile} — {list_file.name}, {len(names)} project(s)")
     print(f"roots: {', '.join(str(r) for r in roots)}"
           + (f"   (preferring *{suffix}.gns3project)" if suffix else "") + "\n")
 
@@ -1056,7 +1051,7 @@ def cmd_projects(args):
             failures.append(name)
 
     if args.record and not args.dry_run:
-        write_import_record(args.record, args.profile, audience, records, roots)
+        write_import_record(args.record, args.profile, records, roots)
         print(f"\n  record {args.record} ({len(records)} source file(s))")
 
     verb = "would import" if args.dry_run else "imported"
@@ -1078,27 +1073,23 @@ def cmd_projects(args):
 # Phase: export-check — the gate that runs before an OVA is cut
 # --------------------------------------------------------------------------- #
 def cmd_export_check(args):
-    """Refuse to bless an appliance that carries projects its audience should not ship.
+    """Refuse to bless an appliance whose contents are not exactly projects.txt.
 
-    Two ways content leaks into an OVA: a project imported into the controller, and a
-    stray .gns3project staged on the VM's disk (the manual build copied them to
-    /home/gns3/projects, and `rm -f` was a step you had to remember). Both are checked.
+    Two ways content reaches an OVA: a project imported into the controller, and a stray
+    .gns3project staged on the VM's disk (the manual build copied them to /home/gns3/projects,
+    and `rm -f` was a step you had to remember). Both are checked.
+
+    This used to compare against the *other* audience's list, so it only caught a solution
+    on a student VM. With one appliance there is no other list to compare against, and an
+    unlisted project is simply one nobody decided to ship — a leftover from a manual test, a
+    solution opened to answer a question. That is now fatal rather than a warning: it is the
+    only thing standing between an off-hand import and a public OVA.
     """
     m = load_manifest(args.manifest)
     if args.profile not in m["profiles"]:
         sys.exit(f"unknown profile '{args.profile}' (have: {', '.join(m['profiles'])})")
-    audience = m["profiles"][args.profile]["audience"]
-    _files, allowed = read_project_list(m, audience)
+    list_file, allowed = read_project_list(m)
     allowed_set = set(allowed)
-
-    # Everything this build is NOT supposed to ship, named so the report can say why.
-    foreign = {}
-    for other in m.get("audiences", {}):
-        if other == audience:
-            continue
-        for name in read_project_list(m, other)[1]:
-            if name not in allowed_set:
-                foreign[name] = other
 
     ctrl = Controller(args.server)
     try:
@@ -1106,23 +1097,23 @@ def cmd_export_check(args):
     except urllib.error.URLError as e:
         sys.exit(f"cannot reach controller at {args.server}: {e}")
 
-    print(f"profile {args.profile}  (audience: {audience}) — "
-          f"{len(allowed)} project(s) permitted\n")
+    print(f"profile {args.profile} — {len(allowed)} project(s) permitted "
+          f"by {list_file.name}\n")
 
     problems, warnings = [], []
 
     imported = {p["name"]: p["project_id"] for p in ctrl.projects()}
     for name in sorted(imported):
-        if name in allowed_set:
-            continue
-        if name in foreign:
-            problems.append(f"project '{name}' is imported but belongs to the "
-                            f"'{foreign[name]}' audience")
-        else:
-            warnings.append(f"project '{name}' is imported but is on no audience list")
+        if name not in allowed_set:
+            problems.append(f"project '{name}' is imported but is not in {list_file.name}")
     missing = [n for n in allowed if n not in imported]
 
     # Staged .gns3project files ship inside the OVA even though nothing imports them.
+    # Matching is on the filename here, not the controller's project name, so strip the
+    # platform variant suffix first: Small-Internet-Demo-arm64.gns3project holds the project
+    # *named* Small-Internet-Demo, and calling that unlisted would be a lie.
+    suffix = m.get("platforms", {}).get(profile_platform(m, args.profile), {}) \
+              .get("project_suffix", "")
     staged_dirs = [Path(os.path.expanduser(str(d)))
                    for d in (m.get("project_roots") or [])]
     staged = []
@@ -1131,18 +1122,22 @@ def cmd_export_check(args):
             staged += sorted(d.rglob("*.gns3project"))
     for f in staged:
         name = f.name[: -len(".gns3project")]
-        if name in foreign:
-            problems.append(f"staged file {f} belongs to the '{foreign[name]}' audience "
-                            f"and would ship inside the OVA")
+        if suffix and name.endswith(suffix) and name[: -len(suffix)] in allowed_set:
+            name = name[: -len(suffix)]
+        if name not in allowed_set:
+            problems.append(f"staged file {f} ({human(f.stat().st_size)}) is not in "
+                            f"{list_file.name} and would ship inside the OVA")
         else:
             warnings.append(f"staged file {f} ({human(f.stat().st_size)}) would ship "
-                            f"inside the OVA for no benefit — delete it")
+                            f"inside the OVA for no benefit — it is already imported, so "
+                            f"delete it")
 
-    # Will the nodes actually start? A project can be perfectly legal for this audience
-    # and still be unusable because it names an image this platform does not install.
-    # The mac profile is where this bites: a project built on a PC carries amd64 Qemu
-    # nodes (and SDN-Basics-Template's disk is an overlay backed by the *amd64* Ubuntu
-    # image), none of which exist on an arm64 build.
+    # Will the nodes actually start? A project can be perfectly legal and still be unusable
+    # because it names an image this platform does not install. The arm64 profile is where
+    # this bites: a project exported on a PC carries amd64 Qemu nodes, none of which exist
+    # on an arm64 build. Note this only inspects the projects the appliance *ships*, which
+    # is now five — it is not evidence that the image set covers the activities students
+    # import themselves. Only `verify=all` shows that.
     images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
     have_docker = set()
     if shutil.which("docker"):
@@ -1174,34 +1169,41 @@ def cmd_export_check(args):
     for w in warnings:
         print(f"  WARN   {w}")
     for p in problems:
-        print(f"  LEAK   {p}")
+        print(f"  UNLISTED {p}")
 
     if broken and args.strict:
         problems += [f"unstartable node: {b}" for b in broken]
     if problems:
-        print(f"\nFAIL — {len(problems)} problem(s). Do NOT export this VM as "
-              f"'{audience}' until they are fixed.")
+        print(f"\nFAIL — {len(problems)} problem(s). Do NOT export this VM until they are "
+              f"fixed: delete the extra projects, or add them to {list_file.name} if they "
+              f"belong on the appliance.")
         return 1
-    print(f"\nOK — nothing outside the '{audience}' audience is present."
-          + (f" ({len(broken)} unstartable, " if broken else " (")
-          + f"{len(warnings)} warning(s))")
+    # "exactly" only if nothing is missing either — INCOMPLETE stays non-fatal (a project file
+    # absent from the build host is a known, survivable case) but must not read as a clean bill.
+    verdict = (f"the appliance carries exactly {list_file.name}" if not missing else
+               f"nothing unlisted is present, but {len(missing)} project(s) on "
+               f"{list_file.name} did not make it in")
+    counts = (f"{len(broken)} unstartable, " if broken else "") + f"{len(warnings)} warning(s)"
+    print(f"\nOK — {verdict}. ({counts})")
     if broken:
         print("       the BROKEN entries above will not start on this platform — "
-              "expected on mac for PC-built Qemu projects; use --strict to fail on them.")
+              "on arm64 that means a PC-built Qemu project needs an -arm64 rebuild; "
+              "use --strict to fail on them.")
     return 0
 
 
 # --------------------------------------------------------------------------- #
 # Phase: provenance — record what this appliance actually contains
 # --------------------------------------------------------------------------- #
-PROVENANCE_SCHEMA = "gns3build-provenance/2"   # /2 added `release` and `git`
+# /2 added `release` and `git`; /3 dropped `audience` when the staff appliance was retired
+PROVENANCE_SCHEMA = "gns3build-provenance/3"
 
 
-def write_import_record(path, profile, audience, records, roots=None):
+def write_import_record(path, profile, records, roots=None):
     """Source-side record written by `projects`, merged into the provenance manifest."""
     p = Path(os.path.expanduser(path))
     p.parent.mkdir(parents=True, exist_ok=True)
-    doc = {"profile": profile, "audience": audience, "sources": records}
+    doc = {"profile": profile, "sources": records}
     if roots:
         doc["roots"] = [{"path": str(r), "git": git_info(r)} for r in roots]
     p.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
@@ -1252,7 +1254,6 @@ def stamp_release(prov):
         "# CQUniversity GNS3 appliance — written at build time, do not edit.",
         f"GNS3_CQU_RELEASE={prov['release']}",
         f"GNS3_CQU_PROFILE={prov['profile']}",
-        f"GNS3_CQU_AUDIENCE={prov['audience']}",
         f"GNS3_CQU_PLATFORM={prov['platform']}",
         f"GNS3_CQU_BUILT={prov['generated_utc']}",
         f"GNS3_CQU_GNS3={prov['gns3']['controller_version']}",
@@ -1305,7 +1306,6 @@ def cmd_provenance(args):
         "release": args.release or None,
         "profile": args.profile,
         "platform": platform,
-        "audience": prof["audience"],
         # What built this. The projects roots are filled in from the import record below,
         # because that phase runs on the control node and this one runs on the VM.
         "git": {"gns3": git_info(REPO_ROOT), "project_roots": []},
@@ -1387,7 +1387,7 @@ def cmd_provenance(args):
     missing_disks = [d["file"] for d in disks if not d["present"]]
     print(f"provenance -> {out}")
     print(f"  generated    {prov['generated_utc']}")
-    print(f"  profile      {args.profile} ({platform}/{prof['audience']})")
+    print(f"  profile      {args.profile} ({platform})")
     print(f"  gns3         {gns3_version}  on {prov['system']['arch']} "
           f"kernel {prov['system']['kernel']}")
     print(f"  docker       {len(images)} image(s)"
@@ -1530,7 +1530,7 @@ def main():
     ln.add_argument("--netplan-file", help="override the manifest's lab_nic.netplan_file")
     ln.add_argument("--dry-run", action="store_true")
 
-    pr = sub.add_parser("projects", help="import the audience's .gns3project files")
+    pr = sub.add_parser("projects", help="import the .gns3project files in projects.txt")
     pr.add_argument("--profile", required=True)
     pr.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
     pr.add_argument("--roots", help="comma-separated dirs to search (overrides the manifest)")
@@ -1539,7 +1539,8 @@ def main():
     pr.add_argument("--dry-run", action="store_true")
 
     ec = sub.add_parser("export-check",
-                        help="refuse to bless an OVA carrying another audience's projects")
+                        help="refuse to bless an OVA whose projects are not exactly "
+                             "projects.txt")
     ec.add_argument("--profile", required=True)
     ec.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
     ec.add_argument("--images-dir", help="override the manifest's qemu_images_dir")

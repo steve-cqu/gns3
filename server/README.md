@@ -1,29 +1,41 @@
 # Building the CQU GNS3 VM (staff only)
 
-How to turn a fresh GNS3 VM into the appliance handed out to students, and the staff
-variant with the solution projects. One command does the build; you cut the OVA yourself.
+How to turn a fresh GNS3 VM into the appliance handed out to students. One command does the
+build; you cut the OVA yourself.
 
-Two appliances are produced from **one** VM, in this order:
+**One appliance per architecture**, given to staff and students alike:
 
-| | Profile | Projects | Exported as |
+| Profile | Projects | Exported as |
+|---|---|---|
+| `amd64` | the 5 in `projects.txt` | `GNS3-CQU-v<version>.ova` |
+| `arm64` | the same 5, preferring any `-arm64` rebuild | `GNS3-CQU-v<version>-arm64.ova` |
+
+There used to be a second, staff-only appliance carrying the 17 solution projects — four
+OVAs a release and two export passes, for a few megabytes of project data. It was retired in
+August 2026. Solutions now reach staff through Moodle, like every other handout.
+
+**What ships on the appliance is demonstration projects only.** The templates students
+complete, and the solutions, are downloaded and imported — importing a `.gns3project` is two
+clicks. The consequence is worth stating plainly, because it is easy to get backwards:
+
+> The appliance is the **runtime**, not the content. It must be able to run *every* activity,
+> not just the five projects it carries. Never trim the image set in `manifest.yml` to match
+> `projects.txt` — `ubuntu-cloud` is installed for a project nobody ships, and a student who
+> imports `SDN-Basics-Template` needs it there.
+
+Because `export-check` only inspects the projects the appliance ships, it can no longer prove
+the image set covers everything. **`-e verify=all` is what proves that** — it imports each
+activity from `gns3-dev` and exercises it. Run it before cutting a release.
+
+**The profile names the GNS3 VM's architecture**, which is the only axis the build varies on:
+
+| Profile | Docker | Qemu disks | Usual hypervisor |
 |---|---|---|---|
-| Student | `amd64-student` / `arm64-student` | the 7 in `projects-student.txt` | `GNS3-CQU-v<version>-student.ova` |
-| Staff | `amd64-staff` / `arm64-staff` | those 7 **plus** the 17 in `projects-staff.txt` | `GNS3-CQU-v<version>-staff.ova` |
-
-Staff is a superset of student — build the student VM, export it, then add the staff
-projects to the same VM and export again. Never the other way round: a student OVA must
-not contain solutions, and `export-check` (below) refuses to bless one that does.
-
-**The profile names the GNS3 VM's architecture**, which is the only axis the build itself
-varies on:
-
-| Profile prefix | Docker | Qemu disks | Usual hypervisor |
-|---|---|---|---|
-| `amd64-*` | `linux/amd64` | amd64 | VirtualBox, on Windows or Linux |
-| `arm64-*` | `linux/arm64/v8` | arm64 (`-arm64` templates) | VMware Fusion, on Apple Silicon |
+| `amd64` | `linux/amd64` | amd64 | VirtualBox, on Windows or Linux |
+| `arm64` | `linux/arm64/v8` | arm64 (`-arm64` templates) | VMware Fusion, on Apple Silicon |
 
 The hypervisor is a **separate** concern and matters in exactly one place: `build.sh`
-discovering the VM's IP. It defaults to VirtualBox for `amd64-*` and Fusion for `arm64-*`,
+discovering the VM's IP. It defaults to VirtualBox for `amd64` and Fusion for `arm64`,
 which covers the two setups in use, and `GNS3_HYPERVISOR=vbox|vmware` overrides that guess.
 Anything else — Hyper-V on a Windows-on-ARM machine, a VM you reach over the network — needs
 no support beyond `GNS3_VM_IP=<ip>`, since discovery is all that differs.
@@ -36,10 +48,12 @@ The Docker images are always built **on the VM**, so they come out native for it
 architecture — there is no cross-building. FRR and NETem are Docker nodes on both
 architectures, since no arm64 Qemu images exist for them.
 
-> **Tested status.** Both paths are validated live. `amd64` on VirtualBox through to exported
-> student and staff OVAs; `arm64` on Apple Silicon through to a green `arm64-student` build and
-> OVA, including `vmrun` IP discovery. Not yet exercised on a Mac: `verify=all` and a
-> `arm64-staff` build.
+> **Tested status.** Both paths were validated live under the previous two-appliance scheme:
+> `amd64` on VirtualBox through to exported OVAs, `arm64` on Apple Silicon through to a green
+> build and OVA including `vmrun` IP discovery. `verify=all` has never been exercised on a Mac.
+> The single-appliance change (August 2026) has not yet been run end to end on hardware — it
+> touches the project list and the export gate, not any image phase, but the first build after
+> it should be treated as a validation run.
 
 ---
 
@@ -54,13 +68,16 @@ architectures, since no arm64 Qemu images exist for them.
 - **Either** an SSH key the VM accepts (`ssh-copy-id gns3@<vm-ip>` — recommended) **or**
   `sshpass` for the password login. The build and the verification tooling both probe for a
   working key first, so a key means you need `sshpass` nowhere.
-- `VBoxManage` on the PATH for `amd64-*`, or `vmrun` + `ovftool` for `arm64-*`
+- `VBoxManage` on the PATH for `amd64`, or `vmrun` + `ovftool` for `arm64`
 - Both repos checked out side by side:
   - `gns3/` — this repo (public: build tooling, Dockerfiles, templates, logos)
   - `gns3-dev/` — the private repo (the `.gns3project` files and `tools/gns3_autotest.py`)
-- The oversized projects that are too big for git, in `infiles/` alongside the repos.
-  **SDN-Basics-Template.gns3project is 729 MB** and is not in either repo — you must have
-  it locally or that project is skipped (with a clear `MISSING` line, not a failure).
+
+`infiles/` is **no longer needed to build the appliance.** Every project on `projects.txt` is
+committed to `gns3-dev`, so a fresh checkout of the two repos is the whole prerequisite. The
+729 MB `SDN-Basics-Template.gns3project` still lives out of git in `infiles/` and is still
+worth having on the build host if you want to test that import by hand, but its absence no
+longer changes what the appliance contains.
 
 ### Setting up a PC build host
 
@@ -182,14 +199,14 @@ python3 -c 'import yaml; print("pyyaml ok")'
 ```
 
 **Why a function and not `export GNS3VMX=…`.** Fusion's default paths contain spaces and
-the VM's name changes — new version, student vs staff, a clone made for an export — so a
-path fixed in your profile goes stale silently and you build the wrong VM. `gns3vmx`
-resolves it each time, preferring a running VM and falling back to a disk search, so it
-works whether the VM is up (building) or shut down (exporting). Keep the quotes:
+the VM's name changes — a new version, a clone made for an export — so a path fixed in your
+profile goes stale silently and you build the wrong VM. `gns3vmx` resolves it each time,
+preferring a running VM and falling back to a disk search, so it works whether the VM is up
+(building) or shut down (exporting). Keep the quotes:
 
 ```sh
-./build.sh "$(gns3vmx)" arm64-student
-./build.sh "$(gns3vmx v029-staff)" arm64-staff
+./build.sh "$(gns3vmx)" arm64
+./build.sh "$(gns3vmx v030)" arm64        # a named VM, when you keep more than one
 ```
 
 If your VMs live somewhere other than `~/Virtual Machines.localized` or `~/VMs`, add that
@@ -213,17 +230,15 @@ the VM, so a control node with the wrong python gets an hour into the build befo
 complaining. The playbook now checks for this up front, but the check is only as good as the
 shell you launched it from.
 
-You can skip `infiles/` on a Mac. SDN-Basics-Template is 729 MB and amd64, so it cannot
-run there regardless — the build logs `MISSING` and carries on.
-
 **The VM:**
 
 - A stock GNS3 VM 2.2.54, running, with SSH reachable and the GNS3 API on **port 80**
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
-- About **12 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
-  images after layer sharing, ~3.7 GB of Qemu disks, and ~2.3 GB of projects — most of
-  that last figure being SDN-Basics-Template, which expands to 2.2 GB once imported
+- About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
+  images after layer sharing, ~3.7 GB of Qemu disks, and well under 100 MB of projects.
+  It was ~12 GB until SDN-Basics-Template came off the appliance; that one project expanded
+  to 2.2 GB on import
 
 ---
 
@@ -233,20 +248,21 @@ From your own machine, not the VM:
 
 ```sh
 cd gns3/server/ansible
-./build.sh "GNS3 VM" amd64-student            # VirtualBox (PC)
-./build.sh "$(gns3vmx)" arm64-student        # VMware Fusion (Apple Silicon)
+./build.sh "GNS3 VM" amd64            # VirtualBox (PC)
+./build.sh "$(gns3vmx)" arm64        # VMware Fusion (Apple Silicon)
 ```
 
 `build.sh` finds the VM's IP from the hypervisor and runs the playbook. If discovery
 fails or you already know the address, skip it:
 
 ```sh
-GNS3_VM_IP=192.168.56.106 ./build.sh "GNS3 VM" amd64-student
+GNS3_VM_IP=192.168.56.106 ./build.sh "GNS3 VM" amd64
 ```
 
 That syncs this repo to the VM, builds every Docker image and downloads every Qemu disk,
-registers the templates, installs the logos and noVNC, imports the student projects, and
-finally runs a handful of activities against the live VM and **fails if any go red**.
+registers the templates, installs the logos and noVNC, imports the projects named in
+`projects.txt`, and finally runs a handful of activities against the live VM and **fails if
+any go red**.
 
 The first build takes a while — 14 Docker images built from source (including a 2.9 GB
 Kali) and about 3.7 GB of Qemu disks downloaded and checksummed. Everything is idempotent,
@@ -266,7 +282,7 @@ Useful flags (anything after the profile is passed to `ansible-playbook`):
 
 | | |
 |---|---|
-| `-e verify=all` | run every activity with a test manifest, not the 4-activity smoke set. Slow (tens of minutes) — **use this before cutting an OVA you will hand out** |
+| `-e verify=all` | run every activity with a test manifest, not the 4-activity smoke set. Slow (tens of minutes) — **use this before cutting an OVA you will hand out.** It is now the only check that the appliance can run the activities students import themselves, since `export-check` sees only the five it ships |
 | `-e verify=none` | skip verification while iterating on the build itself |
 | `--check` | dry run: reports what would change without changing anything |
 | `-e gns3_dev_repo=/path/to/gns3-dev` | if the private repo is not beside this one |
@@ -282,26 +298,36 @@ Run these from your machine — they are also run automatically at the end of ev
 so a green build has already passed them.
 
 ```sh
-ssh gns3@<vm-ip> '~/git/gns3/server/build/gns3build.py export-check --profile amd64-student'
+ssh gns3@<vm-ip> '~/git/gns3/server/build/gns3build.py export-check --profile amd64'
 ```
 
-It fails (exit 1) if the VM carries anything the audience must not ship, and reports:
+It fails (exit 1) unless the appliance carries **exactly** `projects.txt`, and reports:
 
-- **LEAK** — a project from another audience is imported. A student OVA containing
-  `*-Solution` projects is the failure this exists to prevent.
+- **UNLISTED** — a project is imported, or a `.gns3project` is staged in
+  `/home/gns3/projects`, that is not on the list. This is the one that matters: the appliance
+  is public, and a solution opened to answer a student's question is one export away from
+  shipping. Delete it, or add it to `projects.txt` if it genuinely belongs there.
+  (`rm -f /home/gns3/projects/*` clears staged files.)
 - **BROKEN** — a project references a Docker image or Qemu disk that is not installed, so
   its nodes cannot start. Warns by default; `--strict` makes it fail. See
-  [Mac limitations](#mac-limitations) — this is expected there.
-- **WARN** — a stray `.gns3project` left in `/home/gns3/projects`. Nothing imports it, but
-  it still ships inside the OVA. Delete them: `rm -f /home/gns3/projects/*`.
+  [Mac limitations](#mac-limitations).
+- **INCOMPLETE** — a project on the list did not make it in, usually because its file was
+  not under any root. Reported, not fatal.
+
+Until August 2026 this compared the VM against the *other* audience's list, so it only ever
+caught a staff solution on a student OVA. With one appliance there is no other list, so the
+rule is now exact-match — which is stricter, not looser: anything unplanned fails.
+
+Note what it does **not** prove. It inspects the five projects the appliance ships, so it
+says nothing about whether the image set still runs the activities students download for
+themselves. Only `-e verify=all` shows that.
 
 The build also writes a provenance manifest to `/home/gns3/gns3-build-provenance.json` on
 the VM (and fetches a copy to `ansible/provenance-<profile>.json`). It records the date,
 profile, GNS3 and kernel versions, the commit of **both** repositories, every Docker image
 ID, every Qemu disk md5, every template and project, and the size + sha256 of each source
-`.gns3project` — including the out-of-git 729 MB one, which nothing else records. Keep the
-fetched copy with the OVA: without it, two `GNS3-CQU-*.ova` files are indistinguishable
-months later.
+`.gns3project`. Keep the fetched copy with the OVA: without it, two `GNS3-CQU-*.ova` files
+are indistinguishable months later.
 
 The two commits are read in different places, because the phases run in different places —
 this repository on the VM, and each projects root (`gns3-dev`) on the control node during
@@ -313,7 +339,7 @@ uncommitted changes, so the recorded commit does not describe what was built.
 A build becomes a *release* when it goes out to students. Add `-e release=<version>`:
 
 ```sh
-./build.sh "GNS3 VM" amd64-student -e release=v030
+./build.sh "GNS3 VM" amd64 -e release=v030
 ```
 
 That labels the provenance manifest, files a copy under `releases/<version>/` where it is
@@ -330,7 +356,7 @@ given.
 
 ---
 
-## 3. Cut the student OVA
+## 3. Cut the OVA
 
 Not automated — it is a single command and the VM has to be shut down anyway.
 
@@ -342,8 +368,8 @@ ssh gns3@<vm-ip> 'rm -f /home/gns3/projects/*'     # if export-check warned abou
 
 ```sh
 VBoxManage controlvm "GNS3 VM" acpipowerbutton     # or shut down from the VM's own menu
-VBoxManage snapshot  "GNS3 VM" take "v<version>-student"
-VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>-student.ova
+VBoxManage snapshot  "GNS3 VM" take "v<version>"
+VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>.ova
 ```
 
 **VMware Fusion (Mac):**
@@ -360,8 +386,8 @@ snapshots, so export first and snapshot afterwards.
 
 ```sh
 vmrun stop "$(gns3vmx)" soft                    # graceful; `vmrun list` must not show it
-ovftool --compress=9 "$(gns3vmx)" GNS3-CQU-v<version>-student-arm64.ova
-vmrun snapshot "$(gns3vmx)" "v<version>-student"
+ovftool --compress=9 "$(gns3vmx)" GNS3-CQU-v<version>-arm64.ova
+vmrun snapshot "$(gns3vmx)" "v<version>"
 ```
 
 To export a state you already snapshotted, clone it out rather than reverting — the clone
@@ -370,8 +396,8 @@ has no snapshots, and the original keeps its history:
 ```sh
 vmrun listSnapshots "$(gns3vmx)"
 vmrun clone "$(gns3vmx)" ~/VMs/GNS3-export.vmx full \
-      -snapshot="v<version>-student" -cloneName="GNS3-export"
-ovftool --compress=9 "$(gns3vmx GNS3-export)" GNS3-CQU-v<version>-student-arm64.ova
+      -snapshot="v<version>" -cloneName="GNS3-export"
+ovftool --compress=9 "$(gns3vmx GNS3-export)" GNS3-CQU-v<version>-arm64.ova
 rm -rf ~/VMs/GNS3-export.vmwarevm                 # or delete it from Fusion
 ```
 
@@ -383,21 +409,8 @@ rather than an obvious mismatch. The student instructions in
 [`../vm/getting-started-mac.md`](../vm/getting-started-mac.md) tell them to look for the Mac
 appliance; the filename is what makes that possible.
 
----
-
-## 4. Add the staff projects and cut the staff OVA
-
-Start the VM again, then re-run the build with the staff profile. Only the extra projects
-are imported — everything else is already in place and skips:
-
-```sh
-cd gns3/server/ansible
-./build.sh "GNS3 VM" amd64-staff -e verify=all              # VirtualBox
-./build.sh "$(gns3vmx)" arm64-staff -e verify=all          # VMware Fusion
-```
-
-Then repeat step 2's checks with the staff profile and step 3's export, naming it
-`GNS3-CQU-v<version>-staff.ova` (or `-staff-arm64.ova` on a Mac).
+That is the whole export. There is no second pass: the staff appliance was retired in
+August 2026, and staff use the same OVA as students.
 
 ---
 
@@ -407,18 +420,18 @@ Then repeat step 2's checks with the staff profile and step 3's export, naming i
 the VM (`cd ~/git/gns3/server/build`):
 
 ```sh
-./gns3build.py validate                       # check the manifest and every template
-./gns3build.py plan      --profile amd64-staff   # show what would be installed, change nothing
-./gns3build.py build     --profile amd64-staff   # all seven phases below, in order
-./gns3build.py templates --profile amd64-staff   # register templates via the GNS3 API
-./gns3build.py docker    --profile amd64-staff   # build the Docker node images
-./gns3build.py qemu      --profile amd64-staff   # download + verify the Qemu disks
-./gns3build.py logos                          # install the CQU node symbols
-./gns3build.py novnc                          # install noVNC + start-vnc.sh
-./gns3build.py labnic                         # the Windows Host lab NIC (eth2)
-./gns3build.py projects  --profile amd64-staff   # import the audience's projects
-./gns3build.py export-check --profile amd64-staff
-./gns3build.py provenance   --profile amd64-staff
+./gns3build.py validate                    # check the manifest and every template
+./gns3build.py plan      --profile amd64   # show what would be installed, change nothing
+./gns3build.py build     --profile amd64   # all seven phases below, in order
+./gns3build.py templates --profile amd64   # register templates via the GNS3 API
+./gns3build.py docker    --profile amd64   # build the Docker node images
+./gns3build.py qemu      --profile amd64   # download + verify the Qemu disks
+./gns3build.py logos                       # install the CQU node symbols
+./gns3build.py novnc                       # install noVNC + start-vnc.sh
+./gns3build.py labnic                      # the Windows Host lab NIC (eth2)
+./gns3build.py projects  --profile amd64   # import the projects in projects.txt
+./gns3build.py export-check --profile amd64
+./gns3build.py provenance   --profile amd64
 ```
 
 Common options:
@@ -449,8 +462,9 @@ registered through the REST API, which is additive and safe to repeat.
 
 `build/manifest.yml` is the single source of truth: which nodes each platform installs,
 where each image comes from, the Qemu URLs and md5s, which templates each node registers,
-the kernel modules the containers need, and which project lists each audience gets. Adding
-a node means editing that file, not the code. `./gns3build.py validate` checks it, and
+and the kernel modules the containers need. (The projects are the one thing it does *not*
+name — they live in `projects.txt` beside it.) Adding a node means editing the manifest, not
+the code. `./gns3build.py validate` checks it, and
 also cross-checks that every disk a Qemu template names is one its node actually installs.
 
 ---
@@ -499,14 +513,14 @@ guide. Adding one fails the `templates` phase with `Additional properties are no
 
 ## Mac builds
 
-Note the first argument differs by hypervisor: `amd64-*` takes the VM **name**, `arm64-*` takes
+Note the first argument differs by hypervisor: `amd64` takes the VM **name**, `arm64` takes
 a **path to the `.vmx`**.
 
 ```sh
-source ~/gns3-build/bin/activate                        # every new shell — see setup above
+source ~/gns3-build/bin/activate                 # every new shell — see setup above
 cd ~/git/gns3/server/ansible
-./build.sh "$(gns3vmx)" arm64-student
-GNS3_VM_IP=<ip> ./build.sh "$(gns3vmx)" arm64-student   # if vmrun discovery misbehaves
+./build.sh "$(gns3vmx)" arm64
+GNS3_VM_IP=<ip> ./build.sh "$(gns3vmx)" arm64    # if vmrun discovery misbehaves
 ```
 
 Before building, confirm the VM is the one you think it is:
@@ -520,7 +534,7 @@ ssh gns3@<vm-ip> 'uname -m; df -h /opt'       # expect aarch64 and ~10 GB free
 `aarch64` is the one that matters: the `arm64` profile builds Docker images **on the VM** so
 they come out native, which only holds if the VM really is arm64.
 
-A correct `arm64-student` build installs 14 Docker images, **3** Qemu disks and 18 templates
+A correct `arm64` build installs 14 Docker images, **3** Qemu disks and 18 templates
 — three rather than the PC build's four because FRR and NETem are Docker on both
 platforms. The disks should all be arm64 variants:
 
@@ -541,25 +555,29 @@ What does **not** work on a Mac VM: projects containing **amd64 Qemu** nodes. A
 `.gns3project` stores each Qemu node's emulator and disk by name, so a project exported on
 a PC carries `qemu_path: /usr/bin/qemu-system-x86_64` and an `…amd64.img` disk — neither of
 which exists on an arm64 VM, whatever the templates say. Every project holding a Qemu node
-is affected; all five currently do:
+is affected:
 
-| Project | Qemu node(s) | Autotest |
-|---|---|---|
-| DHCP-Client-Solution | amd64 OpenWrt | `dhcp-client` |
-| IPsec-Site-to-Site-Solution | 2 × amd64 OPNsense | `ipsec-site-to-site` |
-| OPNsense-Firewall-Solution | amd64 OPNsense | `opnsense-firewall` |
-| Small-Internet-Demo | amd64 OpenWrt | skipped (manual) |
-| SDN-Basics-Template | amd64 Ubuntu cloud image | skipped (GUI) |
+| Project | Qemu node(s) | Ships on the appliance? | Autotest |
+|---|---|---|---|
+| Small-Internet-Demo | amd64 OpenWrt | **yes** — needs an `-arm64` rebuild | skipped (manual) |
+| DHCP-Client-Solution | amd64 OpenWrt | no — `-arm64` rebuild exists | `dhcp-client` |
+| IPsec-Site-to-Site-Solution | 2 × amd64 OPNsense | no | `ipsec-site-to-site` |
+| OPNsense-Firewall-Solution | amd64 OPNsense | no | `opnsense-firewall` |
+| SDN-Basics-Template | amd64 Ubuntu cloud image | no — downloaded by the student | skipped (GUI) |
 
-`export-check` reports these as `BROKEN` on a Mac build, and under `-e verify=all` the
-first three fail with **`HTTP 403 Forbidden`** — GNS3's response when it cannot resolve a
-node's emulator or disk. It logs nothing server-side, so the bare 403 is all you get; if
-you see it on a Mac, this is why.
+Only the first now affects the appliance, and it matters more than it used to: it is one of
+five projects a student sees on first boot, so on Apple Silicon a broken flagship demo is
+conspicuous. The rest are reached by import, and fail at that point rather than on the OVA.
+
+`export-check` reports whichever of these are imported as `BROKEN` on an arm64 build, and
+under `-e verify=all` the Qemu ones fail with **`HTTP 403 Forbidden`** — GNS3's response when
+it cannot resolve a node's emulator or disk. It logs nothing server-side, so the bare 403 is
+all you get; if you see it on a Mac, this is why.
 
 Fixing one means rebuilding it on a Mac against the arm64 templates — not something the
 build can do for you. Everything else, which is every Docker-based activity, works normally.
 
-**Where a rebuild goes.** Keep the project's *name* identical (the audience lists and
+**Where a rebuild goes.** Keep the project's *name* identical (`projects.txt` and
 `export-check` match on it) and add `-arm64` to the *filename*:
 
 ```
@@ -578,8 +596,9 @@ python3 -u gns3-dev/tools/gns3_autotest.py <slug> --project-suffix=-arm64 --serv
 Note `--project-suffix=-arm64`, with the equals sign: a value starting with `-` is read as
 an option name if passed as a separate argument.
 
-Delete the project from the VM once exported. A hand-built copy is indistinguishable from a
-wrongly imported one, so leaving a staff project on a student VM fails `export-check`.
+Delete the project from the VM once exported, unless it is on `projects.txt`. A hand-built
+copy is indistinguishable from a wrongly imported one, and anything unlisted now fails
+`export-check` outright.
 
 ### Why the arm64 Qemu templates carry `options`
 
@@ -610,7 +629,7 @@ Fusion on Apple Silicon also gives the guest no nested virtualisation — there 
 
 **Editing a template is not enough on its own.** The `templates` phase keys on
 `template_id`, so a changed `.conf` is skipped on a controller that already has it; push it
-with `gns3build.py templates --profile arm64-student --force`. Existing *nodes* keep whatever
+with `gns3build.py templates --profile arm64 --force`. Existing *nodes* keep whatever
 they were created with, so delete and re-add any node made before the change.
 
 All three were booted on Apple Silicon on 2026-07-26 — the first time the arm64 Qemu path
@@ -648,15 +667,18 @@ strip a trailing comma, in place of the REST API.
 
 ## Troubleshooting
 
-**`export-check` says a project belongs to another audience.** You are building a student
-OVA on a VM that already has staff projects. Delete them through the GNS3 GUI or the API
-(`DELETE /v2/projects/<id>`), or start from a clean VM snapshot.
+**`export-check` says a project is UNLISTED.** Something is imported that is not on
+`projects.txt`. The usual causes are a solution opened to answer a question, and a VM built
+under the old two-appliance scheme — the projects that were legitimate then are unlisted now.
+Delete them through the GNS3 GUI or the API (`DELETE /v2/projects/<id>`), or start from a
+clean VM snapshot. Add it to `projects.txt` only if it really should ship to everyone.
 
 **A node fails to start after a rebuild.** If you edited a Dockerfile, the image is only
 rebuilt with `--force` — an existing image is skipped by design.
 
-**`projects` reports MISSING for SDN-Basics-Template.** It is not in git; put the 729 MB
-file in `infiles/` or pass `-e extra_project_dir=...`.
+**`projects` reports MISSING.** The named project is not under any root. Every project on
+`projects.txt` is committed to `gns3-dev`, so this normally means the private repo is not
+beside this one — pass `-e gns3_dev_repo=/path/to/gns3-dev`.
 
 **`projects` fails with `HTTP 409 ... invalid zip`.** The controller could not extract the
 archive. The phase then tests the file locally and tells you which side is at fault: a

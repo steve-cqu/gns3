@@ -4,8 +4,8 @@ One command, run from your own machine, that turns a fresh GNS3 VM into a config
 appliance:
 
 ```sh
-./build.sh "GNS3 VM" amd64-student            # VirtualBox: the VM name
-./build.sh "$(gns3vmx)" arm64-staff           # VMware Fusion: a path to the .vmx
+./build.sh "GNS3 VM" amd64            # VirtualBox: the VM name
+./build.sh "$(gns3vmx)" arm64         # VMware Fusion: a path to the .vmx
 ```
 
 `gns3vmx` is the shell helper defined in [`../README.md`](../README.md) — it resolves the
@@ -16,8 +16,8 @@ rename would silently make it stale.
 playbook directly (IP already known):
 
 ```sh
-ansible-playbook -i 192.168.56.106, site.yml -e profile=amd64-student
-ansible-playbook site.yml -e profile=amd64-staff          # uses inventory.ini
+ansible-playbook -i 192.168.56.106, site.yml -e profile=amd64
+ansible-playbook site.yml -e profile=arm64          # uses inventory.ini
 ```
 
 ## What it does
@@ -32,7 +32,7 @@ wrapper around it. In order:
 4. **import projects** with `gns3build.py projects` **from your machine**, straight into
    the VM's API
 5. **verify** with `gns3_autotest.py` and fail the build if anything comes back red
-6. **export-check** — fail if the VM carries projects this audience must not ship
+6. **export-check** — fail unless the VM carries exactly the projects in `../projects.txt`
 7. **provenance** — record what the appliance contains, and fetch a copy back here
 
 Steps 6 and 7 are the pre-export gate. The playbook stops short of cutting the OVA
@@ -43,15 +43,17 @@ Every phase is idempotent, so re-running is safe and cheap — a second run of a
 unchanged build reports `changed=0` and finishes in seconds.
 
 Docker builds run on the VM so images are built for its architecture (this is why `amd64`
-and `arm64` need no cross-building). Projects are imported from your machine instead of
-being copied to the VM first: SDN-Basics-Template alone is 729 MB, and syncing it would
-put that on the VM's disk *and* transfer it, for no benefit.
+and `arm64` need no cross-building). Projects are imported from your machine straight into
+the API instead of being copied to the VM first — that mattered most when the 729 MB
+SDN-Basics-Template shipped, since syncing it would have put it on the VM's disk *and*
+transferred it; with today's much smaller set it simply keeps the VM's disk clean of staged
+files that would otherwise ride into the OVA.
 
 ## Options
 
 | | |
 |---|---|
-| `-e profile=…` | **required** — `amd64-student`, `amd64-staff`, `arm64-student`, `arm64-staff` |
+| `-e profile=…` | **required** — `amd64` or `arm64`, the architecture of the GNS3 VM |
 | `-e verify=smoke` | default: four fast activities spanning docker, qemu and the custom images |
 | `-e verify=all` | every activity with a test manifest — slow, and what you want before exporting an OVA |
 | `-e verify=none` | skip verification (iterating on the build itself) |
@@ -81,23 +83,25 @@ Both are per-build records, gitignored, and worth keeping alongside the OVA:
   sha256 of each source `.gns3project`. Without it you cannot tell two `GNS3-CQU-*.ova`
   files apart later.
 - `.gns3build-imports.json` — the source-side record the `projects` phase writes and
-  `provenance` folds in. It is the only durable statement of which bytes the oversized
-  out-of-git projects were built from, since git cannot hold them.
+  `provenance` folds in: the size and sha256 of every source `.gns3project` a build used.
 
 `build.sh` passes any extra arguments straight through, e.g.
-`./build.sh "GNS3 VM" amd64-student -e verify=all`.
+`./build.sh "GNS3 VM" amd64 -e verify=all`.
 
 ## Tested status
 
-The `amd64` (VirtualBox) path is validated end to end for both audiences: build, idempotent
-re-run (`changed=0`), `--check`, verification, export-check and provenance, through to an
-exported OVA.
+The `amd64` (VirtualBox) path is validated end to end: build, idempotent re-run
+(`changed=0`), `--check`, verification, export-check and provenance, through to an exported
+OVA.
 
-The `arm64` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a clean run of
-`arm64-student` finished green — Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu disks
-(md5s confirmed against real downloads for the first time), templates, logos, noVNC, 6 of 7
-student projects imported (the seventh, SDN-Basics-Template, deliberately absent), smoke
+The `arm64` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a clean run
+finished green — Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu disks (md5s confirmed
+against real downloads for the first time), templates, logos, noVNC, projects imported, smoke
 verification passed, export-check clean, provenance written and fetched.
+
+Both of those predate the August 2026 move to a single appliance, which changed the project
+list and the export gate but no image phase. Treat the first build after it as a validation
+run.
 
 That build passed `GNS3_VM_IP=<ip>`, so discovery was bypassed; `vmrun getGuestIPAddress`
 was confirmed separately on the same day and returns the reachable host-only address, not

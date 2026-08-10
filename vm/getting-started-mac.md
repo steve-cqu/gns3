@@ -55,7 +55,7 @@ Also note that this is done in your web browser on the Mac, not inside the GNS3 
 You should see the main GNS3 UI, such as:
 ![GNS User Interface](../images/gns3ui-projects-1.png)
 
-You may see a list of pre-loaded projects. If so, click on one to get started using that project. Alternatively, you can import projects (``.gns3project`` files).
+You will see a list of pre-loaded projects. These are demonstrations – click on one to have a look around. The projects you need for your unit activities are downloaded from Moodle and imported, which is described in [Importing a Project](./using-gns3.md#importing-a-project).
 
 You are now ready to use GNS3!
 

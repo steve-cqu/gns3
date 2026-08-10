@@ -3,11 +3,12 @@
 #
 #   ./build.sh <vm> <profile> [ansible-playbook args...]
 #
-#   ./build.sh "GNS3 VM" amd64-student            # VirtualBox
-#   ./build.sh ~/VMs/GNS3.vmx arm64-staff         # VMware Fusion
-#   ./build.sh "GNS3 VM" amd64-student -e verify=all
+#   ./build.sh "GNS3 VM" amd64                    # VirtualBox
+#   ./build.sh ~/VMs/GNS3.vmx arm64               # VMware Fusion
+#   ./build.sh "GNS3 VM" amd64 -e verify=all
 #
-# The profile names the GNS3 VM's ARCHITECTURE, which is all the build itself varies on.
+# The profile names the GNS3 VM's ARCHITECTURE, which is all the build varies on: one
+# appliance per architecture goes to staff and students alike.
 # The hypervisor is a separate axis and only matters here, for finding the VM's IP:
 #   vbox    VBoxManage guestproperty        <vm> is the VM name
 #   vmware  vmrun getGuestIPAddress         <vm> is a path to the .vmx
@@ -20,7 +21,9 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    # Every comment line after the shebang, up to the first line of code — so editing the
+    # header above cannot silently truncate the help text, which a fixed line range did.
+    awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
     exit "${1:-1}"
 }
 
@@ -30,13 +33,13 @@ PROFILE=$2
 shift 2
 
 case "$PROFILE" in
-    amd64-student|amd64-staff|arm64-student|arm64-staff) ;;
+    amd64|arm64) ;;
     *) echo "error: unknown profile '$PROFILE'" >&2
-       echo "       expected one of amd64-student, amd64-staff, arm64-student, arm64-staff" >&2
+       echo "       expected one of amd64, arm64" >&2
        exit 2 ;;
 esac
 
-ARCH=${PROFILE%%-*}
+ARCH=$PROFILE
 HYPERVISOR=${GNS3_HYPERVISOR:-$([ "$ARCH" = amd64 ] && echo vbox || echo vmware)}
 case "$HYPERVISOR" in
     vbox|vmware) ;;

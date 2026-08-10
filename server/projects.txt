@@ -1,0 +1,14 @@
+# Projects pre-imported into the appliance, one name per line.
+#
+# These are the *internal* project names (the "name" in project.gns3), not filenames —
+# export-check compares against what the controller reports, and a platform variant such as
+# Small-Internet-Demo-arm64.gns3project deliberately keeps the same internal name.
+#
+# Demonstration projects only. Templates students complete, and the solutions, are handed out
+# through Moodle instead: the appliance is the runtime, and projects are content that travels
+# separately. Anything imported onto the VM that is not listed here fails export-check.
+GNS3-Intro-Solution
+LAN-Routing-Template
+OSPF-Basics-Template
+Small-Internet-Demo
+Windows-Host-Demo

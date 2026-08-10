@@ -3,10 +3,11 @@
 # Consumed by gns3build.py (the engine) and by the ansible/ wrapper that drives it.
 # This file is the only place node/template mapping and image sources are defined.
 #
-# Project audience mapping: the curated lists ../projects-student.txt and
-# ../projects-staff.txt are the source of truth. As a guideline, *-Template projects
-# go to the student VM and *-Solution projects to the staff VM, with some student-facing
-# exceptions already captured in projects-student.txt (e.g. GNS3-Intro-Solution).
+# Projects: the curated list ../projects.txt is the source of truth, and it holds
+# demonstration projects only. One appliance goes to staff and students alike; the templates
+# students complete and the worked solutions are handed out through Moodle. So the VM must
+# be able to run *every* activity, not just the few it ships — see the note on `platforms:`
+# before removing any image.
 
 gns3_version: "2.2.54"
 
@@ -15,7 +16,7 @@ paths:
   templates_dir: ../templates      # templates/<name>.conf (each a GNS3 template JSON object)
   docker_dir: ../docker            # server/docker/<name>/ build contexts (local sources)
   symbols_dir: ../../images/symbols  # CQU node logos (*.svg) installed by the `logos` phase
-  lists_dir: ..                    # projects-<audience>.txt
+  project_list: ../projects.txt    # names of the projects pre-imported into the appliance
 
 # Absolute path on the GNS3 VM where Qemu disk images live.
 qemu_images_dir: /opt/gns3/images/QEMU
@@ -60,30 +61,28 @@ lab_nic:
   netplan_file: /etc/netplan/95-cqu-lab-nic.yaml
 
 # ---------------------------------------------------------------------------
-# Profiles = architecture x audience. The architecture is that of the GNS3 VM, not of the
-# build host, and is the only axis anything here varies on: Docker platform, Qemu images,
-# templates and project variants. The *hypervisor* is a separate concern and lives in
-# ansible/build.sh — VirtualBox and VMware Fusion both host amd64 or arm64 VMs, so binding
-# the two together (the old pc/mac naming) could not describe, say, an arm64 VM under
-# Hyper-V on a Windows-on-ARM machine.
+# Profiles name the GNS3 VM's architecture — not the build host's, and not the audience.
+# There is one appliance per architecture, and the architecture is the only axis anything
+# here varies on: Docker platform, Qemu images, templates and project variants. The
+# *hypervisor* is a separate concern and lives in ansible/build.sh — VirtualBox and VMware
+# Fusion both host amd64 or arm64 VMs, so binding the two together (the old pc/mac naming)
+# could not describe, say, an arm64 VM under Hyper-V on a Windows-on-ARM machine.
+#
+# There was a second axis until August 2026: profiles were <arch>-student / <arch>-staff and
+# the staff appliance was the student one plus the 17 solution projects. Four OVAs a release,
+# two export passes, for a difference of a few megabytes of project data. Solutions now go to
+# staff through Moodle like every other handout.
 # ---------------------------------------------------------------------------
 profiles:
-  amd64-student: { platform: amd64, audience: student }
-  amd64-staff:   { platform: amd64, audience: staff   }
-  arm64-student: { platform: arm64, audience: student }
-  arm64-staff:   { platform: arm64, audience: staff   }
-
-# Which ../projects-<list>.txt each audience installs, in order (names de-duplicated).
-# The staff VM is a superset: the manual build imported the student projects, exported the
-# student OVA, then added the staff-only projects to the same VM and exported again. The
-# two lists are disjoint, so a staff build that read only projects-staff.txt would ship a
-# VM missing every student project. `export-check` enforces this both ways: nothing outside
-# the audience's own lists may be present when the OVA is cut.
-audiences:
-  student: [student]
-  staff:   [student, staff]
+  amd64: { platform: amd64 }
+  arm64: { platform: arm64 }
 
 # Nodes enabled per platform, in install order. Keys reference `nodes:` below.
+#
+# This list is deliberately NOT trimmed to the projects in projects.txt. The appliance ships
+# five demonstration projects but has to run every activity, because students import the rest
+# themselves — so the images stay complete. ubuntu-cloud is the clearest case: nothing on
+# projects.txt uses it, and it exists solely to back SDN-Basics-Template's controller disk.
 # NOTE: amd64 now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
 # Qemu ones — this bakes in the Qemu->Docker migration.
 platforms:
@@ -229,6 +228,10 @@ nodes:
   # backing file is this image at exactly this size, so the `resize` is not optional.
   # (The superseded manual build never installed this image, so on a VM built that way
   # the SDN controller node could not start at all.)
+  # SDN-Basics-Template is no longer pre-imported — at 729 MB, and ~2.2 GB once expanded, it
+  # is downloaded and imported by the student. That makes this image MORE important, not
+  # less: it is the half of the pairing the student cannot supply, and nothing on
+  # projects.txt will fail if it goes missing.
   ubuntu-cloud:
     kind: qemu
     file: ubuntu-24.04-server-cloudimg-amd64.img

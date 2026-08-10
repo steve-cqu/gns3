@@ -4,6 +4,22 @@ We are using the web user interface (UI) for GNS3. That is, the GNS3 server runs
 
 Here are some tips and tricks with using the GNS3 web UI. There is no attempt to cover all aspects of the UI; just a few tasks to get started and some features that may be useful for new users.
 
+# Importing a Project
+
+The GNS3 virtual machine comes with a small number of demonstration projects already loaded. Most of the projects you need for your unit are not on the virtual machine – you download them from Moodle and import them yourself. A project is a single file ending in `.gns3project`.
+
+You only import a project once. After that it stays on your virtual machine and appears in the project list every time you open GNS3.
+
+1. Download the `.gns3project` file from Moodle to your host computer. Note where your browser saved it.
+2. Open GNS3 in your browser and go to the project list. If a project is already open, close it first.
+3. Select *Import project*, choose the file you downloaded, and give the project a name if you are asked for one.
+4. Wait for the upload to finish. Large projects take a while – one of them is several hundred megabytes, so do not close the browser tab while it is working.
+5. Open the imported project from the list and start the nodes as normal.
+
+If the import fails, the two common causes are that the file did not download completely, and that the virtual machine has run out of disk space. A project expands to several times the size of the file you downloaded.
+
+Importing a project does not install anything else. All of the node images the activities use are already on the virtual machine, so an imported project is ready to start.
+
 # GNS3 Web Interface Basics
 
 ## Adding a Node

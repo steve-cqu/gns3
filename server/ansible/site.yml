@@ -1,8 +1,8 @@
 ---
 # Host-driven GNS3 VM build — the Layer 1 wrapper around build/gns3build.py.
 #
-#   ansible-playbook site.yml -e profile=amd64-student
-#   ansible-playbook -i 192.168.56.106, site.yml -e profile=amd64-staff
+#   ansible-playbook site.yml -e profile=amd64
+#   ansible-playbook -i 192.168.56.106, site.yml -e profile=arm64
 #
 # or, discovering the VM's IP from the hypervisor first, `./build.sh <vm-name> <profile>`.
 #
@@ -24,9 +24,9 @@
   gather_facts: true
 
   vars:
-    # Which profile to build: {amd64,arm64}-{student,staff}. No default — it decides the
-    # architecture and the project set, so it must be a conscious choice.
-    # profile: amd64-student
+    # Which profile to build: amd64 or arm64. No default — it decides the architecture of
+    # every image on the appliance, so it must be a conscious choice.
+    # profile: amd64
 
     # Repo locations on the *control node*. Defaults assume the standard side-by-side
     # checkout: <workspace>/gns3 (public) and <workspace>/gns3-dev (private).
@@ -57,7 +57,7 @@
     # PC-exported project cannot run on arm64; where a rebuild exists as
     # <Name>-arm64.gns3project it is used instead, both when importing into the appliance
     # and when verifying. Projects without a Qemu node need no variant.
-    arch: "{{ profile.split('-')[0] }}"
+    arch: "{{ profile }}"
     project_suffix: "{{ '-arm64' if arch == 'arm64' else '' }}"
 
     gns3build: "{{ vm_repo_dir }}/server/build/gns3build.py"
@@ -103,8 +103,7 @@
       ansible.builtin.assert:
         that: profile is defined and profile | length > 0
         fail_msg: >-
-          Set the profile, e.g. -e profile=amd64-student
-          (one of amd64-student, amd64-staff, arm64-student, arm64-staff)
+          Set the profile, e.g. -e profile=amd64 (one of amd64, arm64)
         quiet: true
 
     # check_mode: false on the read-only tasks — they must really run even in a dry run,
@@ -388,10 +387,11 @@
       when: verify != 'none' and not ansible_check_mode
 
     # ------------------------------------------------- pre-export gate + record ----
-    # A student OVA must not carry staff solutions, and a stray .gns3project staged on
-    # the VM ships inside the image even though nothing imports it. Fail here rather than
-    # after the OVA is built and handed out.
-    - name: Check nothing outside this audience would ship
+    # The appliance is public and must carry exactly the projects in projects.txt — no
+    # solution imported to answer a question, no leftover from a manual test. A stray
+    # .gns3project staged on the VM ships inside the image too, even though nothing imports
+    # it. Fail here rather than after the OVA is built and handed out.
+    - name: Check nothing unlisted would ship
       ansible.builtin.command: "{{ gns3build }} export-check --profile {{ profile }}"
       register: gns3_export_check
       changed_when: false
@@ -402,12 +402,12 @@
       ansible.builtin.debug:
         msg: "{{ gns3_export_check.stdout_lines }}"
 
-    - name: Fail if the appliance would leak another audience's projects
+    - name: Fail if the appliance carries anything outside projects.txt
       ansible.builtin.assert:
         that: gns3_export_check.rc == 0
         fail_msg: >-
-          export-check found content that must not ship as '{{ profile }}' — see the LEAK
-          lines above. Do NOT export this VM until they are removed.
+          export-check found content that is not in projects.txt — see the UNLISTED lines
+          above. Do NOT export this VM until they are removed.
         quiet: true
 
     - name: Copy the source-checksum record to the VM
@@ -440,7 +440,7 @@
 
     # A released build's manifest is the durable record of what students are running, so
     # it lands in the repo rather than in the gitignored working copy above. One file per
-    # profile — a release is up to four OVAs and they do not contain the same things.
+    # profile — a release is two OVAs, amd64 and arm64, built from different images.
     - name: File the provenance manifest under the release
       ansible.builtin.fetch:
         src: "{{ provenance_path }}"

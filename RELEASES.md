@@ -9,6 +9,12 @@ not terms, so the sequence has gaps — v023–v026 and v028+ were built and nev
 Students are told which release to use at the start of term, and to delete the previous one.
 Old appliances are never rebuilt or patched.
 
+**From August 2026 a release is two OVAs, not four.** Releases up to and including `v027`
+came in student and staff variants, the staff one carrying the 17 solution projects; the
+appliance now ships five demonstration projects and goes to both audiences unchanged, with
+templates and solutions handed out through Moodle. Rows below `v027` should be read with that
+in mind — their `-student` / `-staff` filenames are not a naming convention that still exists.
+
 ## Released
 
 | Version | Term | Released | `gns3` | `gns3-dev` | Notes |
@@ -41,10 +47,10 @@ artefact; students are not normally expected to touch the repo on it at all.
 ## What a release records
 
 The build writes `/home/gns3/gns3-build-provenance.json` on the appliance, and a released
-build also files a copy per profile under `server/releases/<version>/`. It records the
-release label, both repository commits, GNS3 and kernel versions, every Docker image ID,
-every Qemu disk md5, every template and project, and the size + sha256 of each source
-`.gns3project` — including the out-of-git 729 MB one, which nothing else records.
+build also files a copy per profile under `server/releases/<version>/` — two files, `amd64`
+and `arm64`, since those are built from different images. It records the release label, both
+repository commits, GNS3 and kernel versions, every Docker image ID, every Qemu disk md5,
+every template and project, and the size + sha256 of each source `.gns3project`.
 
 This is **provenance, not reproducibility**. The Docker builds install from upstream
 package repositories, so rebuilding an old tag today will not reproduce that release's
@@ -56,7 +62,7 @@ A released appliance also carries `/etc/gns3-cqu-release`, so it can name itself
 ```
 $ cat /etc/gns3-cqu-release
 GNS3_CQU_RELEASE=v030
-GNS3_CQU_PROFILE=amd64-student
+GNS3_CQU_PROFILE=amd64
 ...
 ```
 
@@ -72,12 +78,16 @@ repo.
 
 1. Commit everything in both repositories. The build warns if either work tree is dirty,
    because a dirty tree cannot be pointed back at a tag.
-2. Build with the release label:
+2. Build with the release label, once per architecture:
    ```sh
-   ./build.sh <vm> amd64-student -e release=v030
+   ./build.sh <vm> amd64 -e release=v030 -e verify=all
    ```
    This stamps the appliance and files the manifest under `server/releases/v030/`.
+   Use `verify=all`: it is the only check that the appliance still runs the activities
+   students import for themselves, since the appliance ships only demonstration projects.
 3. Cut the OVA — section 3 of [`server/README.md`](server/README.md). Still manual.
+   Two OVAs per release, `amd64` and `arm64`. There is no separate staff appliance: staff
+   and students get the same file, and the solutions go out through Moodle.
 4. Tag **both** repositories with the same label, since `server/build/manifest.yml` takes
    the projects from `gns3-dev`, and a `gns3` tag alone does not describe an appliance:
    ```sh
@@ -86,4 +96,7 @@ repo.
    git -C gns3 push origin v030 && git -C gns3-dev push origin v030
    ```
 5. Add the row above, with the OVA filenames, sizes and sha256 sums.
-6. Tell students which version to use this term, and to delete the previous one.
+6. Publish the handout projects for the term alongside the OVA: the templates students
+   complete, the solutions for staff, and `SDN-Basics-Template` (729 MB — too large for a
+   Moodle upload, so it is hosted with the OVA and linked from there).
+7. Tell students which version to use this term, and to delete the previous one.
