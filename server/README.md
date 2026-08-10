@@ -426,6 +426,7 @@ the VM (`cd ~/git/gns3/server/build`):
 ./gns3build.py templates --profile amd64   # register templates via the GNS3 API
 ./gns3build.py docker    --profile amd64   # build the Docker node images
 ./gns3build.py qemu      --profile amd64   # download + verify the Qemu disks
+./gns3build.py accel                       # Qemu acceleration in gns3_server.conf
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + start-vnc.sh
 ./gns3build.py labnic                      # the Windows Host lab NIC (eth2)
@@ -466,6 +467,60 @@ and the kernel modules the containers need. (The projects are the one thing it d
 name — they live in `projects.txt` beside it.) Adding a node means editing the manifest, not
 the code. `./gns3build.py validate` checks it, and
 also cross-checks that every disk a Qemu template names is one its node actually installs.
+
+---
+
+## Qemu hardware acceleration
+
+The `accel` phase writes a `[Qemu]` section into `~/.config/GNS3/2.2/gns3_server.conf` on the
+appliance:
+
+```ini
+[Qemu]
+require_kvm = false
+```
+
+That one line is the difference between "Qemu nodes work everywhere" and "Qemu nodes work only
+on hardware with nested virtualisation". It is worth understanding, because the obvious setting
+is the wrong one.
+
+**What GNS3 2.2.54 actually does** (`gns3server/compute/qemu/qemu_vm.py`,
+`_run_with_hardware_acceleration`):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `enable_hardware_acceleration` | `true` | use KVM/HAXM at all |
+| `require_hardware_acceleration` | `true` | a missing `/dev/kvm` **raises**, rather than falling back |
+| `enable_kvm`, `require_kvm` | unset | pre-2.0 names, still honoured on Linux and they **override** the two above |
+
+Both defaults are `true` and "require" means *raise*. So out of the box, a host without nested
+virtualisation fails every Qemu node with `KVM acceleration cannot be used (/dev/kvm doesn't
+exist)`. That is not hypothetical: a managed Windows laptop with Credential Guard enabled has
+Hyper-V holding VT-x, so VirtualBox cannot pass it through and the guest has no `/dev/kvm`.
+Docker nodes are unaffected — they share the host kernel — so most activities still work and
+only the Qemu ones break, which makes the fault look stranger than it is.
+
+**`require_kvm = false`, not `enable_kvm = false`.** The two do different things:
+
+- `require_kvm = false` — keep acceleration wherever it exists, and fall back to TCG emulation
+  where it does not. No penalty on capable hardware.
+- `enable_kvm = false` — turn acceleration off *unconditionally*, including on machines that
+  have it. OPNsense boots in about 20 seconds with KVM and takes minutes without, so this
+  costs every capable machine that difference. It is what the older troubleshooting notes
+  recommended, and it is the wrong lever for an appliance handed to a whole cohort.
+
+**On arm64 this is mandatory, not a nicety.** The acceleration check runs *before* the
+architecture check, and its list of supported binaries is x86-only (`qemu-system-x86_64`,
+`qemu-system-i386`, `qemu-kvm`). With the defaults, `qemu-system-aarch64` therefore raises
+`Hardware acceleration can only be used with the following Qemu executables: …` on every Qemu
+node, regardless of the hardware. `require_kvm = false` returns `False` at that point instead.
+
+**No restart.** `gns3server` watches its config files (`FileWatcher`, mtime, one second) and
+reloads on change, so the phase writes the file and nothing else — the build still never
+restarts the GNS3 service. The one caveat is that only files present when the server started
+are watched; this file always exists on a stock appliance, and the phase warns if it does not.
+
+Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
 
 ---
 
@@ -624,8 +679,12 @@ Three reasons, each of which stops the node dead within seconds if missed:
   `hda_disk_interface: ide` fails with "machine type does not support if=ide".
 
 Fusion on Apple Silicon also gives the guest no nested virtualisation — there is no
-`/dev/kvm` — so these run under TCG emulation, slower than their PC equivalents. Set
-`enable_kvm = false` in `gns3_server.conf` if a node complains about KVM.
+`/dev/kvm` — so these run under TCG emulation, slower than their PC equivalents. **The
+`accel` phase is what makes that work**, and on arm64 it is not optional: see
+[Qemu hardware acceleration](#qemu-hardware-acceleration) below. Until that phase existed,
+the arm64 Qemu nodes only booted because someone had set `enable_kvm = false` by hand while
+debugging something else — an invisible dependency that a rebuild from a fresh VM would have
+lost.
 
 **Editing a template is not enough on its own.** The `templates` phase keys on
 `template_id`, so a changed `.conf` is skipped on a controller that already has it; push it

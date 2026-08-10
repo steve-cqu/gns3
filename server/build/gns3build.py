@@ -13,6 +13,7 @@ Subcommands
   templates --profile P     register profile P's templates via the controller API
   docker    --profile P     build the profile's docker node images        [run on the VM]
   qemu      --profile P     download + unpack the profile's Qemu images   [run on the VM]
+  accel                     Qemu acceleration in gns3_server.conf         [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
   novnc                     install noVNC + start-vnc.sh                  [run on the VM]
   projects  --profile P     import the .gns3project files named in projects.txt
@@ -860,6 +861,91 @@ def cmd_labnic(args):
     return 0
 
 
+# --------------------------------------------------------------------------- #
+# Phase: accel — Qemu hardware acceleration in gns3_server.conf   [run on the VM]
+# --------------------------------------------------------------------------- #
+def ini_set(text, section, settings):
+    """Set key=value inside an INI section, returning the new text.
+
+    A surgical line edit rather than configparser, which would drop comments and rewrite
+    sections it was not asked to touch. This file is also hand-edited when someone follows a
+    troubleshooting note, so leaving the rest of it byte-identical matters.
+
+    Keys already present in the section are replaced in place; missing ones are appended to
+    the end of the section; a missing section is appended to the file.
+    """
+    lines = text.splitlines()
+    head = f"[{section}]"
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == head), None)
+
+    if start is None:
+        block = [""] if (lines and lines[-1].strip()) else []
+        block += [head] + [f"{k} = {v}" for k, v in settings.items()]
+        return "\n".join(lines + block) + "\n"
+
+    end = next((i for i in range(start + 1, len(lines))
+                if lines[i].lstrip().startswith("[")), len(lines))
+    for key, value in settings.items():
+        for i in range(start + 1, end):
+            bare = lines[i].split("#", 1)[0]
+            if "=" in bare and bare.split("=", 1)[0].strip().lower() == key.lower():
+                lines[i] = f"{key} = {value}"
+                break
+        else:
+            # Append after the section's last non-blank line, so a blank separating this
+            # section from the next one stays where it is.
+            at = end
+            while at > start + 1 and not lines[at - 1].strip():
+                at -= 1
+            lines.insert(at, f"{key} = {value}")
+            end += 1
+    return "\n".join(lines) + "\n"
+
+
+def cmd_accel(args):
+    """Write the [Qemu] acceleration settings that keep Qemu nodes startable everywhere.
+
+    See the long comment on `qemu_accel:` in the manifest for why `require_kvm` and not
+    `enable_kvm`. Nothing is restarted: gns3server watches its config files and reloads.
+    """
+    m = load_manifest(args.manifest)
+    cfg = m.get("qemu_accel") or {}
+    if not cfg.get("settings"):
+        print("  skip   no qemu_accel.settings in the manifest")
+        return 0
+    path = Path(os.path.expanduser(cfg.get("config_file",
+                                           "~/.config/GNS3/2.2/gns3_server.conf")))
+    section = cfg.get("section", "Qemu")
+    settings = {k: ("true" if v is True else "false" if v is False else str(v))
+                for k, v in cfg["settings"].items()}
+
+    # Say which mode this VM is actually in — the whole point of the phase is that both are
+    # meant to work, so the operator should be able to see which one they just built.
+    kvm = Path("/dev/kvm").exists()
+    print(f"  host   /dev/kvm {'present — Qemu nodes run accelerated' if kvm else 'ABSENT'}"
+          + ("" if kvm else " — Qemu nodes fall back to TCG emulation (minutes, not seconds)"))
+
+    if not path.exists():
+        # gns3server only watches files that existed when it started, so creating this one
+        # now would not take effect until a restart. Say so rather than silently misleading.
+        print(f"  WARN   {path} does not exist — creating it, but gns3server will not pick "
+              f"it up until the service restarts")
+    old = path.read_text() if path.exists() else ""
+    new = ini_set(old, section, settings)
+    shown = ", ".join(f"{k} = {v}" for k, v in settings.items())
+    if new == old:
+        print(f"  skip   {path} already has [{section}] {shown}")
+        return 0
+    if args.dry_run:
+        print(f"  [dry-run] set [{section}] {shown} in {path}")
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new)
+    print(f"  accel  [{section}] {shown} -> {path}")
+    print("  note   picked up live (gns3server watches its config); no restart needed")
+    return 0
+
+
 def cmd_novnc(args):
     m = load_manifest(args.manifest)
     cfg = m.get("novnc") or {}
@@ -1426,7 +1512,8 @@ def cmd_provenance(args):
 # --------------------------------------------------------------------------- #
 # Phase: build — run every phase in order
 # --------------------------------------------------------------------------- #
-BUILD_PHASES = ["templates", "docker", "qemu", "logos", "novnc", "labnic", "projects"]
+BUILD_PHASES = ["templates", "docker", "qemu", "accel", "logos", "novnc", "labnic",
+                "projects"]
 
 
 def cmd_build(args):
@@ -1447,8 +1534,8 @@ def cmd_build(args):
         phases = [p for p in phases if p not in skip]
 
     handlers = {"templates": cmd_templates, "docker": cmd_docker, "qemu": cmd_qemu,
-                "logos": cmd_logos, "novnc": cmd_novnc, "labnic": cmd_labnic,
-                "projects": cmd_projects}
+                "accel": cmd_accel, "logos": cmd_logos, "novnc": cmd_novnc,
+                "labnic": cmd_labnic, "projects": cmd_projects}
     # Every phase reads its options off this one namespace, so it must carry a default
     # for every option any phase's sub-parser defines — a missing one is an AttributeError
     # at run time, not a parse error. Add new phase options here too.
@@ -1522,6 +1609,10 @@ def main():
     lg.add_argument("--dest", help="override the auto-detected gns3server symbols dir")
     lg.add_argument("--dry-run", action="store_true")
 
+    ac = sub.add_parser("accel", help="set Qemu hardware acceleration in gns3_server.conf "
+                                      "(run on the VM)")
+    ac.add_argument("--dry-run", action="store_true")
+
     nv = sub.add_parser("novnc", help="install noVNC + start-vnc.sh (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
 
@@ -1577,7 +1668,7 @@ def main():
     except AttributeError:                       # Python < 3.7
         pass
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
-            "docker": cmd_docker, "qemu": cmd_qemu, "logos": cmd_logos,
+            "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
             "novnc": cmd_novnc, "labnic": cmd_labnic,
             "projects": cmd_projects, "build": cmd_build,
             "export-check": cmd_export_check,

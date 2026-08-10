@@ -46,6 +46,37 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/m
 #   sch_netem  - netem qdisc used by the NETem docker node
 kernel_modules: [wireguard, sch_netem]
 
+# Qemu hardware acceleration, written into gns3_server.conf's [Qemu] section by the `accel`
+# phase. Read gns3server/compute/qemu/qemu_vm.py:_run_with_hardware_acceleration (2.2.54)
+# before changing any of this — the defaults are a trap in two separate ways.
+#
+# Both `enable_hardware_acceleration` and `require_hardware_acceleration` default to TRUE, and
+# "require" means *raise*, not *fall back*. So on a host with no nested virtualisation — a
+# managed Windows laptop where Credential Guard forces Hyper-V to hold VT-x, and possibly some
+# lab machines — every Qemu node dies with "KVM acceleration cannot be used (/dev/kvm doesn't
+# exist)". Docker nodes are unaffected; they share the host kernel.
+#
+# Worse on arm64: the acceleration check runs BEFORE the architecture check and its
+# supported_binaries list is x86-only, so qemu-system-aarch64 raises "Hardware acceleration can
+# only be used with the following Qemu executables" on a Mac appliance whatever the hardware.
+# The arm64 Qemu nodes only ever booted because enable_kvm=false had been set by hand while
+# debugging something else.
+#
+# `require_kvm: false` fixes both: acceleration is still used wherever it exists, and the
+# absent case returns False instead of raising. Do NOT reach for `enable_kvm: false` — the
+# legacy names take priority over the new ones on Linux, so that disables acceleration
+# outright and costs every capable machine the speed (OPNsense boots in ~20 s with KVM and
+# minutes without).
+#
+# gns3server watches its config files (FileWatcher, mtime, 1 s) and live-reloads, so this needs
+# no service restart — the build still never restarts GNS3. The watch is only established for
+# files that existed at startup, which this one always does.
+qemu_accel:
+  config_file: ~/.config/GNS3/2.2/gns3_server.conf
+  section: Qemu
+  settings:
+    require_kvm: false
+
 # The lab NIC — the GNS3 VM's third adapter, on an isolated hypervisor network shared with a
 # Windows VM running beside it. The "Windows Host" Cloud template binds to it.
 #
