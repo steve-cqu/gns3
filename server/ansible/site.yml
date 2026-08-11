@@ -157,8 +157,8 @@
         quiet: true
 
     # ---------------------------------------------------------------- sync ----
-    # Sync only what the engine needs: the build tooling, docker contexts, templates and
-    # start-vnc.sh (server/), plus the node logos (images/symbols).
+    # Sync only what the engine needs: the build tooling, docker contexts, templates and the
+    # noVNC gateway sources (server/), plus the node logos (images/symbols).
     #
     # No `mode:` below on purpose — rsync -a restores the source tree's permissions, so
     # forcing a mode here just makes this task and the rsync flip-flop each other, and

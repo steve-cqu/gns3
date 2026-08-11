@@ -260,7 +260,7 @@ GNS3_VM_IP=192.168.56.106 ./build.sh "GNS3 VM" amd64
 ```
 
 That syncs this repo to the VM, builds every Docker image and downloads every Qemu disk,
-registers the templates, installs the logos and noVNC, imports the projects named in
+registers the templates, installs the logos and the noVNC gateway, imports the projects named in
 `projects.txt`, and finally runs a handful of activities against the live VM and **fails if
 any go red**.
 
@@ -321,6 +321,10 @@ rule is now exact-match — which is stricter, not looser: anything unplanned fa
 Note what it does **not** prove. It inspects the five projects the appliance ships, so it
 says nothing about whether the image set still runs the activities students download for
 themselves. Only `-e verify=all` shows that.
+
+One thing to eyeball by hand, because no phase can: open `http://<vm-ip>:6080/` in a browser.
+It should render the VNC-node page (an empty list is correct when no project is open). That
+is the whole of the student's VNC workflow — see [Reaching a VNC node](#reaching-a-vnc-node).
 
 The build also writes a provenance manifest to `/home/gns3/gns3-build-provenance.json` on
 the VM (and fetches a copy to `ansible/provenance-<profile>.json`). It records the date,
@@ -428,7 +432,7 @@ the VM (`cd ~/git/gns3/server/build`):
 ./gns3build.py qemu      --profile amd64   # download + verify the Qemu disks
 ./gns3build.py accel                       # Qemu acceleration in gns3_server.conf
 ./gns3build.py logos                       # install the CQU node symbols
-./gns3build.py novnc                       # install noVNC + start-vnc.sh
+./gns3build.py novnc                       # install noVNC + the gns3-novnc service
 ./gns3build.py labnic                      # the Windows Host lab NIC (eth2)
 ./gns3build.py projects  --profile amd64   # import the projects in projects.txt
 ./gns3build.py export-check --profile amd64
@@ -521,6 +525,70 @@ restarts the GNS3 service. The one caveat is that only files present when the se
 are watched; this file always exists on a stock appliance, and the phase warns if it does not.
 
 Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
+
+---
+
+## Reaching a VNC node
+
+A few nodes have a **VNC console** instead of a terminal — the Firefox Host is the one
+students meet. The GNS3 web UI cannot open those: it draws consoles with xterm.js and ships
+no VNC client at all, so *Web console* works for every other node and does nothing for these.
+
+The appliance answers that with **`gns3-novnc`**, a service the `novnc` phase installs and
+enables. It runs one `websockify` on **port 6080** from boot, serving stock noVNC. A student
+opens
+
+```
+http://<gns3-vm-ip>:6080/
+```
+
+and gets a list of the VNC nodes in whatever project is open, with an **Open console** button
+on each. Nothing else: no VM shell, no port numbers, no second bridge for the second Firefox
+Host, and nothing to redo after a reboot. The URL is the same for every activity, so it can
+be bookmarked once.
+
+**How one listener reaches every node.** websockify normally proxies to one fixed target.
+Its `--token-plugin` hook is asked, per connection, where to connect instead — so the token
+in the URL names the node. The plugin (`novnc/gns3_vnc_console.py`) answers from the GNS3
+API: the console port of a *started* VNC node in an *open* project, on localhost. Anything
+else — a stopped node, a port that is not a node console, an unknown name — is refused, which
+is narrower than the script this replaced would allow.
+
+A token is a **console port** (`5900`, what the page uses, since it has just read the list) or
+a **node name** (`Host2`, or `Project/Host2` if two open projects both have one). The name
+form is the one to put in an activity, because it survives the port changing:
+
+```
+http://<gns3-vm-ip>:6080/novnc/vnc.html?path=websockify/?token=Host2&autoconnect=true&resize=scale
+```
+
+**Parts.** `novnc/gns3_vnc_console.py` (the service: token plugin, `/nodes.json`, the proxy),
+`novnc/index.html` (the picker page), `novnc/gns3-novnc.service` (the unit, with `@LIB@`,
+`@WEB@` and `@PORT@` substituted from `novnc.service` in the manifest). They install to
+`/usr/local/lib/gns3-novnc`, `/usr/local/share/gns3-novnc` (plus a `novnc` symlink to
+`/usr/share/novnc`) and `/etc/systemd/system`.
+
+The page cannot ask the GNS3 API for the node list itself, which is why the service serves
+`/nodes.json`: `gns3server`'s CORS whitelist is six hardcoded origins (127.0.0.1 and
+localhost on 3080 and 4200, gns3.github.io), so a page served from `:6080` is refused. The
+service finds the API's own port by reading `[Server] port` from `gns3_server.conf` — this
+appliance serves the web UI on **80**, while a stock GNS3 VM uses 3080.
+
+**Checking it.** On the VM:
+
+```sh
+systemctl status gns3-novnc
+python3 /usr/local/lib/gns3-novnc/gns3_vnc_console.py --list   # what it can see right now
+journalctl -u gns3-novnc -n 30                                 # refused tokens are logged
+```
+
+An empty list is usually correct: a project has to be **open** and the node **started**
+before its console exists. `curl http://<vm>:6080/nodes.json` asks the same question from
+outside.
+
+**`start-vnc.sh`** is still installed in the `gns3` home directory as a staff fallback, for
+bridging a VNC port the service will not resolve because it is not a GNS3 node console. Give
+it a web port other than 6080 — `./start-vnc.sh 5901 6081` — or it cannot bind.
 
 ---
 

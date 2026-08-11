@@ -50,6 +50,24 @@ You can either use the *Web console*, which starts a small window on the GNS3 pr
 
 Do not use *Console* or *Auxillary console* as most of our nodes do not support that. In most instructions, if we refer to a *console* or *terminal*, then we normally mean a *web console* in GNS3.
 
+## Nodes with a Desktop: the VNC Page
+
+A few nodes are not a terminal at all. A *Firefox Host* runs a graphical desktop with a web browser on it, and the GNS3 web console cannot show a desktop — if you open the web console on one of these you get nothing useful.
+
+Those nodes have their own page on the virtual machine. Open a new browser tab and visit the address of your GNS3 virtual machine with `:6080` after it:
+
+```
+http://192.168.56.101:6080/
+```
+
+Use your own virtual machine's address — the same one you use for GNS3 itself, with `:6080` added. It is worth bookmarking, because it is the same for every activity.
+
+The page lists the desktop nodes in the project you have open. Start the node in GNS3 first, then select *Open console* beside it and the desktop appears in a new tab. If the list is empty, the node is not started yet — start it and the page updates on its own within a few seconds.
+
+![The VNC page listing a Firefox Host](../images/gns3-vnc-page-1.png)
+
+You can leave the desktop tab open while you work in GNS3, and you can open more than one at a time when an activity has two of these nodes.
+
 ## Copy and Paste in Web Console: Ctrl/Shift-Insert
 
 The web console does not support the traditional Ctrl-C and Ctrl-V copy and paste. This is because those keyboard combinations have special meanings in some console. However most browsers while support the special commands of:

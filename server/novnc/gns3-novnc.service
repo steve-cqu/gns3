@@ -1,0 +1,26 @@
+# Installed to /etc/systemd/system/ by `gns3build.py novnc`, which substitutes @LIB@,
+# @WEB@ and @PORT@ from build/manifest.yml. Edit this file, not the installed copy.
+[Unit]
+Description=noVNC gateway for GNS3 VNC consoles
+Documentation=https://github.com/steve-cqu/gns3
+After=network-online.target gns3.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gns3
+Group=gns3
+ExecStart=/usr/bin/python3 @LIB@/gns3_vnc_console.py --port @PORT@ --web @WEB@
+# The GNS3 controller is not a hard dependency: the service starts without it and the page
+# says so, which is what a student rebooting the VM should see rather than a dead port.
+Restart=always
+RestartSec=3
+# It only ever reads: the config file under /home/gns3 for the controller's port, and the
+# noVNC files under /usr/share. Nothing here needs to be writable or privileged.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

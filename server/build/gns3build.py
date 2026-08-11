@@ -15,7 +15,7 @@ Subcommands
   qemu      --profile P     download + unpack the profile's Qemu images   [run on the VM]
   accel                     Qemu acceleration in gns3_server.conf         [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
-  novnc                     install noVNC + start-vnc.sh                  [run on the VM]
+  novnc                     install noVNC + the gns3-novnc service        [run on the VM]
   projects  --profile P     import the .gns3project files named in projects.txt
   build     --profile P     every phase above, in order
 
@@ -327,6 +327,16 @@ def cmd_validate(args):
                     f"'{name}' and '{seen[tid]}'")
             elif tid:
                 seen[tid] = name
+
+    # The novnc service ships three files. A rename that missed the manifest would otherwise
+    # only surface an hour into a build, on the VM, at the phase that installs them.
+    svc = (m.get("novnc") or {}).get("service") or {}
+    if svc:
+        src_dir = (m["_dir"] / svc.get("dir", "../novnc")).resolve()
+        for f in ("gns3_vnc_console.py", "index.html",
+                  svc.get("unit", "gns3-novnc.service")):
+            if not (src_dir / f).exists():
+                problems.append(f"novnc service: missing {src_dir / f}")
 
     print(f"manifest: {args.manifest}")
     print(f"profiles: {', '.join(m['profiles'])}")
@@ -946,6 +956,99 @@ def cmd_accel(args):
     return 0
 
 
+def install_novnc_service(src_dir, cfg, dry_run):
+    """Install and enable gns3-novnc: one websockify serving every VNC console on this VM.
+
+    Replaces what used to be a student task — enter the VM's shell, run start-vnc.sh with a
+    VNC port and a web port, remember the URL, do it again for the second Firefox Host, and
+    redo the lot after a reboot. The service does it once, from boot, for every node: the
+    student opens http://<vm-ip>:6080/ and clicks the node. Why one listener can reach them
+    all (websockify's token plugin) is explained in novnc/gns3_vnc_console.py.
+
+    Four things go on the VM, all idempotent and all reported: the module, the picker page, a
+    symlink giving the page stock noVNC under ./novnc, and the systemd unit with the
+    manifest's paths substituted in. The unit is only restarted when something changed —
+    restarting it drops any console a student happens to have open.
+
+    Returns non-zero if the service will not start, which fails the phase and the build: an
+    appliance whose VNC gateway is dead is broken for every GUI activity, and nothing later
+    in the build would notice.
+    """
+    port = int(cfg.get("port", 6080))
+    lib_dir = Path(cfg.get("lib_dir", "/usr/local/lib/gns3-novnc"))
+    web_dir = Path(cfg.get("web_dir", "/usr/local/share/gns3-novnc"))
+    novnc_dir = Path(cfg.get("novnc_dir", "/usr/share/novnc"))
+    unit_name = cfg.get("unit", "gns3-novnc.service")
+    unit_path = Path("/etc/systemd/system") / unit_name
+
+    module = src_dir / "gns3_vnc_console.py"
+    page = src_dir / "index.html"
+    unit_src = src_dir / unit_name
+    for f in (module, page, unit_src):
+        if not f.exists():
+            sys.exit(f"novnc service source missing: {f}")
+
+    unit_text = (unit_src.read_text()
+                 .replace("@LIB@", str(lib_dir))
+                 .replace("@WEB@", str(web_dir))
+                 .replace("@PORT@", str(port)))
+    installs = [(module, lib_dir / module.name),
+                (page, web_dir / page.name),
+                (unit_src, unit_path)]
+
+    if dry_run:
+        for src, dst in installs:
+            print(f"  [dry-run] install {src.name} -> {dst}")
+        print(f"  [dry-run] symlink {web_dir / 'novnc'} -> {novnc_dir}")
+        print(f"  [dry-run] systemctl enable --now {unit_name}")
+        return
+
+    for d in (lib_dir, web_dir):
+        if not d.is_dir():
+            subprocess.run(["sudo", "mkdir", "-p", str(d)], check=True)
+
+    changed = False
+    for src, dst in installs:
+        text = unit_text if src is unit_src else src.read_text()
+        if sudo_write(dst, text):
+            # 0644 for the same reason as the netplan file in cmd_labnic: sudo_write compares
+            # by reading the file as the build user, so a root-only file would look changed
+            # on every run and the phase would stop being idempotent.
+            subprocess.run(["sudo", "chmod", "644", str(dst)], check=False)
+            print(f"  install {src.name} -> {dst}")
+            changed = True
+        else:
+            print(f"  skip   {dst} (already correct)")
+
+    # The picker page links to stock noVNC as ./novnc/vnc.html, so the web root has to offer
+    # it. A symlink to the whole package directory rather than to each file inside it: the
+    # page never has to know noVNC's layout, and a package update cannot leave it half wired.
+    link = web_dir / "novnc"
+    if not novnc_dir.is_dir():
+        print(f"  WARN   {novnc_dir} is missing — is the novnc package installed?")
+    if not (link.is_symlink() and os.readlink(str(link)) == str(novnc_dir)):
+        subprocess.run(["sudo", "ln", "-sfn", str(novnc_dir), str(link)], check=True)
+        print(f"  link   {link} -> {novnc_dir}")
+        changed = True
+    else:
+        print(f"  skip   {link} (already linked)")
+
+    if changed:
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+    active = subprocess.run(["systemctl", "is-active", "--quiet", unit_name]).returncode == 0
+    if changed or not active:
+        rc = subprocess.run(["sudo", "systemctl", "enable", "--now", unit_name]).returncode
+        if rc == 0 and changed and active:
+            rc = subprocess.run(["sudo", "systemctl", "restart", unit_name]).returncode
+        print(f"  service {unit_name} {'started' if rc == 0 else 'FAILED to start'}")
+        if rc != 0:
+            print(f"         journalctl -u {unit_name} -n 30")
+            return
+    else:
+        print(f"  skip   {unit_name} already enabled and running")
+    print(f"  url    http://<gns3-vm-ip>:{port}/ — every VNC node on this VM, one click each")
+
+
 def cmd_novnc(args):
     m = load_manifest(args.manifest)
     cfg = m.get("novnc") or {}
@@ -977,6 +1080,11 @@ def cmd_novnc(args):
         target.write_text(want)
         target.chmod(0o755)
         print(f"  install {script.name} -> {target}")
+
+    svc = cfg.get("service") or {}
+    if svc:
+        install_novnc_service((m["_dir"] / svc.get("dir", "../novnc")).resolve(),
+                              svc, args.dry_run)
     return 0
 
 
@@ -1613,7 +1721,8 @@ def main():
                                       "(run on the VM)")
     ac.add_argument("--dry-run", action="store_true")
 
-    nv = sub.add_parser("novnc", help="install noVNC + start-vnc.sh (run on the VM)")
+    nv = sub.add_parser("novnc",
+                        help="install noVNC + the gns3-novnc service (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
 
     ln = sub.add_parser("labnic", help="bring up the Windows Host lab NIC (run on the VM)")

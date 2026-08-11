@@ -31,11 +31,28 @@ qemu_images_dir: /opt/gns3/images/QEMU
 # (DUP) whenever a name resolves under more than one root.
 project_roots: [/home/gns3/projects]
 
-# noVNC lets students reach VNC nodes (e.g. Firefox Host) from a browser.
+# noVNC lets students reach VNC nodes (e.g. Firefox Host) from a browser — the GNS3 web UI
+# draws consoles with xterm.js and has no VNC client, so this is the only way to open one.
+#
+# `service:` is the way students use it: one websockify, started at boot, serving every VNC
+# console on this VM from one port. They open http://<gns3-vm-ip>:6080/ and click a node —
+# no VM shell, no port numbers, nothing to redo after a reboot. Sources in server/novnc/,
+# design and troubleshooting in server/README.md ("Reaching a VNC node").
+#
+# `script:` is the old manual bridge, kept as a staff fallback for a target the service will
+# not resolve (a VNC port that is not a GNS3 node console). Give it a web port other than
+# the service's, e.g. `./start-vnc.sh 5901 6081`, or it cannot bind.
 novnc:
   packages: [novnc, python3-websockify, python3-numpy]
   script: ../start-vnc.sh          # installed to, and run from, the gns3 home dir
   install_to: ~/start-vnc.sh
+  service:
+    dir: ../novnc                       # sources: gns3_vnc_console.py, index.html, the unit
+    unit: gns3-novnc.service            # -> /etc/systemd/system/
+    port: 6080
+    lib_dir: /usr/local/lib/gns3-novnc
+    web_dir: /usr/local/share/gns3-novnc
+    novnc_dir: /usr/share/novnc         # symlinked into web_dir as ./novnc
 
 # GNS3 registry raw base (for docker nodes pulled from upstream)
 registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master
