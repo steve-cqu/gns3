@@ -7,7 +7,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN sed -i 's/Components: main restricted/Components: main restricted universe multiverse/' \
         /etc/apt/sources.list.d/ubuntu.sources || true
 
-# Add packages (apt-get equivalents of the alpinenode toolset, plus PAM/security tools)
+# Add packages (apt-get equivalents of the alpinenode toolset, plus PAM/security tools).
+#
+# hping3 / mgen / tcpreplay back the "Traffic Generator" template. They are here rather than
+# in alpinenode because Alpine has hping3 only in edge/testing and does not package mgen or
+# nping at all — reaching into edge from a pinned base is what ipv6node had to do for tayga,
+# and it is the thing most likely to break on a rebuild. Ubuntu carries all three in
+# universe for both architectures. nping arrives with nmap, already installed above.
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
  && apt-get update && apt-get install -y --no-install-recommends \
     openssh-server openssh-client \
@@ -21,6 +27,7 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     libpam-google-authenticator \
     john \
     dsniff nftables rsyslog \
+    hping3 mgen tcpreplay \
     tzdata \
  && dpkg-reconfigure --frontend noninteractive tzdata \
  && apt-get clean && rm -rf /var/lib/apt/lists/*

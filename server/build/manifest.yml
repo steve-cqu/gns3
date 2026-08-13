@@ -133,19 +133,25 @@ profiles:
 # projects.txt uses it, and it exists solely to back SDN-Basics-Template's controller disk.
 # NOTE: amd64 now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
 # Qemu ones — this bakes in the Qemu->Docker migration.
+#
+# ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and three images
+# are derived (`FROM cqugns3/alpinenode`): ipv6node, servicenode and monitornode. Each must
+# appear AFTER alpinenode or its build has no base to build on. The phase also skips any image
+# that already exists, so after changing alpinenode you must rebuild the derived images with
+# --force or they keep the old base.
 platforms:
   amd64:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode]
+             frrnode, netemnode, servicenode, monitornode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode]
+             frrnode, netemnode, servicenode, monitornode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -200,7 +206,10 @@ nodes:
     kind: docker
     image: cqugns3/ubuntunode:latest
     source: {type: local, path: ubuntunode}
-    templates: [docker-ubuntuhost]
+    # docker-trafficgen is the same image with a different name, symbol and usage text —
+    # hping3/mgen/tcpreplay live in ubuntunode because Alpine does not package them in a
+    # stable branch. No new image for a node that is three packages and a label.
+    templates: [docker-ubuntuhost, docker-trafficgen]
   net_toolbox:
     kind: docker
     image: adosztal/net_toolbox:latest
@@ -236,6 +245,24 @@ nodes:
     image: cqugns3/netemnode:latest
     source: {type: local, path: netemnode}
     templates: [docker-netem]
+  # Network services: BIND and chrony, one image behind two templates. A service gets its own
+  # *template* when it occupies its own box on the topology diagram; it gets its own *image*
+  # only when it drags in a runtime the others do not need — and these two are ~1 MB combined.
+  # Room was left deliberately: the small Tier 2/3 daemons (LDAP, Postfix, Squid) belong here
+  # too, while the image stays under 150 MB over alpinenode. Anything larger gets its own.
+  servicenode:
+    kind: docker
+    image: cqugns3/servicenode:latest
+    source: {type: local, path: servicenode}
+    templates: [docker-dnsserver, docker-ntpserver]
+  # Prometheus + Grafana + blackbox_exporter. Own image rather than joining servicenode
+  # because Grafana (331 MB) and Prometheus (224 MB) are exactly the runtime the rule above
+  # splits on. Alpine-based because Grafana is not in Ubuntu's archive at any version.
+  monitornode:
+    kind: docker
+    image: cqugns3/monitornode:latest
+    source: {type: local, path: monitornode}
+    templates: [docker-monitor]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running

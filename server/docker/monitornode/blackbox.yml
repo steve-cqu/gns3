@@ -1,0 +1,60 @@
+# blackbox_exporter configuration for the CQU GNS3 Monitor node.
+#
+# blackbox_exporter is an ACTIVE prober: it does not sit and wait for metrics, it goes and
+# tests something and reports what happened. Prometheus scrapes it and passes the target to
+# probe as a URL parameter — see the `icmp` job in prometheus.yml.
+#
+# Test any module by hand before wiring it into Prometheus:
+#     curl -s "http://localhost:9115/probe?target=10.0.2.10&module=icmp" | grep probe_success
+# probe_success 1 means the probe worked; 0 means it did not.
+
+modules:
+  # Ping. This is what "is the host up?" means on a dashboard.
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4
+      # ip_protocol_fallback: false   # uncomment to force IPv4 and fail rather than try IPv6
+
+  # Ping over IPv6, for an IPv6 topology.
+  icmp_v6:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip6
+
+  # Does a TCP port accept a connection? Probing a port is a stronger statement than a ping:
+  # a host can answer ICMP while the service on it is dead.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # Does a web server return a 2xx? Stronger again — this exercises the whole path through to
+  # the application. Add "valid_status_codes: [200, 301, 302]" to accept redirects.
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+
+  # As above, but for a server using a self-signed certificate — which is every web server you
+  # will build in these activities until you run a CA. Without insecure_skip_verify the probe
+  # fails on the certificate rather than on the service, which is a confusing way to find out
+  # that your TLS is working exactly as configured.
+  https_2xx_insecure:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: true
+
+  # Does the DNS server answer for a name? Pairs with the DNS Server node.
+  dns_example:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: "www.example.com"
+      query_type: "A"

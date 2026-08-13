@@ -1,0 +1,33 @@
+; Reverse zone for 192.168.1.0/24 — address to name, the opposite direction to the forward zone.
+;
+; This is what `dig -x 192.168.1.20` and `ping -a` use, and what a mail server checks when it
+; decides whether to trust a connection. A forward record with no matching PTR is a very common
+; misconfiguration, which is why this zone ships beside example.com.
+;
+; The zone NAME is the network's first three octets REVERSED, then .in-addr.arpa:
+;     192.168.1.0/24   ->   1.168.192.in-addr.arpa
+;     10.0.1.0/24      ->   1.0.10.in-addr.arpa
+; If you change the addressing, change the zone name in /etc/bind/named.conf to match.
+
+$TTL 60
+
+@       IN  SOA     ns1.example.com. admin.example.com. (
+                    2026081301  ; Serial  <-- increase this on EVERY edit
+                    3600        ; Refresh
+                    600         ; Retry
+                    604800      ; Expire
+                    60 )        ; Negative cache TTL
+
+@       IN  NS      ns1.example.com.
+
+; PTR — the last octet of the address, mapped back to a full name. The trailing dot is not
+; optional here: without it BIND appends the zone name and you get a nonsense answer like
+; www.example.com.1.168.192.in-addr.arpa.
+;
+; Keep these in step with example.com.zone. They are a separate zone and do NOT update
+; themselves when you add an A record.
+10      IN  PTR     ns1.example.com.
+20      IN  PTR     www.example.com.
+30      IN  PTR     mail.example.com.
+101     IN  PTR     host1.example.com.
+102     IN  PTR     host2.example.com.

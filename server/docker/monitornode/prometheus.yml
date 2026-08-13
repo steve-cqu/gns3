@@ -1,0 +1,70 @@
+# Prometheus configuration for the CQU GNS3 Monitor node.
+#
+# This file is valid as it stands and scrapes one target: Prometheus itself. Start it, open
+# Status > Targets, and you should see exactly one green row. That tells you the stack works
+# before you have written a single line — so when a target you add later comes up red, you know
+# the problem is the job, not the server.
+#
+# Writing the two jobs at the bottom is the activity. Check your work before restarting:
+#     promtool check config /etc/prometheus/prometheus.yml
+
+global:
+  # How often to scrape every target. 15 s is a reasonable default; shorter means more
+  # resolution and more load. It also sets the floor on how quickly a dashboard can react —
+  # something to remember when you are asked why a change took a few seconds to appear.
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus scraping itself. Every Prometheus does this; it is how you monitor the monitor.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ---------------------------------------------------------------------------------------
+  # TASK: host metrics. node_exporter runs on every Linux Host (it is in the base image) and
+  # publishes CPU, memory, disk and interface counters on port 9100. Uncomment this job and
+  # replace the addresses with your own hosts'.
+  #
+  # The `labels` block is optional but worth doing: it attaches a friendly name to every metric
+  # from that target, so a Grafana panel can say "Host 3" instead of "10.0.2.10:9100".
+  # ---------------------------------------------------------------------------------------
+  # - job_name: node
+  #   static_configs:
+  #     - targets: ['10.0.1.10:9100']
+  #       labels: {host: Host1}
+  #     - targets: ['10.0.1.11:9100']
+  #       labels: {host: Host2}
+  #     - targets: ['10.0.2.10:9100']
+  #       labels: {host: Host3}
+  #     - targets: ['10.0.2.11:9100']
+  #       labels: {host: Host4}
+
+  # ---------------------------------------------------------------------------------------
+  # TASK: reachability probes. This one is a different shape, and the shape is the lesson.
+  #
+  # Prometheus does not ping anything itself. It scrapes blackbox_exporter and tells it WHICH
+  # target to probe, by passing the address as a URL parameter. So:
+  #
+  #   1. `targets` lists the things to PROBE (the hosts).
+  #   2. `params` chooses the probe module from blackbox.yml (icmp = ping).
+  #   3. The relabel rules rewrite the request: take the probe target out of __address__,
+  #      put it in the `target` URL parameter, and point the actual scrape at
+  #      blackbox_exporter instead.
+  #
+  # Without those three relabel steps Prometheus would try to scrape the hosts directly on
+  # port 9115 and every probe would fail.
+  # ---------------------------------------------------------------------------------------
+  # - job_name: icmp
+  #   metrics_path: /probe
+  #   params:
+  #     module: [icmp]
+  #   static_configs:
+  #     - targets: ['10.0.1.10', '10.0.1.11', '10.0.2.10', '10.0.2.11']
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target       # the host to probe becomes ?target=...
+  #     - source_labels: [__param_target]
+  #       target_label: instance             # label the result with the host, not the prober
+  #     - target_label: __address__
+  #       replacement: 127.0.0.1:9115        # ...and actually scrape blackbox_exporter

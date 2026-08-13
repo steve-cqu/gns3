@@ -1,0 +1,53 @@
+; Forward zone for example.com — the CQU GNS3 DNS Server node.
+;
+; Edit the addresses to match your topology, then BUMP THE SERIAL and restart:
+;     named-checkzone example.com /var/bind/pri/example.com.zone
+;     start-dns.sh
+;
+; Forgetting the serial is the classic DNS mistake: the server may keep answering with the old
+; data, and a secondary will never notice there is anything new to copy.
+
+; $TTL is how long a resolver may cache these answers. 60 seconds is a LAB value — it means an
+; edit shows up within a minute instead of a day. A real zone uses hours (3600–86400); short
+; TTLs multiply the query load on your servers.
+$TTL 60
+
+; SOA — Start Of Authority. One per zone. The fields, in order:
+;   ns1.example.com.      the primary nameserver for this zone
+;   admin.example.com.    the administrator's email, with @ written as a dot (admin@example.com)
+;   Serial                version of this file. Convention is YYYYMMDDnn. MUST increase on edit
+;   Refresh               how often a secondary checks for a new serial
+;   Retry                 how soon a secondary retries after a failed check
+;   Expire                how long a secondary keeps serving if it cannot reach the primary
+;   Negative TTL          how long "this name does not exist" may be cached
+@       IN  SOA     ns1.example.com. admin.example.com. (
+                    2026081301  ; Serial  <-- increase this on EVERY edit
+                    3600        ; Refresh
+                    600         ; Retry
+                    604800      ; Expire
+                    60 )        ; Negative cache TTL
+
+; NS — which servers are authoritative for this zone. The trailing dot matters: it makes the
+; name absolute. Without it, BIND appends the zone name and you get ns1.example.com.example.com.
+@       IN  NS      ns1.example.com.
+
+; A — name to IPv4 address. These are the addresses to change for your topology.
+ns1     IN  A       192.168.1.10
+www     IN  A       192.168.1.20
+mail    IN  A       192.168.1.30
+host1   IN  A       192.168.1.101
+host2   IN  A       192.168.1.102
+
+; CNAME — an alias. web.example.com is another name for www.example.com. A CNAME's target must
+; be a name, never an address, and a name with a CNAME may have no other records.
+web     IN  CNAME   www.example.com.
+
+; MX — where mail for @example.com goes. The number is the preference: lower is tried first.
+@       IN  MX  10  mail.example.com.
+
+; TXT — arbitrary text. This is where SPF, DKIM and DMARC records live on a real domain.
+@       IN  TXT     "CQU GNS3 lab zone"
+
+; AAAA — the IPv6 equivalent of A. Uncomment for an IPv6 activity.
+; ns1     IN  AAAA    2001:db8:1::10
+; www     IN  AAAA    2001:db8:1::20

@@ -10,12 +10,36 @@ FROM alpine:3.24
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | cut -d "." -f 1,2 | tr -d \")/community" \
     >> /etc/apk/repositories
 
-# Add packages
+# Add packages.
+#
+# Two of these are here for the monitoring and performance activities rather than for the
+# general host role:
+#   iperf3                    - `iperf` is Alpine's iperf *2*, and the activities call for
+#                               iperf3. Both are kept: some older material still uses v2.
+#   prometheus-node-exporter  - so ANY Linux Host is monitorable without swapping it for a
+#                               special node. 16.5 MB, and it is what removes the need for a
+#                               separate "monitoring host" image. Started with
+#                               `node_exporter &` on the host being monitored; the Monitor
+#                               node (cqugns3/monitornode) scrapes it on :9100.
+#   chrony                    - the NTP CLIENT side, on every host: `chronyd -Q 'server <ip>
+#                               iburst'` measures the offset and delay to a time server without
+#                               touching any clock (it cannot: container nodes share the GNS3
+#                               VM's clock). 390 KB. The NTP Server template is the same
+#                               package on cqugns3/servicenode with a server config.
+#   libfaketime               - runs ONE command with a different idea of the time, which is the
+#                               only way to demonstrate clock skew on a container node. 200 KB,
+#                               and it is inherited by auth-kerberos, where it earns its place:
+#                               `faketime '+6 minutes' kinit student` produces the real
+#                               "Clock skew too great" failure.
 RUN apk add --no-cache \
 openssh \
 mtr \
 nmap \
 iperf \
+iperf3 \
+prometheus-node-exporter \
+chrony \
+libfaketime \
 socat \
 vim \
 nano \
