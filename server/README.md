@@ -528,6 +528,101 @@ Change the values in `qemu_accel.settings` in `manifest.yml`, not on the applian
 
 ---
 
+## What survives a project being closed
+
+A Docker node is rebuilt from its image every time a project is closed and reopened, so only the
+directories GNS3 was told to keep come back. What it keeps is the **union of three things**
+(`gns3server/compute/docker/docker_vm.py`, `_mount_binds`):
+
+```
+/etc/network  +  the image's own VOLUME list  +  the template's extra_volumes
+```
+
+then collapsed so that a **more general path absorbs a more specific one** — adding `/etc` swallows
+`/etc/ssh` and `/etc/network`, which is harmless because GNS3 writes its sample network config into
+the same working directory and it ends up inside the wider mount.
+
+**So `extra_volumes` is a delta, not a list of everything a node needs.** Read the image first:
+
+```sh
+docker image inspect cqugns3/alpinenode:latest --format '{{json .Config.Volumes}}'
+```
+
+| Image | Declares in its Dockerfile |
+|---|---|
+| `alpinenode`, `ubuntunode`, `ipv6node` | `/data` `/etc/ssh` `/home/student` `/root/.ssh` |
+| `auth-kerberos` | those four **plus `/etc`** |
+| `net_toolbox` | `/etc` `/root` `/var/www` `/tftpboot` `/var/log` |
+| `suricata` | `/etc/suricata` `/var/lib/suricata/rules` `/var/log/suricata` |
+| `frrnode` | `/etc/frr` |
+| `gns3/openvswitch` | `/etc/openvswitch` `/root` |
+| `gns3/webterm` | `/root` |
+| `wazuh-agent` | `/var/ossec/etc` `/var/ossec/logs` |
+| `gns3/kalilinux`, `netemnode` | *nothing* |
+
+What each template adds on top, in `templates/docker-*.conf`:
+
+| Template | `extra_volumes` | Covers |
+|---|---|---|
+| Linux Host, Linux Router, VPN Router, Ansible Host | `/etc` `/root` `/var/www` `/usr/local/bin` | `hosts`, `shadow`, `pam.d`, `ssl`, `nginx`, `wireguard`, `nftables.conf`; the openssl CA tree under `/root/ca`; web roots; exporter binaries |
+| Ubuntu Host | those four **plus `/home`** | extra accounts made in `password-hashing` |
+| Kerberos Host | `/root` `/var/lib/krb5kdc` | the KDC database (`/etc` is already in the image) |
+| NAT64Router | `/etc` `/root` `/usr/local/bin` | `tayga.conf`, and the three helper scripts |
+| Kali Linux CLI | `/root` | the image declares nothing, so scan output and notes were lost |
+| everything else | *(empty)* | the image already covers what the activities write |
+
+The four alpinenode roles deliberately share one set. They are one image, a Linux Router gets used
+as a host all the time, and the difference is about 2 MB per node — a per-role minimal set would only
+produce "why did my page survive on Host1 and not on Router1".
+
+The empty ones are empty on purpose, not by omission. **Linux Server** (`net_toolbox`) already
+declares everything it needs; **Suricata IDS** keeps its config, custom rules and logs in the three
+directories its image declares; **FRR** writes `vtysh` output to `/etc/frr`; **Firefox Host** keeps
+its browser profile under `/root`; **Wazuh Agent** keeps its key and config under `/var/ossec`;
+**NETem**'s settings are `tc` state in the kernel, so no directory would help.
+
+### Verified on hardware, 13 August 2026
+
+Two `Linux Host` nodes on 192.168.56.108, identical edits, project closed and reopened. The control
+node had image defaults only; the other had the four directories above.
+
+| Edit | Control | With `extra_volumes` |
+|---|---|---|
+| entry appended to `/etc/hosts` | **lost** | kept |
+| file in `/etc`, `/root`, `/var/www`, `/usr/local/bin` | **lost** | kept |
+| file in `/home/student` | kept | kept |
+
+Three things that came out of it and are not obvious:
+
+- **`/etc/hosts` cannot be kept any other way.** Docker mounts it as an individual file, and a
+  volume must be a directory — so `/etc` is the only route. It is also the single most-referenced
+  path in the activity handouts (`dns-hosts` is built on editing it), and it was being lost on every
+  reopen.
+- **There is no stale-DNS risk.** Keeping `/etc` does shadow Docker's managed `/etc/resolv.conf`
+  with a first-start snapshot, but that file is *empty* on these nodes to begin with, so there is
+  nothing to freeze. `/etc/hostname` is likewise empty and unused — the container hostname comes
+  from Docker's own config and follows a rename correctly.
+- **A rename after first start leaves `/etc/hosts` stale**, holding `127.0.1.1 <old-name>`. The node
+  can no longer resolve its own name. The student guide (`gns3-dev/guides/gns3-saving-work.md`) now
+  says to name nodes before starting them, and how to fix one afterwards.
+
+Cost measured on the same nodes: **2.9 MB per node** with `/etc` kept, against 856 KB without.
+
+### Applying a change
+
+`extra_volumes` reaches **nodes created after** the template changes; existing nodes keep what they
+were built with. Two consequences worth knowing:
+
+- On a controller that already has the templates, the `templates` phase skips them (it keys on
+  `template_id`) — push the change with `gns3build.py templates --profile amd64 --force`.
+- The NAT64Router entry only pays off once `ipv6node` is rebuilt: its three helper scripts moved
+  from `/bin` to `/usr/local/bin` so that the edit `ipv6-basics` asks students to make survives.
+  An existing image is skipped, so that needs `gns3build.py docker --only ipv6node --force`.
+
+`vm-fix-persistence.sh` in this directory does the same job over the REST API on an appliance that
+is already built. It was the July 2026 post-release fix for `v027` and is still what those
+appliances need; it is not part of the build.
+
 ## Reaching a VNC node
 
 A few nodes have a **VNC console** instead of a terminal — the Firefox Host is the one

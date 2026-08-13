@@ -44,6 +44,12 @@ given, and that difference is invisible otherwise.
 That `git pull` is the exception, not the mechanism. A released appliance is a finished
 artefact; students are not normally expected to touch the repo on it at all.
 
+**That fix is now in the build** (13 Aug 2026). The directories live in `extra_volumes` in the
+`templates/docker-*.conf` files, so the `templates` phase installs them and every release from
+the next one on ships with persistence already set — no script, no `git pull`. `v027` appliances
+still need the script, which is why it is still in the repository and still in the guide.
+See [Node persistence](server/README.md#what-survives-a-project-being-closed).
+
 ## What a release records
 
 The build writes `/home/gns3/gns3-build-provenance.json` on the appliance, and a released
