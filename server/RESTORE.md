@@ -76,14 +76,15 @@ cat /etc/gns3-cqu-release
 Adding an activity, a project file or a node — the normal between-terms case.
 
 1. Start the VM from the `.ova`, or build a fresh VM from `gns3-vm-<version>/`.
-2. Restore the Qemu disks into `qemu_images_dir` (`/opt/gns3/images/QEMU`):
+2. Restore the Qemu disks into `qemu_images_dir` (`/opt/gns3/images/QEMU`), as the `gns3`
+   user — it owns that directory, so no `sudo` is needed:
    ```sh
-   sha256sum -c qemu-images-vNNN.tar.sha256
-   sudo tar -xf qemu-images-vNNN.tar -C /opt/gns3/images
-   sudo chown -R gns3:gns3 /opt/gns3/images/QEMU
+   sha256sum -c qemu-images-vNNN-amd64.tar.sha256
+   tar -xf qemu-images-vNNN-amd64.tar -C /opt/gns3/images
    ```
-   The archive also carries the `.md5sum` sidecars, so `gns3build.py qemu` will trust the
-   restored files instead of re-downloading them.
+   The archive carries the `.md5sum` sidecars with the disks, so `gns3build.py qemu` trusts the
+   restored files instead of re-downloading them — which is the whole point, since several of
+   those URLs will be dead.
 3. Restore the Docker images — **no network, no upstream, byte-identical to what shipped**:
    ```sh
    python3 server/build/gns3build.py thaw --in frozen-vNNN-amd64.tar.gz
@@ -180,13 +181,20 @@ release, whatever the build log said.
 ```sh
 # on the VM, after the build is verified
 python3 server/build/gns3build.py freeze --profile amd64 --out frozen-vNNN-amd64.tar.gz
-sudo tar -cf qemu-images-vNNN.tar -C /opt/gns3/images QEMU     # ~3.7 GB, mostly OPNsense
-sha256sum qemu-images-vNNN.tar > qemu-images-vNNN.tar.sha256
+tar -cf qemu-images-vNNN-amd64.tar -C /opt/gns3/images QEMU     # ~3.7 GB, mostly OPNsense
 
 # on the workstation
 git -C gns3     bundle create gns3.bundle --all
 git -C gns3-dev bundle create gns3-dev.bundle --all
-sha256sum *.ova > <each>.sha256
+```
+
+**Or just run the script**, which does all of the above plus the checksums and this file:
+
+```sh
+server/archive-release.sh vNNN ~/archive --vm-host <vm-ip> \
+    --ova ~/ova/gns3-cqu-vNNN-amd64.ova \
+    --vm-appliance ~/Downloads/GNS3VM.VirtualBox.<ver>.zip
+# then again with --arch arm64 --vm-host <arm64-vm>, same output directory
 ```
 
 `git bundle` rather than a copied `.git` directory: one file, full history and tags, survives

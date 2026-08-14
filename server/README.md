@@ -401,15 +401,27 @@ freezing, because it looks authoritative.
 **What freeze does not cover:** the Qemu disk images. They are already pinned by URL *and* md5,
 but several are hosted on SourceForge, a community mirror and a personal GitHub release, any of
 which can 404 over a couple of years. Archive `qemu_images_dir` alongside the frozen Docker
-archive and the same guarantee extends to them:
+archive and the same guarantee extends to them.
+
+### Archiving a release — `archive-release.sh`
+
+One command does the whole thing: freeze the images, tar the Qemu disks, bundle both repos,
+copy in the OVAs and the upstream GNS3 VM, add `RESTORE.md` and checksum the lot.
 
 ```sh
-sudo tar -cf qemu-images-v030.tar -C /opt/gns3/images QEMU     # ~3.7 GB
+server/archive-release.sh v030 ~/archive --vm-host <vm-ip> \
+    --ova ~/ova/gns3-cqu-v030-amd64.ova \
+    --vm-appliance ~/Downloads/GNS3VM.VirtualBox.0.15.0.zip
 ```
 
-[`RESTORE.md`](RESTORE.md) is the template to copy onto the shared drive with each release — the
-folder layout, which restore path to use, and the verification steps. Fill in its header and put
-it beside the OVAs, because in two years nobody will remember this section exists.
+Run it **once per architecture** into the same output directory (`--arch arm64 --vm-host <arm64
+vm>` for the second), then copy the folder to the shared drive and check it landed intact with
+`sha256sum -c SHA256SUMS`. `--dry-run` prints what it would do. It warns rather than proceeding
+silently when a work tree is dirty, a repo has no tag for the version, or the OVAs are missing.
+
+[`RESTORE.md`](RESTORE.md) is copied in by that script and is what a future reader follows — the
+folder layout, which of the three restore paths to use, and how to verify the result. **Fill in
+its header**, because in two years nobody will remember this section exists.
 
 ---
 
