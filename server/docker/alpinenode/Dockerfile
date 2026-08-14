@@ -26,11 +26,16 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-releas
 #                               touching any clock (it cannot: container nodes share the GNS3
 #                               VM's clock). 390 KB. The NTP Server template is the same
 #                               package on cqugns3/servicenode with a server config.
-#   libfaketime               - runs ONE command with a different idea of the time, which is the
-#                               only way to demonstrate clock skew on a container node. 200 KB,
-#                               and it is inherited by auth-kerberos, where it earns its place:
-#                               `faketime -f '+6m' kinit student` produces the real
-#                               "Clock skew too great" failure.
+#   libfaketime               - runs ONE command with a different idea of the time. 200 KB.
+#                               NOTE, measured on the built appliance 14 Aug 2026: this fakes
+#                               `date` correctly but does NOT affect `kinit` or `chronyd` --
+#                               both read the clock through the vDSO, which LD_PRELOAD cannot
+#                               intercept. `faketime -f '+2h' kinit` returns 0 and issues a
+#                               ticket at the REAL time; `chronyd -Q` under faketime hangs.
+#                               So it does NOT demonstrate Kerberos clock skew, which was the
+#                               original reason for adding it. Kept because it is small and
+#                               does work for simple commands; do not build teaching on it
+#                               without testing the specific program first.
 RUN apk add --no-cache \
 openssh \
 mtr \
