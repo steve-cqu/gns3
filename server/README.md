@@ -358,6 +358,46 @@ The full checklist — including tagging both repositories, which the build cann
 — is in [`RELEASES.md`](../RELEASES.md), along with the record of what each cohort was
 given.
 
+### Freezing the image set — `freeze` / `thaw`
+
+Pinning inputs makes a rebuild *likely* to reproduce. Freezing the output makes it *certain*,
+and it is the only one of the two that survives an upstream going away — which over an
+appliance's life is the more probable failure. Once a build is verified:
+
+```sh
+python3 server/build/gns3build.py freeze --profile amd64 \
+        --out /home/gns3/frozen-v030-amd64.tar.gz
+```
+
+That `docker save`s every image the profile ships (16 on amd64) through gzip in one pass, and
+writes a `.json` sidecar recording the profile, the date, the archive's sha256 and **each
+image's ID** — two archives can carry the same `:latest` tags and different bytes, and the
+sidecar is what says which. Keep both files with the OVA.
+
+A later rebuild then restores instead of rebuilding, with no network and no upstream involved:
+
+```sh
+python3 server/build/gns3build.py thaw --in /home/gns3/frozen-v030-amd64.tar.gz
+```
+
+`thaw` verifies the archive against the sidecar (skip with `--skip-verify`; it is several GB),
+loads it, and then checks that every expected image is actually present — a load that silently
+dropped one is the failure worth catching, because everything downstream still succeeds and one
+node type is simply absent. After a successful `thaw`, **skip the `docker` phase**:
+
+```sh
+./build.sh "GNS3 VM" amd64 -e phases=templates,qemu,accel,logos,novnc,labnic
+```
+
+Neither is part of `build` — freezing is a release step, not a build phase, and it must happen
+*after* verification, never before. Freezing a half-built or unverified set is worse than not
+freezing, because it looks authoritative.
+
+**What freeze does not cover:** the Qemu disk images. They are already pinned by URL *and* md5,
+but several are hosted on SourceForge, a community mirror and a personal GitHub release, any of
+which can 404 over a couple of years. Archive `qemu_images_dir` alongside the frozen Docker
+archive and the same guarantee extends to them.
+
 ---
 
 ## 3. Cut the OVA

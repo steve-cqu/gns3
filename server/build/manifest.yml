@@ -54,8 +54,22 @@ novnc:
     web_dir: /usr/local/share/gns3-novnc
     novnc_dir: /usr/share/novnc         # symlinked into web_dir as ./novnc
 
-# GNS3 registry raw base (for docker nodes pulled from upstream)
-registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/refs/heads/master
+# GNS3 registry raw base (for docker nodes pulled from upstream).
+#
+# PINNED TO A COMMIT, deliberately — this was `refs/heads/master` until 14 August 2026, and an
+# unpinned branch meant five images were built from whatever GNS3 had merged that day, with
+# nothing in this repo changing. That is not hypothetical: it is how `openvswitch` acquired a
+# non-executable init.sh between a passing July build and a failing August one, taking down
+# stp-basics, vlan-basics and vlan-router. See gns3-dev/tools/tests/ovs-init-perms-fix.md.
+#
+# raw.githubusercontent.com serves a commit SHA in place of a branch name, so pinning costs
+# nothing at build time. Every file fetched from here also carries a sha256 below, so a moved
+# or truncated download fails loudly instead of producing a subtly different image.
+#
+# TO BUMP: change the SHA, re-run `gns3build.py docker --force --only <the five>`, refresh the
+# sha256 values it reports as mismatched, and re-run the OVS activities (stp-basics,
+# vlan-basics, vlan-router) before trusting it. Do not bump inside a term.
+registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936ff5b0a3597bd84e5e3952e0aaa32
 
 # Kernel modules the docker nodes need from the *host* kernel (containers share it).
 # Loaded and persisted to /etc/modules-load.d/<mod>.conf by the `docker` phase.
@@ -168,32 +182,59 @@ platforms:
 # ---------------------------------------------------------------------------
 nodes:
   # --- Docker nodes built from the GNS3 registry ---
+  #
+  # Each `files:` entry may be a bare filename or a {name, sha256} mapping. The sha256 is
+  # verified after download: it is the only thing standing between a moved upstream file and an
+  # appliance that builds cleanly but behaves differently. Values below were taken at
+  # registry_base's pinned commit on 14 August 2026 and match the images shipped in that build.
   openvswitch:
     kind: docker
     image: gns3/openvswitch:latest
-    source: {type: registry, dir: docker/openvswitch, files: [Dockerfile, init.sh]}
+    source:
+      type: registry
+      dir: docker/openvswitch
+      files:
+        - {name: Dockerfile, sha256: b817cd4f1f60d5a3a32ad360bc0fe6cc410306dc186581dc5338cf18a95c6ffc}
+        - {name: init.sh,    sha256: 20a952d72cca2ead5e20fb7cec219831e90a35161a677940a4bdd9b6312185e0}
     templates: [docker-openvswitch]
   ipterm-base:
     kind: docker
     image: gns3/ipterm-base:latest
-    source: {type: registry, dir: docker/ipterm/base, files: [Dockerfile]}
+    source:
+      type: registry
+      dir: docker/ipterm/base
+      files:
+        - {name: Dockerfile, sha256: 7d3cc210c168e0f6d4d7045a0660daaedf446ff6436cccdc65349b9f31a0fae1}
     templates: []                       # support image, no template
   ipterm:
     kind: docker
     image: gns3/ipterm:latest
-    source: {type: registry, dir: docker/ipterm/cli, files: [Dockerfile]}
+    source:
+      type: registry
+      dir: docker/ipterm/cli
+      files:
+        - {name: Dockerfile, sha256: b7bc4e65cbd1961857f3228ca3f6259307b49dec2a652cfa2204998a17614a8f}
     build_args: {DOCKER_REPOSITORY: gns3}
     templates: []
   webterm:
     kind: docker
     image: gns3/webterm:latest
-    source: {type: registry, dir: docker/ipterm/web, files: [Dockerfile]}
+    source:
+      type: registry
+      dir: docker/ipterm/web
+      files:
+        - {name: Dockerfile, sha256: 0c061e6285aa23ac7729c1b9e4585657698049b0106f7df7befb0224e6c961a5}
     build_args: {DOCKER_REPOSITORY: gns3}
     templates: [docker-firefoxhost]
   kali:
     kind: docker
     image: gns3/kalilinux:latest
-    source: {type: registry, dir: docker/kalilinux, files: [Dockerfile, index-1.html]}
+    source:
+      type: registry
+      dir: docker/kalilinux
+      files:
+        - {name: Dockerfile,     sha256: 8d9619c9ef1a3d8bf36289f38287acf5212d5eb06c6462b84626e89c073e9a5b}
+        - {name: index-1.html,   sha256: cb84ed11819fe35dcca617a315a4f027a72dca48bbb51c888e738ab2b7c705be}
     templates: [docker-kali]
 
   # --- Docker nodes built from this repo (server/docker/<name>/) ---

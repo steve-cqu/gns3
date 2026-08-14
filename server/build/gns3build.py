@@ -39,6 +39,7 @@ already in place (qemu) is skipped, so re-running is cheap. --force rebuilds/re-
 import argparse
 import bz2
 import datetime
+import gzip
 import hashlib
 import json
 import os
@@ -440,6 +441,130 @@ def image_exists(image):
                           stderr=subprocess.DEVNULL).returncode == 0
 
 
+def _frozen_images(m, profile, only):
+    """The docker images a profile ships, in build order."""
+    platform = profile_platform(m, profile)
+    keys = select_nodes(m, platform, "docker", only)
+    return keys, [m["nodes"][k]["image"] for k in keys]
+
+
+def cmd_freeze(args):
+    """`docker save` the built image set to one archive, with a provenance sidecar.
+
+    WHY THIS EXISTS. Pinning inputs (registry_base, base-image digests, package versions) makes a
+    rebuild *likely* to reproduce. Freezing the output makes it *certain*, and it is the only one
+    of the two that survives an upstream disappearing — which, over a multi-year appliance life,
+    is the more probable failure. A frozen archive rebuilds the appliance with no network at all.
+
+    Use it as the release artefact beside the OVA: build, verify, freeze, and keep the archive.
+    A later rebuild is `thaw` + the non-docker phases, not `docker`.
+    """
+    m = load_manifest(args.manifest)
+    keys, images = _frozen_images(m, args.profile, args.only)
+
+    print(f"profile {args.profile} — {len(images)} image(s)\n")
+    missing = [i for i in images if not image_exists(i)]
+    if missing:
+        sys.exit("these images are not built here, so there is nothing to freeze:\n  "
+                 + "\n  ".join(missing)
+                 + "\n\nRun the `docker` phase first — freeze captures what a VERIFIED build "
+                   "produced, and freezing a half-built set is worse than not freezing.")
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for key, image in zip(keys, images):
+        print(f"  {key:14} {image}")
+    if args.dry_run:
+        print(f"\n[dry-run] docker save -> {out}")
+        return
+
+    # Stream through gzip rather than saving then compressing: the uncompressed set is several
+    # GB and a VM with room for one copy may not have room for two.
+    print(f"\nsaving -> {out} ...")
+    sys.stdout.flush()
+    proc = subprocess.Popen(["docker", "save"] + images, stdout=subprocess.PIPE)
+    try:
+        if str(out).endswith(".gz"):
+            with gzip.open(str(out), "wb", compresslevel=6) as fout:
+                shutil.copyfileobj(proc.stdout, fout, length=1 << 20)
+        else:
+            with open(str(out), "wb") as fout:
+                shutil.copyfileobj(proc.stdout, fout, length=1 << 20)
+    finally:
+        proc.stdout.close()
+        rc = proc.wait()
+    if rc != 0:
+        sys.exit(f"docker save failed ({rc}); {out} is incomplete — delete it")
+
+    digest = sha256_of(out)
+    side = Path(str(out) + ".json")
+    # Image IDs, not just names: two archives can carry the same :latest tags and different
+    # bytes, and the whole point of this file is to say which bytes.
+    ids = {}
+    for image in images:
+        r = subprocess.run(["docker", "image", "inspect", "-f", "{{.Id}}", image],
+                           stdout=subprocess.PIPE, universal_newlines=True)
+        ids[image] = r.stdout.strip() if r.returncode == 0 else "?"
+    side.write_text(json.dumps({
+        "profile": args.profile,
+        # timezone-aware: utcnow() is deprecated from Python 3.12 and prints a warning into
+        # the build log. (The `provenance` phase still uses the old form — same fix applies.)
+        "created": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "archive": out.name,
+        "bytes": out.stat().st_size,
+        "sha256": digest,
+        "images": ids,
+    }, indent=2) + "\n")
+
+    print(f"\nfroze {len(images)} image(s)")
+    print(f"  archive  {out}  ({human(out.stat().st_size)})")
+    print(f"  sha256   {digest}")
+    print(f"  manifest {side}")
+    print("\nKeep BOTH files with the OVA. Restore with:  gns3build.py thaw --in " + str(out))
+
+
+def cmd_thaw(args):
+    """`docker load` a frozen archive back onto a VM, then confirm the set is complete."""
+    m = load_manifest(args.manifest)
+    src = Path(args.inp)
+    if not src.exists():
+        sys.exit(f"no such archive: {src}")
+
+    side = Path(str(src) + ".json")
+    meta = json.loads(side.read_text()) if side.exists() else {}
+    if meta:
+        print(f"archive from {meta.get('created','?')} (profile {meta.get('profile','?')}), "
+              f"{len(meta.get('images', {}))} image(s)")
+    else:
+        print(f"no sidecar {side.name} — loading anyway, but provenance is unknown")
+
+    if not args.skip_verify and meta.get("sha256"):
+        print("verifying archive sha256 ...")
+        got = sha256_of(src)
+        if got != meta["sha256"]:
+            sys.exit(f"archive sha256 mismatch\n  expected {meta['sha256']}\n  got      {got}\n"
+                     "The archive is corrupt or is not the one the sidecar describes.")
+        print("  ok")
+
+    if args.dry_run:
+        print(f"[dry-run] docker load -i {src}")
+        return
+
+    print(f"loading {src} ...")
+    run(["docker", "load", "-i", str(src)])
+
+    # A load that silently dropped an image is the failure worth catching: everything downstream
+    # then builds fine and one node type is simply absent.
+    expected = list(meta.get("images", {})) or _frozen_images(m, args.profile, None)[1]
+    missing = [i for i in expected if not image_exists(i)]
+    print()
+    for image in expected:
+        print(f"  {'ok  ' if image not in missing else 'MISS'} {image}")
+    if missing:
+        sys.exit(f"\n{len(missing)} image(s) missing after load — the archive is incomplete")
+    print(f"\nloaded {len(expected)} image(s). The `docker` phase can now be skipped.")
+
+
 def ensure_kernel_modules(mods, dry_run):
     """Docker nodes share the VM's kernel: load what they need, and persist it across reboots."""
     for mod in mods:
@@ -465,8 +590,38 @@ def docker_context(m, node, tmpdir):
     if src["type"] == "registry":
         ctx = Path(tmpdir)
         base = m["registry_base"].rstrip("/") + "/" + src["dir"].strip("/")
-        for fname in src["files"]:
-            download(f"{base}/{fname}", ctx / fname)
+        for entry in src["files"]:
+            # An entry is either a bare filename or {name, sha256}. Both forms are accepted so
+            # a new file can be added without a checksum while it is being worked out, but a
+            # release build should have one on every line — see registry_base's note.
+            fname = entry if isinstance(entry, str) else entry["name"]
+            want = None if isinstance(entry, str) else entry.get("sha256")
+            dest = ctx / fname
+            download(f"{base}/{fname}", dest)
+            if want:
+                got = sha256_of(dest)
+                if got != want:
+                    raise RuntimeError(
+                        f"{fname}: sha256 mismatch from {base}/{fname}\n"
+                        f"  expected {want}\n  got      {got}\n"
+                        f"Upstream moved, or registry_base is not pinned to the commit these "
+                        f"checksums were taken at. Do NOT just paste the new value in: read the "
+                        f"diff first, then re-run the OVS activities if openvswitch changed.")
+            else:
+                print(f"    WARN {fname}: no sha256 in the manifest — build is not reproducible")
+            # HTTP carries no permission bits, so a downloaded script lands 0644/0664 and
+            # the image ships it non-executable. Normally the upstream Dockerfile's
+            # `RUN chmod +x` would fix that — but gns3/openvswitch declares
+            # `VOLUME ["/root", "/etc/openvswitch"]` BEFORE it copies init.sh there, and
+            # Docker discards RUN changes made to an already-declared VOLUME path. The
+            # chmod is silently thrown away, the container's CMD hits "Permission denied",
+            # it exits 126 before building any bridge, and every OVS activity fails with
+            # "container is not running" (found 14 Aug 2026 via a stp-basics FAIL; the
+            # same symptom for saved projects is in gns3-dev/tools/tests/ovs-init-perms-fix.md).
+            # COPY *does* preserve the source mode, so setting it here survives — verified
+            # on Docker 29.6.2 against all three variants of the Dockerfile ordering.
+            if fname.endswith(".sh"):
+                dest.chmod(0o755)
         return ctx
     raise ValueError(f"unknown source type '{src['type']}'")
 
@@ -1703,6 +1858,23 @@ def main():
                     help="rebuild even if the image exists (needed after editing a Dockerfile)")
     dk.add_argument("--dry-run", action="store_true")
 
+    fz = sub.add_parser("freeze",
+                        help="docker save the built image set as a release artefact (on the VM)")
+    fz.add_argument("--profile", required=True)
+    fz.add_argument("--only", help="comma-separated node keys (default: every image in the profile)")
+    fz.add_argument("--out", required=True,
+                    help="archive path; ending in .gz streams through gzip (recommended)")
+    fz.add_argument("--dry-run", action="store_true")
+
+    tw = sub.add_parser("thaw",
+                        help="docker load a frozen archive, skipping the `docker` phase entirely")
+    tw.add_argument("--in", dest="inp", required=True, help="archive written by `freeze`")
+    tw.add_argument("--profile", default="",
+                    help="only needed when the archive has no .json sidecar")
+    tw.add_argument("--skip-verify", action="store_true",
+                    help="don't re-hash the archive (it is several GB; verification is slow)")
+    tw.add_argument("--dry-run", action="store_true")
+
     qm = sub.add_parser("qemu", help="download + unpack disk images (run on the VM)")
     qm.add_argument("--profile", required=True)
     qm.add_argument("--only", help="comma-separated node keys, e.g. openwrt")
@@ -1780,6 +1952,7 @@ def main():
             "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
             "novnc": cmd_novnc, "labnic": cmd_labnic,
             "projects": cmd_projects, "build": cmd_build,
+            "freeze": cmd_freeze, "thaw": cmd_thaw,
             "export-check": cmd_export_check,
             "provenance": cmd_provenance}[args.cmd](args)
 
