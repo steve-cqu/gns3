@@ -37,6 +37,15 @@
     # Where the repo lands on the VM.
     vm_repo_dir: /home/gns3/git/gns3
 
+    # Optional local cache of the Qemu disk images, seeded to the VM before the build so the
+    # `qemu` phase has nothing left to download. Empty = download from the manifest's URLs as
+    # normal. See "Building from a local Qemu cache" in ../README.md.
+    #   -e qemu_cache=~/gns3-archive/gns3-v030/QEMU
+    qemu_cache: ""
+    # Must match `qemu_images_dir` in server/build/manifest.yml. Duplicated rather than parsed
+    # out of the manifest because this task runs before anything reads it.
+    vm_qemu_images_dir: /opt/gns3/images/QEMU
+
     # Project search roots, in order — the authoritative copy MUST come first.
     # gns3-dev/outfiles is deliberately absent: it holds stale exports that share their
     # project_id with the rebuilt originals under activities/, so importing one shadows
@@ -272,6 +281,66 @@
       register: gns3_validate
       changed_when: false
       check_mode: false
+
+    # ---------------------------------------------------- qemu cache (optional) ----
+    # The `qemu` phase runs ON THE VM and skips any image already in qemu_images_dir whose
+    # .md5sum sidecar matches the manifest. That check does nothing on a FRESH VM, where the
+    # images you already have are on *your* machine — so the build re-downloads several GB
+    # from SourceForge, a community mirror and a personal GitHub release. Slow today; by 2028
+    # at least one of those is likely to be gone (see ../RESTORE.md).
+    #
+    # With -e qemu_cache=<dir> they are rsynced across first and the phase then skips them
+    # all. No --delete: this SEEDS the directory, it does not mirror it, so an image the VM
+    # has and the cache does not is left alone. Images arriving without a .md5sum sidecar are
+    # still md5-verified by the qemu phase against the manifest, so a hand-downloaded cache is
+    # exactly as safe as one taken from a release archive — it just re-hashes once.
+    - name: Stat the local Qemu cache
+      ansible.builtin.stat:
+        path: "{{ qemu_cache }}"
+      register: qemu_cache_stat
+      delegate_to: localhost
+      changed_when: false
+      when: qemu_cache | length > 0
+
+    - name: Fail early if the Qemu cache is not a directory
+      # Better here than a confusing rsync error, and better than silently downloading the
+      # several GB the operator was explicitly trying to avoid.
+      ansible.builtin.fail:
+        msg: >-
+          qemu_cache={{ qemu_cache }} is not a directory on this machine. Point it at the
+          folder holding the .img/.qcow2 files (and their .md5sum sidecars), or drop the flag.
+      when: qemu_cache | length > 0 and not (qemu_cache_stat.stat.isdir | default(false))
+
+    - name: Ensure the VM's Qemu images directory exists
+      ansible.builtin.file:
+        path: "{{ vm_qemu_images_dir }}"
+        state: directory
+        mode: "0755"
+      when: qemu_cache | length > 0
+
+    - name: Seed the VM's Qemu images from the local cache
+      ansible.builtin.command:
+        argv: >-
+          {{ ['rsync', '--archive', '--itemize-changes']
+             + (['--dry-run'] if ansible_check_mode else [])
+             + ['--rsh=' ~ rsync_rsh,
+                qemu_cache ~ '/',
+                ansible_user ~ '@' ~ vm_address ~ ':' ~ vm_qemu_images_dir ~ '/'] }}
+      environment:
+        SSHPASS: "{{ ansible_password | default('') }}"
+      register: qemu_seed
+      changed_when: qemu_seed.stdout | trim | length > 0
+      delegate_to: localhost
+      check_mode: false
+      when: qemu_cache | length > 0
+
+    - name: Report what the Qemu cache contributed
+      ansible.builtin.debug:
+        msg: >-
+          Seeded {{ (qemu_seed.stdout_lines | default([]) | length) }} file(s) from
+          {{ qemu_cache }} into {{ vm_qemu_images_dir }} — the qemu phase below should now
+          report them as `skip`.
+      when: qemu_cache | length > 0
 
     # --------------------------------------------------------------- build ----
     # Everything except projects runs on the VM: docker builds must happen on the

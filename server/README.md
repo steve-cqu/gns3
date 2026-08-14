@@ -287,8 +287,41 @@ Useful flags (anything after the profile is passed to `ansible-playbook`):
 | `--check` | dry run: reports what would change without changing anything |
 | `-e gns3_dev_repo=/path/to/gns3-dev` | if the private repo is not beside this one |
 | `-e extra_project_dir=/path/to/infiles` | if the oversized projects live elsewhere |
+| `-e qemu_cache=/path/to/QEMU` | seed the Qemu disks from a local folder instead of downloading them — see below |
 
 See [`ansible/README.md`](ansible/README.md) for the full option list.
+
+### Building from a local Qemu cache
+
+The `qemu` phase skips any disk already in `qemu_images_dir` on the VM whose `.md5sum`
+sidecar matches the manifest:
+
+```
+skip   OPNsense-24.1-nano-amd64.img       (sidecar, 3.0 GiB)
+```
+
+That makes a rebuild of an existing VM free. It does nothing for a **fresh** VM, though,
+where the copies you already have are on *your* machine — so the build pulls ~3.7 GB again
+from SourceForge, a community mirror and a personal GitHub release. Point it at them
+instead:
+
+```sh
+./build.sh "GNS3 VM" amd64 -e qemu_cache=~/gns3-archive/gns3-v030/QEMU
+```
+
+They are rsynced to the VM before the build, and the phase then reports every one as
+`skip`. The folder can be one you assembled by hand or one restored from a release archive
+(`qemu-images-vNNN-<arch>.tar` — see [`RESTORE.md`](RESTORE.md)); files arriving **without**
+a sidecar are still md5-verified against the manifest, so a hand-made cache is exactly as
+safe, it just re-hashes once.
+
+The seed does not use `--delete` — it adds to the VM's images without removing anything
+that is only there. Note the sidecars matter for `ubuntu-cloud`, which the build `resize`s
+after verification: its md5 no longer matches the manifest afterwards, and the sidecar is
+what records that it was verified before being mutated. Copy sidecars with the images.
+
+This matters more over time than it does today. It is the difference between a 2028 rebuild
+that works offline and one that depends on three third-party hosts still being up.
 
 ---
 

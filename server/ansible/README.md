@@ -59,6 +59,7 @@ files that would otherwise ride into the OVA.
 | `-e verify=none` | skip verification (iterating on the build itself) |
 | `-e gns3_dev_repo=…` | path to the private `gns3-dev` checkout (default: alongside `gns3`) |
 | `-e extra_project_dir=…` | where the oversized out-of-git projects live (default: `../infiles`) |
+| `-e qemu_cache=…` | a local folder of Qemu `.img`/`.qcow2` files to rsync to the VM *before* the build, so the `qemu` phase downloads nothing. See *Building from a local Qemu cache* in [`../README.md`](../README.md) |
 | `--check` | dry run — passes `--dry-run` through to rsync *and* `gns3build.py`, so it reports what the build would actually do rather than skipping the tasks |
 
 ## Watching a run
