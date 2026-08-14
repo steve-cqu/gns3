@@ -29,7 +29,7 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-releas
 #   libfaketime               - runs ONE command with a different idea of the time, which is the
 #                               only way to demonstrate clock skew on a container node. 200 KB,
 #                               and it is inherited by auth-kerberos, where it earns its place:
-#                               `faketime '+6 minutes' kinit student` produces the real
+#                               `faketime -f '+6m' kinit student` produces the real
 #                               "Clock skew too great" failure.
 RUN apk add --no-cache \
 openssh \
