@@ -102,6 +102,13 @@ repo.
    git -C gns3 push origin v030 && git -C gns3-dev push origin v030
    ```
 5. Add the row above, with the OVA filenames, sizes and sha256 sums.
+5a. **Archive the release to the shared drive.** The appliance is frozen for years, not months,
+   and a from-source rebuild in 2028 depends on upstreams that will have moved or gone. Freeze
+   the built images, tar the Qemu disks, bundle both repos, and copy
+   [`server/RESTORE.md`](server/RESTORE.md) in with its header filled out — it tells whoever
+   opens that folder later which restore path to use. Commands are in `RESTORE.md` under
+   *Making the archive*. Do this **after** `verify=all` passes, never before: an archive of an
+   unverified set is worse than none, because it looks authoritative.
 6. Publish the handout projects for the term alongside the OVA: the templates students
    complete, the solutions for staff, and `SDN-Basics-Template` (729 MB — too large for a
    Moodle upload, so it is hosted with the OVA and linked from there).

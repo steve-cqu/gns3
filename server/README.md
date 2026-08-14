@@ -383,11 +383,16 @@ python3 server/build/gns3build.py thaw --in /home/gns3/frozen-v030-amd64.tar.gz
 `thaw` verifies the archive against the sidecar (skip with `--skip-verify`; it is several GB),
 loads it, and then checks that every expected image is actually present — a load that silently
 dropped one is the failure worth catching, because everything downstream still succeeds and one
-node type is simply absent. After a successful `thaw`, **skip the `docker` phase**:
+node type is simply absent. After a successful `thaw`, run the remaining phases **on the VM**
+with the `docker` phase skipped:
 
 ```sh
-./build.sh "GNS3 VM" amd64 -e phases=templates,qemu,accel,logos,novnc,labnic
+python3 server/build/gns3build.py build --profile amd64 \
+        --skip docker,projects --server http://localhost
 ```
+
+(`projects` is skipped because it runs from the control node, which is what `build.sh` does for
+you — see *Running phases individually*.)
 
 Neither is part of `build` — freezing is a release step, not a build phase, and it must happen
 *after* verification, never before. Freezing a half-built or unverified set is worse than not
@@ -396,7 +401,15 @@ freezing, because it looks authoritative.
 **What freeze does not cover:** the Qemu disk images. They are already pinned by URL *and* md5,
 but several are hosted on SourceForge, a community mirror and a personal GitHub release, any of
 which can 404 over a couple of years. Archive `qemu_images_dir` alongside the frozen Docker
-archive and the same guarantee extends to them.
+archive and the same guarantee extends to them:
+
+```sh
+sudo tar -cf qemu-images-v030.tar -C /opt/gns3/images QEMU     # ~3.7 GB
+```
+
+[`RESTORE.md`](RESTORE.md) is the template to copy onto the shared drive with each release — the
+folder layout, which restore path to use, and the verification steps. Fill in its header and put
+it beside the OVAs, because in two years nobody will remember this section exists.
 
 ---
 

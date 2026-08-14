@@ -1861,7 +1861,8 @@ def main():
     fz = sub.add_parser("freeze",
                         help="docker save the built image set as a release artefact (on the VM)")
     fz.add_argument("--profile", required=True)
-    fz.add_argument("--only", help="comma-separated node keys (default: every image in the profile)")
+    fz.add_argument("--only",
+                    help="comma-separated node keys (default: every image in the profile)")
     fz.add_argument("--out", required=True,
                     help="archive path; ending in .gz streams through gzip (recommended)")
     fz.add_argument("--dry-run", action="store_true")
