@@ -14,10 +14,20 @@ if [ ! -f "$CONF" ]; then
     exit 1
 fi
 
-if pgrep -x grafana-server >/dev/null 2>&1 || pgrep -x grafana >/dev/null 2>&1; then
+# Restart cleanly if it is already running, so this script is safe to run repeatedly — which
+# matters, because "edit grafana.ini then run this again" is how a setting is applied.
+#
+# It has to be `pgrep -f`, not `pgrep -x`. /usr/sbin/grafana-server is a two-line shim that
+# does `exec /usr/bin/grafana server`, so the running process has comm=grafana but
+# argv[0]=/usr/bin/grafana, and BusyBox pgrep matches argv[0] unless -f is given. Both
+# `pgrep -x grafana-server` and `pgrep -x grafana` therefore come back empty while :3000
+# answers perfectly happily. Measured on the built appliance, 14 August 2026: with -x the
+# check never fired, a second run started a DUPLICATE Grafana that died with
+# "bind: address already in use", and this script still reported success because the original
+# was still answering — so the student's edited config was silently never applied.
+if pgrep -f 'grafana server' >/dev/null 2>&1; then
     echo "Stopping the running Grafana..."
-    pkill -x grafana-server 2>/dev/null
-    pkill -x grafana 2>/dev/null
+    pkill -f 'grafana server' 2>/dev/null
     sleep 2
 fi
 

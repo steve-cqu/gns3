@@ -8,13 +8,26 @@ echo "================================================"
 echo ""
 
 echo "1. Processes:"
-for p in node_exporter blackbox_exporter prometheus grafana-server; do
+# blackbox_exporter and prometheus match on argv[0], so -x is right for them. Grafana does not:
+# /usr/sbin/grafana-server execs /usr/bin/grafana server, so argv[0] is a full path and BusyBox
+# `pgrep -x` never matches under either name while :3000 answers fine. Use -f for it.
+for p in node_exporter blackbox_exporter prometheus; do
     if pgrep -x "$p" >/dev/null 2>&1; then
         echo "   RUNNING  $p"
+    elif [ "$p" = "node_exporter" ]; then
+        # Not a fault: node_exporter on THIS node is only needed if you want the Monitor to
+        # appear in its own dashboards. start-monitoring.sh starts it; the piece-at-a-time
+        # scripts do not, and no scrape target in the lab depends on it.
+        echo "   stopped  $p   (optional on this node — see note below)"
     else
         echo "   stopped  $p"
     fi
 done
+if pgrep -f 'grafana server' >/dev/null 2>&1; then
+    echo "   RUNNING  grafana"
+else
+    echo "   stopped  grafana"
+fi
 echo ""
 
 echo "2. This node's addresses (what a browser should point at):"
@@ -59,6 +72,10 @@ fi
 echo ""
 
 echo "================================================"
+echo "node_exporter on this node is optional: it publishes THIS node's own metrics, and"
+echo "nothing in the lab scrapes it unless you add it to prometheus.yml yourself."
+echo "start-monitoring.sh starts it; the three piece-at-a-time scripts do not."
+echo ""
 echo "Config:  /etc/prometheus/prometheus.yml"
 echo "         /etc/prometheus/blackbox.yml"
 echo "         /etc/grafana.ini"
