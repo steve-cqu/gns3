@@ -1,0 +1,48 @@
+# Faucet SDN controller configuration.
+#
+# This file is the lesson: it is what the controller knows about the network, and editing it and
+# reloading is how an SDN switch gets configured. Everything a traditional switch would be told
+# through its own CLI is here instead, in one file, for every switch the controller manages.
+#
+# As shipped it is valid and does something useful — all four ports in one VLAN, so a switch
+# that connects gets a working flat network with no edits. Two further examples are in
+# /etc/faucet/examples/.
+#
+# After any edit:
+#     check_faucet_config /etc/faucet/faucet.yaml     # says exactly what is wrong, if anything
+#     start-faucet.sh                                 # restarts the controller cleanly
+
+vlans:
+    office:
+        vid: 100
+        description: "office network"
+
+dps:
+    # One entry per switch. The name is yours; the dp_id is the switch's identity and MUST match
+    # the datapath-id set on the switch itself:
+    #     ovs-vsctl set bridge br0 other-config:datapath-id=0000000000000001
+    # A mismatch is the usual reason a switch connects and then nothing works — Faucet logs
+    # "unknown datapath" and ignores it.
+    sw1:
+        dp_id: 0x1
+        hardware: "Open vSwitch"
+        interfaces:
+            # The numbers are OpenFlow port numbers, not interface names. On the switch they are
+            # assigned with:
+            #     ovs-vsctl set interface eth1 ofport_request=1
+            1:
+                name: "h1"
+                description: "host1"
+                native_vlan: office
+            2:
+                name: "h2"
+                description: "host2"
+                native_vlan: office
+            3:
+                name: "h3"
+                description: "host3"
+                native_vlan: office
+            4:
+                name: "h4"
+                description: "host4"
+                native_vlan: office

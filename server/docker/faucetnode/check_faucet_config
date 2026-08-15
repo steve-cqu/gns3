@@ -1,0 +1,16 @@
+#!/bin/bash
+# check_faucet_config — validate a Faucet configuration file.
+# Usage: check_faucet_config [file ...]        (default: /etc/faucet/faucet.yaml)
+#
+# A wrapper around the tool of the same name in Faucet's venv, kept in /usr/local/bin so PATH
+# finds it first. It exists only to suppress eventlet's deprecation banner, which os_ken triggers
+# on import and which would otherwise print nine lines of unrelated text ahead of the answer,
+# every time. Arguments and the exit code pass straight through, so this behaves exactly like the
+# tool it wraps -- including printing the whole normalised configuration on success, which is
+# Faucet's own way of saying "this is what I understood you to mean".
+#
+# PYTHONWARNINGS=ignore rather than ignore::DeprecationWarning: eventlet's
+# EventletDeprecationWarning derives from Warning directly, not from DeprecationWarning, so
+# nothing narrower silences it (measured 15 August 2026, eventlet 0.40.3).
+exec env PYTHONWARNINGS=ignore \
+    /opt/faucet/bin/python /opt/faucet/bin/check_faucet_config "$@"

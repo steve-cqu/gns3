@@ -158,14 +158,14 @@ platforms:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -304,6 +304,16 @@ nodes:
     image: cqugns3/monitornode:latest
     source: {type: local, path: monitornode}
     templates: [docker-monitor]
+  # Faucet SDN controller. Its own image because it drags in a Python venv with a compiled
+  # extension, which is the runtime split the rule above describes; Alpine-based like every
+  # other CQU service node. This replaces the Qemu Ubuntu VM that sdn-basics used as its
+  # controller, and with it the ubuntu-cloud disk in both OVAs and the 729 MB
+  # SDN-Basics-Template.gns3project that could not be committed — see the Dockerfile.
+  faucetnode:
+    kind: docker
+    image: cqugns3/faucetnode:latest
+    source: {type: local, path: faucetnode}
+    templates: [docker-faucet]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
