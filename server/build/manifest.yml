@@ -326,15 +326,14 @@ nodes:
     kind: docker
     image: cqugns3/servicenode:latest
     source: {type: local, path: servicenode}
-    # docker-flowcollector is deliberately NOT registered yet. nfcapd/nfdump (the collector) and
-    # softflowd (the probe) ship on the image, and the collector works, but softflowd does not
-    # process packets inside a GNS3 container (libpcap receives them, softflowd's processed-count
-    # stays 0) — verified live 15 August 2026. Flow telemetry therefore needs its own timeboxed
-    # exporter spike (try fprobe/pmacct, or a newer softflowd) before the template is registered.
-    # See gns3-dev/notes/tier5-and-spike-designs.md. The docker-flowcollector.conf is kept in the
-    # tree, ready to add back to this list once an exporter is proven.
+    # Flow Collector is now registered. The exporter spike resolved 15 August 2026: softflowd 1.1.0
+    # receives packets via libpcap but processes 0 inside a GNS3 container (exports nothing), so the
+    # image ships fprobe instead — it builds and exports NetFlow correctly in the same container, is
+    # 32 KB, and is in Alpine main for both amd64 and arm64. Proven end-to-end in a live GNS3
+    # topology (probe builds flows -> nfcapd collects -> nfdump/flow-status.sh reads them). See
+    # gns3-dev/notes/tier5-and-spike-designs.md.
     templates: [docker-dnsserver, docker-ntpserver, docker-dbserver, docker-cacheserver,
-                docker-dhcpserver]
+                docker-dhcpserver, docker-flowcollector]
   # Prometheus + Grafana + blackbox_exporter. Own image rather than joining servicenode
   # because Grafana (331 MB) and Prometheus (224 MB) are exactly the runtime the rule above
   # splits on. Alpine-based because Grafana is not in Ubuntu's archive at any version.

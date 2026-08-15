@@ -86,8 +86,13 @@ RUN chmod +x /usr/local/bin/start-dns.sh /usr/local/bin/start-ntp.sh \
 #
 #   postgresql / valkey / kea-dhcp4  - the three "own box" data services, each with its own
 #                                      template below. PostgreSQL is the first stateful node.
-#   nfdump / softflowd               - NetFlow collection and probing: the flow view of a network,
+#   nfdump / fprobe                  - NetFlow collection and probing: the flow view of a network,
 #                                      the third telemetry modality beside packet capture and IDS.
+#                                      fprobe, not softflowd: softflowd 1.1.0 receives packets via
+#                                      libpcap but processes 0 of them inside a GNS3 container, so it
+#                                      exports nothing; fprobe builds flows correctly in the same
+#                                      container and is packaged for both arches. Verified live
+#                                      15 Aug 2026 — see gns3-dev/notes/tier5-and-spike-designs.md.
 #   fail2ban + nftables              - auto-ban brute-force sources; the "respond" half of
 #                                      detect-and-respond, protecting the sshd every node runs.
 #   monit / goaccess                 - cheap operations tools (service supervision, web-log
@@ -96,7 +101,7 @@ RUN apk add --no-cache \
     postgresql17 postgresql17-client postgresql17-contrib pgbackrest \
     valkey valkey-cli \
     kea-dhcp4 kea-admin \
-    nfdump softflowd \
+    nfdump fprobe \
     fail2ban nftables \
     monit goaccess
 

@@ -2,7 +2,9 @@
 # What flows has this collector seen?
 # Usage: flow-status.sh
 
-FLOWDIR=/var/flows
+# nfcapd writes into this SUBDIRECTORY of the persisted /var/flows volume so that `nfdump -R` is not
+# tripped by GNS3's `.gns3_perms` marker in the volume root — see start-flow.sh for the full note.
+FLOWDIR=/var/flows/nfcapd
 
 echo "================================================"
 echo "NetFlow Collector Status"
