@@ -14,6 +14,7 @@ Subcommands
   docker    --profile P     build the profile's docker node images        [run on the VM]
   qemu      --profile P     download + unpack the profile's Qemu images   [run on the VM]
   accel                     Qemu acceleration in gns3_server.conf         [run on the VM]
+  quiesce                   mask Ubuntu's unattended-upgrade timers       [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
   novnc                     install noVNC + the gns3-novnc service        [run on the VM]
   projects  --profile P     import the .gns3project files named in projects.txt
@@ -930,6 +931,125 @@ def cmd_logos(args):
 
 
 # --------------------------------------------------------------------------- #
+# Phase: quiesce — stop the appliance updating itself          [run on the VM]
+# --------------------------------------------------------------------------- #
+# systemctl's own vocabulary. Anything outside it is not a verdict we can act on — a
+# container's systemd stub, for one, answers `is-enabled` with a paragraph of advice.
+_UNIT_STATES = {"masked", "masked-runtime", "enabled", "enabled-runtime", "disabled",
+                "static", "indirect", "generated", "transient", "alias", "linked",
+                "linked-runtime", "not-found"}
+
+
+def unit_state(unit):
+    """`systemctl is-enabled` verdict for one unit: masked / enabled / disabled / absent."""
+    try:
+        r = subprocess.run(["systemctl", "is-enabled", unit],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True)
+    except OSError:                              # no systemctl at all
+        return "unknown"
+    if "No such file" in (r.stderr or ""):
+        return "absent"
+    first = next((ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()), "")
+    if first == "not-found":                     # newer systemd says it on stdout instead
+        return "absent"
+    return first if first in _UNIT_STATES else "unknown"
+
+
+def cmd_quiesce(args):
+    """Mask Ubuntu's unattended-upgrade timers so the appliance stops rewriting itself.
+
+    See the `auto_updates:` comment in the manifest for the incident that prompted this. The
+    short version: an appliance is meant to be the thing that was tested, and a machine that
+    upgrades libc6 and the kernel behind your back on first boot is not that. It also steals
+    the CPU — this VM has one core — for minutes at a time, which on a lab machine lands as a
+    node that mysteriously stops responding mid-activity.
+
+    `mask` rather than `disable`: disable leaves the unit startable, and an apt upgrade of
+    unattended-upgrades or systemd re-enables what it shipped enabled. A masked unit is
+    symlinked to /dev/null and stays masked across upgrades.
+    """
+    m = load_manifest(args.manifest)
+    cfg = m.get("auto_updates") or {}
+    units = cfg.get("mask_units") or []
+    if not units:
+        print("  skip   no auto_updates.mask_units in the manifest")
+        return 0
+
+    print("auto-updates: masking Ubuntu's own upgrade schedule\n")
+    changed = failed = 0
+    for unit in units:
+        state = unit_state(unit)
+        if state == "masked":
+            print(f"  skip   {unit} (already masked)")
+            continue
+        if state == "absent":
+            # Not an error: unattended-upgrades is not installed on every Ubuntu variant, and
+            # a unit that does not exist cannot start an upgrade.
+            print(f"  none   {unit} is not installed on this VM")
+            continue
+        if args.dry_run:
+            print(f"  [dry-run] systemctl mask --now {unit} (currently {state})")
+            continue
+        # --now also stops it, so an upgrade already in flight is halted rather than left to
+        # finish under the build.
+        rc = subprocess.run(["sudo", "systemctl", "mask", "--now", unit],
+                            stdout=subprocess.DEVNULL).returncode
+        if rc:
+            print(f"  FAIL   could not mask {unit} (rc={rc})")
+            failed += 1
+        else:
+            print(f"  mask   {unit} (was {state})")
+            changed += 1
+
+    path = cfg.get("apt_periodic_file", "/etc/apt/apt.conf.d/99-cqu-no-auto-upgrades")
+    text = (
+        '// Installed by gns3build.py (quiesce phase) — do not edit by hand.\n'
+        '//\n'
+        '// Turns off the periodic apt work that /etc/apt/apt.conf.d/20auto-upgrades enables.\n'
+        '// The units are masked as well; this file is what survives an apt upgrade putting\n'
+        '// 20auto-upgrades back, since apt reads this directory in lexical order and the last\n'
+        '// setting of a key wins.\n'
+        '//\n'
+        '// Updating the appliance is a build-time decision: rebuild from the manifest and cut\n'
+        '// a new OVA, so what students run is what was tested.\n'
+        'APT::Periodic::Enable "0";\n'
+        'APT::Periodic::Update-Package-Lists "0";\n'
+        'APT::Periodic::Unattended-Upgrade "0";\n'
+        'APT::Periodic::Download-Upgradeable-Packages "0";\n'
+        'APT::Periodic::AutocleanInterval "0";\n'
+    )
+    if args.dry_run:
+        print(f"\n  [dry-run] write {path}")
+    elif sudo_write(path, text):
+        subprocess.run(["sudo", "chmod", "644", path], check=False)
+        print(f"\n  write  {path}")
+        changed += 1
+    else:
+        print(f"\n  skip   {path} (already correct)")
+
+    # An upgrade that already ran leaves the VM running one kernel with another installed.
+    # Exporting in that state ships an appliance whose first boot changes it — exactly what
+    # this phase exists to prevent — so say so loudly enough to act on.
+    if Path("/var/run/reboot-required").exists():
+        pkgs = ""
+        try:
+            pkgs = Path("/var/run/reboot-required.pkgs").read_text().split()
+            pkgs = " (" + ", ".join(sorted(set(pkgs))) + ")" if pkgs else ""
+        except OSError:
+            pass
+        print(f"\n  WARN   this VM has a pending reboot{pkgs}")
+        print("         An upgrade has already been applied under the running system. Reboot "
+              "before")
+        print("         running export-check, or the OVA ships a machine that changes on first "
+              "boot.")
+
+    if not args.dry_run:
+        print(f"\nquiesced: {changed} change(s), {failed} failure(s)")
+    return 1 if failed else 0
+
+
+# --------------------------------------------------------------------------- #
 # Phase: novnc — browser access to VNC nodes (runs on the VM)
 # --------------------------------------------------------------------------- #
 def apt_installed(pkg):
@@ -1544,8 +1664,9 @@ def cmd_export_check(args):
 # --------------------------------------------------------------------------- #
 # Phase: provenance — record what this appliance actually contains
 # --------------------------------------------------------------------------- #
-# /2 added `release` and `git`; /3 dropped `audience` when the staff appliance was retired
-PROVENANCE_SCHEMA = "gns3build-provenance/3"
+# /2 added `release` and `git`; /3 dropped `audience` when the staff appliance was retired;
+# /4 added system.auto_update_units + system.reboot_required (see the `quiesce` phase)
+PROVENANCE_SCHEMA = "gns3build-provenance/4"
 
 
 def write_import_record(path, profile, records, roots=None):
@@ -1665,6 +1786,14 @@ def cmd_provenance(args):
             "arch": _cmd_out(["uname", "-m"]),
             "kernel": _cmd_out(["uname", "-r"]),
             "docker": _cmd_out(["docker", "--version"]),
+            # Two ways an appliance stops being the machine that was tested, both invisible
+            # in a package list: an upgrade timer still running (it will rewrite the VM on
+            # some future boot), and an upgrade already applied but not booted into. The
+            # `quiesce` phase fixes the first and warns about the second; recording them
+            # here is how you can tell after the fact which OVA had which.
+            "auto_update_units": {u: unit_state(u) for u in
+                                  ((m.get("auto_updates") or {}).get("mask_units") or [])},
+            "reboot_required": Path("/var/run/reboot-required").exists(),
         },
     }
 
@@ -1775,7 +1904,10 @@ def cmd_provenance(args):
 # --------------------------------------------------------------------------- #
 # Phase: build — run every phase in order
 # --------------------------------------------------------------------------- #
-BUILD_PHASES = ["templates", "docker", "qemu", "accel", "logos", "novnc", "labnic",
+# `quiesce` runs first, and not for tidiness: it is the phase that stops Ubuntu's own upgrade
+# timers competing with the build for a single-core VM's CPU, so it has to land before the two
+# long phases (docker, qemu) rather than after them.
+BUILD_PHASES = ["quiesce", "templates", "docker", "qemu", "accel", "logos", "novnc", "labnic",
                 "projects"]
 
 
@@ -1796,8 +1928,8 @@ def cmd_build(args):
                      f"(have: {', '.join(BUILD_PHASES)})")
         phases = [p for p in phases if p not in skip]
 
-    handlers = {"templates": cmd_templates, "docker": cmd_docker, "qemu": cmd_qemu,
-                "accel": cmd_accel, "logos": cmd_logos, "novnc": cmd_novnc,
+    handlers = {"quiesce": cmd_quiesce, "templates": cmd_templates, "docker": cmd_docker,
+                "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos, "novnc": cmd_novnc,
                 "labnic": cmd_labnic, "projects": cmd_projects}
     # Every phase reads its options off this one namespace, so it must carry a default
     # for every option any phase's sub-parser defines — a missing one is an AttributeError
@@ -1894,6 +2026,10 @@ def main():
                                       "(run on the VM)")
     ac.add_argument("--dry-run", action="store_true")
 
+    qs = sub.add_parser("quiesce", help="mask Ubuntu's unattended-upgrade timers "
+                                        "(run on the VM)")
+    qs.add_argument("--dry-run", action="store_true")
+
     nv = sub.add_parser("novnc",
                         help="install noVNC + the gns3-novnc service (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
@@ -1951,7 +2087,7 @@ def main():
         pass
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
             "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
-            "novnc": cmd_novnc, "labnic": cmd_labnic,
+            "novnc": cmd_novnc, "labnic": cmd_labnic, "quiesce": cmd_quiesce,
             "projects": cmd_projects, "build": cmd_build,
             "freeze": cmd_freeze, "thaw": cmd_thaw,
             "export-check": cmd_export_check,

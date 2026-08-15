@@ -361,8 +361,9 @@ is the whole of the student's VNC workflow — see [Reaching a VNC node](#reachi
 
 The build also writes a provenance manifest to `/home/gns3/gns3-build-provenance.json` on
 the VM (and fetches a copy to `ansible/provenance-<profile>.json`). It records the date,
-profile, GNS3 and kernel versions, the commit of **both** repositories, every Docker image
-ID, every Qemu disk md5, every template and project, and the size + sha256 of each source
+profile, GNS3 and kernel versions, whether the appliance's auto-update units are masked and
+whether it has a pending reboot, the commit of **both** repositories, every Docker image ID,
+every Qemu disk md5, every template and project, and the size + sha256 of each source
 `.gns3project`. Keep the fetched copy with the OVA: without it, two `GNS3-CQU-*.ova` files
 are indistinguishable months later.
 
@@ -524,11 +525,12 @@ the VM (`cd ~/git/gns3/server/build`):
 ```sh
 ./gns3build.py validate                    # check the manifest and every template
 ./gns3build.py plan      --profile amd64   # show what would be installed, change nothing
-./gns3build.py build     --profile amd64   # all seven phases below, in order
+./gns3build.py build     --profile amd64   # all nine phases below, in order
 ./gns3build.py templates --profile amd64   # register templates via the GNS3 API
 ./gns3build.py docker    --profile amd64   # build the Docker node images
 ./gns3build.py qemu      --profile amd64   # download + verify the Qemu disks
 ./gns3build.py accel                       # Qemu acceleration in gns3_server.conf
+./gns3build.py quiesce                     # mask Ubuntu's unattended-upgrade timers
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + the gns3-novnc service
 ./gns3build.py labnic                      # the Windows Host lab NIC (eth2)
@@ -554,9 +556,10 @@ Common options:
   `gns3-dev/outfiles` before `gns3-dev/activities`.
 
 `validate`, `plan`, `templates`, `projects`, `export-check` and `provenance` also accept
-`--server http://<vm-ip>` and can be run from your own machine. `docker`, `qemu`, `logos`
-and `novnc` must run on the VM itself, because they need its Docker daemon and filesystem
-— which is also why images are always built natively for the VM's architecture.
+`--server http://<vm-ip>` and can be run from your own machine. `docker`, `qemu`, `logos`,
+`novnc`, `labnic` and `quiesce` must run on the VM itself, because they touch its Docker
+daemon, filesystem and systemd — which is also why images are always built natively for the
+VM's architecture.
 
 Nothing edits `gns3_controller.conf` or restarts the GNS3 service. Templates are
 registered through the REST API, which is additive and safe to repeat.
@@ -569,6 +572,46 @@ and the kernel modules the containers need. (The projects are the one thing it d
 name — they live in `projects.txt` beside it.) Adding a node means editing the manifest, not
 the code. `./gns3build.py validate` checks it, and
 also cross-checks that every disk a Qemu template names is one its node actually installs.
+
+---
+
+## The appliance does not update itself
+
+The `quiesce` phase masks `apt-daily.timer`, `apt-daily-upgrade.timer`, the two services they
+activate and `unattended-upgrades.service`, then writes
+`/etc/apt/apt.conf.d/99-cqu-no-auto-upgrades` turning the `APT::Periodic` keys off. The units
+and the file both come from `auto_updates:` in the manifest.
+
+**Why.** An OVA is meant to be the machine that was tested. A stock Ubuntu appliance is not:
+it upgrades itself on a schedule, so what a student runs in week 8 is whatever the archive
+held the day they first booted it, and no two students necessarily have the same appliance.
+
+It also costs real time on a one-core VM. On 15 August 2026 `apt-daily-upgrade.service`
+started 80 seconds into an autotest batch and spent 05:42:54–05:44:18 installing 38 packages
+— `libc6`, `systemd`, `udev`, `openssl` and a new kernel. The `link-performance` test ran
+inside that window; its node console went quiet for 105 seconds and the run was recorded as
+`FAIL`. Nothing was wrong with the activity — it passed five times in a row once the VM was
+idle. In a classroom the same event is a node that stops answering mid-activity for no
+visible reason.
+
+`mask`, not `disable`: a disabled unit is still startable, and an apt upgrade of
+`unattended-upgrades` or `systemd` re-enables what the package ships enabled. Masking
+symlinks the unit to `/dev/null` and survives that. Check it with:
+
+```sh
+systemctl is-enabled apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service
+# expect: masked  masked  masked
+```
+
+**Updating the appliance is a build-time decision.** To take new packages, upgrade
+deliberately (`sudo apt-get update && sudo apt-get upgrade`), reboot, re-run the build and
+the autotests, then cut a new OVA — so what ships is again the thing that was tested.
+
+**Pending reboots.** If an upgrade has already run, the VM is left running one kernel with
+another installed. `quiesce` warns when `/var/run/reboot-required` exists, and `provenance`
+records both `system.reboot_required` and the state of each masked unit. Reboot before
+`export-check`: an OVA cut in that state ships a machine that changes on its first boot,
+which is the whole thing this phase exists to prevent.
 
 ---
 

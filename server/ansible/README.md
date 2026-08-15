@@ -28,7 +28,7 @@ wrapper around it. In order:
 1. **check** the profile is set and the GNS3 API answers
 2. **sync** `server/` and `images/` to `/home/gns3/git/gns3/` on the VM
 3. **validate** the manifest, then run `gns3build.py build --skip projects` **on the VM**
-   (`templates` → `docker` → `qemu` → `accel` → `logos` → `novnc` → `labnic`)
+   (`quiesce` → `templates` → `docker` → `qemu` → `accel` → `logos` → `novnc` → `labnic`)
 4. **import projects** with `gns3build.py projects` **from your machine**, straight into
    the VM's API
 5. **verify** with `gns3_autotest.py` and fail the build if anything comes back red

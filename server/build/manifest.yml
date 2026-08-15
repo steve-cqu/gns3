@@ -108,6 +108,30 @@ qemu_accel:
   settings:
     require_kvm: false
 
+# Ubuntu's own update machinery, masked by the `quiesce` phase. An appliance is a frozen
+# artifact: what it contains is decided by this manifest and recorded by `provenance`, not by
+# whatever the archive happened to hold the first time a student booted it.
+#
+# This is not hypothetical tidiness. On 15 Aug 2026 apt-daily-upgrade.service started 80 s
+# into an autotest batch and spent 05:42:54–05:44:18 installing 38 packages — libc6, systemd,
+# udev, openssl and a new kernel — on the 1-vCPU build VM. The link-performance test ran
+# inside that window, its node console went silent for 105 s, and the activity was recorded
+# FAIL. Nothing was wrong with it; it passed five times in a row afterwards. Left in place the
+# same thing happens in a classroom, and every appliance drifts from the one that was tested.
+#
+# The two timers are the schedule; the services they activate are masked as well, because
+# unattended-upgrades also runs from a shutdown hook that no timer controls. The apt.conf
+# drop-in is the belt to that pair of braces: an apt upgrade can restore 20auto-upgrades, and
+# a later-sorting file in the same directory wins.
+auto_updates:
+  mask_units:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+    - apt-daily.service
+    - apt-daily-upgrade.service
+    - unattended-upgrades.service
+  apt_periodic_file: /etc/apt/apt.conf.d/99-cqu-no-auto-upgrades
+
 # The lab NIC — the GNS3 VM's third adapter, on an isolated hypervisor network shared with a
 # Windows VM running beside it. The "Windows Host" Cloud template binds to it.
 #
