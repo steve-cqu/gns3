@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# Claude Code session config (may contain machine-local paths and settings)
+.claude/
