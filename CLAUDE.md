@@ -1,0 +1,143 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Purpose
+
+This repository builds and ships the **CQU GNS3 appliance** — the virtual machine students import
+to run the networking and security labs. It holds the node images, the GNS3 templates, the build
+engine that assembles an appliance from them, and the student-facing getting-started guides.
+
+The activities that *run* on the appliance live in the sibling **`gns3-dev`** repository, along
+with the test harness that drives a live appliance. The two move together: a node image change here
+usually needs an activity, a `-test.yaml` and a `topics.yaml` entry there.
+
+**This repository is public** (`github.com/steve-cqu/gns3`); `gns3-dev` is private, and that split is
+deliberate — activity solutions and anything naming cohorts, assessment or internal infrastructure
+stay on the private side. Some lab defaults that ship here have been reviewed and accepted as
+throwaway; leave them alone rather than "fixing" them, and do not write anything into this repo that
+would not survive being read by a student or a stranger. Credentials, addresses and internal paths
+belong in `gns3-dev`, not here.
+
+## Repository Layout
+
+```
+server/build/      # THE BUILD ENGINE — gns3build.py + manifest.yml (the source of truth)
+server/docker/     # 12 local Dockerfile build contexts (one directory per image)
+server/templates/  # 30 GNS3 template .conf files (raw REST template JSON, one per template)
+server/ansible/    # build.sh + site.yml — the wrapper that syncs this tree to the VM and runs it
+server/novnc/      # the noVNC service installed by the `novnc` phase
+server/windows/    # the Windows-Host-beside-the-VM Cloud node material
+server/projects.txt # which .gns3project files an appliance carries
+images/symbols/    # node symbols (.svg, -w/-b pairs) installed by the `logos` phase
+vm/                # student-facing getting-started guides (PC, Mac, VirtualBox, VMware, using GNS3)
+data/              # large out-of-band artefacts (the SDN project that is too big to ship)
+```
+
+Staff docs: [`server/README.md`](server/README.md) is the full build and release runbook (1,100
+lines — read the section you need, not the whole thing) and [`RELEASES.md`](RELEASES.md) records
+what each term's appliance contained.
+
+## The build engine
+
+**`server/build/manifest.yml` is authoritative.** It lists every node, which templates each backs,
+the per-architecture image and disk lists, the kernel modules to load, and the appliance-level
+settings. If something is not in the manifest it is not in the appliance.
+
+Phases, in build order (`gns3build.py:1982`):
+
+```
+quiesce  templates  docker  qemu  accel  logos  novnc  labnic  projects
+```
+
+**Where a phase can run matters.** `validate`, `plan`, `templates`, `projects`, `export-check` and
+`provenance` work from anywhere and take `--server URL` (defaulting to `$GNS3_SERVER`).
+`docker`, `qemu`, `logos`, `novnc`, `labnic` and `quiesce` touch the local Docker daemon,
+filesystem, netplan or systemd, so they **run on the GNS3 VM itself** — which is also why images
+are always built natively for the VM's architecture rather than cross-built. (The module docstring
+at the top of `gns3build.py` lists only the first four of those; it is one revision behind.)
+
+**Profiles are `amd64` and `arm64`** — the architecture of the GNS3 VM, and the only axis the build
+varies on. One appliance per architecture goes to staff and students alike.
+
+**Both phases are idempotent by skipping, which is the usual way to be confused:**
+
+- `docker` skips an image that already exists. **After editing a Dockerfile you need `--force`**,
+  and after rebuilding a base you need `--force` on everything derived from it.
+- `templates` keys on `template_id` and skips an id already registered. **After editing a `.conf`
+  you need `templates --force`** — and existing nodes in existing projects keep the settings they
+  were created with regardless.
+
+## Adding or changing a node
+
+Two rules govern the shape, both settled by measurement in
+`gns3-dev/notes/tier1-service-nodes-plan.md` (decisions D1–D5):
+
+> **A service gets its own *template* when it occupies its own box on the topology diagram. It gets
+> its own *image* only when it drags in a runtime the other services do not need.**
+
+> A service joins `servicenode` while the image stays **under 150 MB over `alpinenode`**. The first
+> candidate that breaks the budget gets its own image — forced by measurement, not by argument.
+
+**Choose the base by which distribution packages the software for *both* architectures**, not by
+preference. That is the whole multi-arch story: `docker build --platform` against a pinned Alpine or
+Ubuntu base gives arm64 for free for anything in the distribution repositories. Check
+`APKINDEX.tar.gz` / `Packages.gz` for both arches before committing to a base — the method and a
+measured table for ~25 candidates are in `gns3-dev/notes/candidate-node-types.md`.
+
+The edit surface for one new image plus one template:
+
+1. `server/docker/<name>/` — `Dockerfile` plus start/status scripts
+2. `server/templates/docker-<name>.conf` — **with a freshly generated `template_id` UUID**; a
+   duplicate id silently updates the wrong template. Ids are deliberately shared across platforms so
+   projects stay portable.
+3. `images/symbols/<name>-w.svg` and `-b.svg` — the `logos` phase copies the directory, nothing else
+   to wire up
+4. `server/build/manifest.yml` — a `nodes:` entry, and the image appended to **both**
+   `platforms.amd64.docker` and `platforms.arm64.docker`. **Order matters**: the phase builds in
+   list order, so a derived image must appear after its base
+5. In `gns3-dev`: the activity (`instructions`, `solution`, `-test.yaml`, `-test.sh`), a
+   `topics.yaml` entry **with a `book:` value**, and a `check_<name>()` in `tools/tests/readiness.sh`
+
+### Constraints that bite
+
+- **The engine cannot pull a published image.** `docker_context()` (`gns3build.py:594-637`) accepts
+  `source.type` of `local` or `registry` only — and `registry` downloads a *Dockerfile*, not an
+  image. Every image is built from source. A vendor image needs a new source type first.
+- **GNS3 runs every Docker node privileged** (`Privileged: True`, `CapAdd: ["ALL"]`, AppArmor
+  unconfined) — capabilities are never the blocker, and no node should ask a student to enable
+  anything. Kernel modules are the exception: `/lib/modules` is not mounted into nodes, so a module
+  must go in `kernel_modules:` in the manifest.
+- **Helper scripts go in `/usr/local/bin`, never `/bin`.** `/usr/local/bin` can be persisted and
+  precedes `/bin` in `PATH`. A packaged script that misbehaves inside a node (see the `wg-quick`
+  note) is fixed by copying it there at build time.
+- **`extra_volumes` is a delta over the image's own `VOLUME` lines**, not a full list, and a
+  directory volume is the only way to keep a single file such as `/etc/hosts`. Anything a student
+  is assessed on must survive a project close — see `gns3-dev/notes/node-persistence.md`.
+- **GNS3 does not sync an image `VOLUME` into project-files on export.** A config that must travel
+  with a project has to be injected into `project-files/docker/<node_id>/…` with the node's
+  `extra_volumes`.
+- **Services start from a script, never `systemctl`** — Alpine has no systemd. Validate the config
+  before starting (`named-checkconf`, `promtool check config`), be idempotent, and print where the
+  logs are. Name the script in the template's `usage` field.
+- **Qemu is a last resort.** A Qemu node means a per-architecture disk, a download and an md5, and
+  any `.gns3project` containing one is permanently bound to the architecture it was exported on.
+  FRR, NETem and the SDN controller were all migrated off Qemu for this reason.
+
+## Working against a live appliance
+
+Finding the VM, the API port, credentials, the test harness and the read-before-you-change rule are
+all in **`gns3-dev/notes/vm-access.md`**. Read that before touching a running appliance — it is
+usually mid-verification for something.
+
+## Releases
+
+`server/README.md` §1–3 is the runbook: build, `export-check` and `provenance` before cutting, then
+`archive-release.sh` and the OVA. Record the result in `RELEASES.md`. The per-term tag scheme is
+`v0NN` in both repos, no branches.
+
+## Related
+
+- [`server/README.md`](server/README.md) — build/release runbook, troubleshooting, Mac builds
+- `../gns3-dev/CLAUDE.md` — the activities, the test harness and the documentation conventions
+- `../gns3-dev/notes/README.md` — what is in flight across both repos
