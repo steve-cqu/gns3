@@ -347,6 +347,14 @@ It fails (exit 1) unless the appliance carries **exactly** `projects.txt`, and r
 - **INCOMPLETE** — a project on the list did not make it in, usually because its file was
   not under any root. Reported, not fatal.
 
+**Run it on the VM, as above.** It also accepts `--server http://<vm-ip>` from your own
+machine, but staged `.gns3project` files are a question about the *VM's disk* and nothing
+over the API can see them — so a remote run reports `staged files NOT CHECKED` and ends in
+`PARTIAL` rather than `OK`. Treat `PARTIAL` as "not yet gated". The image checks work either
+way: they ask the controller what it has installed (`/v2/computes/local/{qemu,docker}/images`)
+rather than reading the local filesystem, which until August 2026 they did — so a remote run
+used to invent BROKEN lines for disks the appliance had all along.
+
 Until August 2026 this compared the VM against the *other* audience's list, so it only ever
 caught a staff solution on a student OVA. With one appliance there is no other list, so the
 rule is now exact-match — which is stricter, not looser: anything unplanned fails.
@@ -556,7 +564,8 @@ Common options:
   `gns3-dev/outfiles` before `gns3-dev/activities`.
 
 `validate`, `plan`, `templates`, `projects`, `export-check` and `provenance` also accept
-`--server http://<vm-ip>` and can be run from your own machine. `docker`, `qemu`, `logos`,
+`--server http://<vm-ip>` and can be run from your own machine — though `export-check` can
+only half-answer from there and says so (see [Check before you export](#2-check-before-you-export)). `docker`, `qemu`, `logos`,
 `novnc`, `labnic` and `quiesce` must run on the VM itself, because they touch its Docker
 daemon, filesystem and systemd — which is also why images are always built natively for the
 VM's architecture.

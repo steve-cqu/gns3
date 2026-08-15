@@ -45,10 +45,12 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 import zlib
@@ -252,6 +254,15 @@ class Controller:
 
     def project_nodes(self, project_id):
         return self._req("GET", f"/projects/{project_id}/nodes")
+
+    # The compute is the machine that actually runs the nodes, so these two answer "does the
+    # appliance have this image?" — the question `export-check` needs — rather than "does the
+    # machine running this script have it?", which is a different question with the same shape.
+    def qemu_images(self, compute_id="local"):
+        return self._req("GET", f"/computes/{compute_id}/qemu/images")
+
+    def docker_images(self, compute_id="local"):
+        return self._req("GET", f"/computes/{compute_id}/docker/images")
 
     def import_project(self, project_id, path, timeout=3600):
         """POST a .gns3project as the raw body, streamed — SDN-Basics-Template is 729 MB."""
@@ -1541,6 +1552,50 @@ def cmd_projects(args):
 # --------------------------------------------------------------------------- #
 # Phase: export-check — the gate that runs before an OVA is cut
 # --------------------------------------------------------------------------- #
+def controller_is_local(server):
+    """Is the controller at `server` this same machine?
+
+    Decides whether the host-local parts of `export-check` are inspecting the appliance or
+    some other computer entirely. Name resolution can fail on an offline build host, so a
+    failure here means "assume remote" — the cautious answer, since it downgrades a check to
+    "not run" rather than silently reporting someone else's disk as the appliance's.
+    """
+    host = (urllib.parse.urlparse(server).hostname or "").lower()
+    if host in ("", "localhost", "127.0.0.1", "::1", socket.gethostname().lower()):
+        return True
+    try:
+        return host in {ai[4][0] for ai in socket.getaddrinfo(socket.gethostname(), None)}
+    except OSError:
+        return False
+
+
+def installed_images(ctrl):
+    """(qemu filenames, docker image tags) the *controller* reports, or None where unknown.
+
+    None means "could not ask" — an older controller without these endpoints, say. It is
+    deliberately not an empty set: an empty set would mark every node unstartable, which is
+    the same false alarm this function exists to remove, only louder.
+    """
+    try:
+        qemu = {os.path.basename(i.get("filename") or i.get("path") or "")
+                for i in (ctrl.qemu_images() or [])}
+        qemu.discard("")
+    except Exception:                                    # noqa: BLE001
+        qemu = None
+    try:
+        docker = set()
+        for i in (ctrl.docker_images() or []):
+            img = i.get("image") or ""
+            if img:
+                docker.add(img)
+                # A node's `image` property may or may not carry the tag; the API always does.
+                if img.endswith(":latest"):
+                    docker.add(img[: -len(":latest")])
+    except Exception:                                    # noqa: BLE001
+        docker = None
+    return qemu, docker
+
+
 def cmd_export_check(args):
     """Refuse to bless an appliance whose contents are not exactly projects.txt.
 
@@ -1553,6 +1608,11 @@ def cmd_export_check(args):
     unlisted project is simply one nobody decided to ship — a leftover from a manual test, a
     solution opened to answer a question. That is now fatal rather than a warning: it is the
     only thing standing between an off-hand import and a public OVA.
+
+    Run from another machine (`--server http://<vm-ip>`), the parts that read a *filesystem*
+    are answering about the wrong computer. The image checks therefore go through the API, and
+    the staged-file scan reports itself as not run rather than as clean — a gate that cannot
+    see half of what it guards must say so, or it reads as a pass.
     """
     m = load_manifest(args.manifest)
     if args.profile not in m["profiles"]:
@@ -1583,12 +1643,14 @@ def cmd_export_check(args):
     # *named* Small-Internet-Demo, and calling that unlisted would be a lie.
     suffix = m.get("platforms", {}).get(profile_platform(m, args.profile), {}) \
               .get("project_suffix", "")
+    local = controller_is_local(args.server)
     staged_dirs = [Path(os.path.expanduser(str(d)))
                    for d in (m.get("project_roots") or [])]
     staged = []
-    for d in staged_dirs:
-        if d.is_dir():
-            staged += sorted(d.rglob("*.gns3project"))
+    if local:
+        for d in staged_dirs:
+            if d.is_dir():
+                staged += sorted(d.rglob("*.gns3project"))
     for f in staged:
         name = f.name[: -len(".gns3project")]
         if suffix and name.endswith(suffix) and name[: -len(suffix)] in allowed_set:
@@ -1607,29 +1669,33 @@ def cmd_export_check(args):
     # on an arm64 build. Note this only inspects the projects the appliance *ships*, which
     # is now five — it is not evidence that the image set covers the activities students
     # import themselves. Only `verify=all` shows that.
-    images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
-    have_docker = set()
-    if shutil.which("docker"):
-        out = _cmd_out(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}"])
-        have_docker = set((out or "").split())
+    have_qemu, have_docker = installed_images(ctrl)
+    for kind, have in (("qemu", have_qemu), ("docker", have_docker)):
+        if have is None:
+            warnings.append(f"the controller did not answer for its {kind} images, so no "
+                            f"node using one was checked for being startable")
     broken = []
     for name, pid in sorted(imported.items()):
         for node in ctrl.project_nodes(pid):
             props = node.get("properties") or {}
-            if node.get("node_type") == "qemu":
+            if node.get("node_type") == "qemu" and have_qemu is not None:
                 for field in ("hda_disk_image", "hdb_disk_image", "cdrom_image"):
                     disk = props.get(field)
-                    if disk and not (images_dir / os.path.basename(disk)).exists():
+                    if disk and os.path.basename(disk) not in have_qemu:
                         broken.append(f"{name}: qemu disk '{os.path.basename(disk)}' "
                                       f"is not installed")
-            elif node.get("node_type") == "docker" and have_docker:
-                if props.get("image") and props["image"] not in have_docker:
-                    broken.append(f"{name}: docker image '{props['image']}' is not built")
+            elif node.get("node_type") == "docker" and have_docker is not None:
+                img = props.get("image")
+                if img and img not in have_docker and f"{img}:latest" not in have_docker:
+                    broken.append(f"{name}: docker image '{img}' is not built")
     broken = sorted(set(broken))
 
     print(f"  imported projects   {len(imported)}")
     print(f"  permitted           {len(allowed)}")
-    print(f"  staged files        {len(staged)}")
+    print(f"  staged files        "
+          + (str(len(staged)) if local else
+             "NOT CHECKED — the controller is another machine, and staged files are on its "
+             "disk"))
     if missing:
         print(f"\n  INCOMPLETE  {len(missing)} permitted project(s) not imported: "
               f"{', '.join(missing)}")
@@ -1644,8 +1710,8 @@ def cmd_export_check(args):
         problems += [f"unstartable node: {b}" for b in broken]
     if problems:
         print(f"\nFAIL — {len(problems)} problem(s). Do NOT export this VM until they are "
-              f"fixed: delete the extra projects, or add them to {list_file.name} if they "
-              f"belong on the appliance.")
+              f"fixed: delete anything unlisted, or add it to {list_file.name} if it belongs "
+              f"on the appliance; an unstartable node needs its image installed instead.")
         return 1
     # "exactly" only if nothing is missing either — INCOMPLETE stays non-fatal (a project file
     # absent from the build host is a known, survivable case) but must not read as a clean bill.
@@ -1653,11 +1719,17 @@ def cmd_export_check(args):
                f"nothing unlisted is present, but {len(missing)} project(s) on "
                f"{list_file.name} did not make it in")
     counts = (f"{len(broken)} unstartable, " if broken else "") + f"{len(warnings)} warning(s)"
-    print(f"\nOK — {verdict}. ({counts})")
+    print(f"\n{'OK' if local else 'PARTIAL'} — {verdict}. ({counts})")
     if broken:
         print("       the BROKEN entries above will not start on this platform — "
               "on arm64 that means a PC-built Qemu project needs an -arm64 rebuild; "
               "use --strict to fail on them.")
+    if not local:
+        # Not a warning in the list above, because it is about this *run* rather than about
+        # the appliance: everything reported is true, and one whole check did not happen.
+        print("       PARTIAL because a staged .gns3project on the VM's own disk would ship "
+              "inside the\n       OVA and nothing here can see it. Re-run on the VM before "
+              "cutting the OVA.")
     return 0
 
 
@@ -2052,7 +2124,8 @@ def main():
                              "projects.txt")
     ec.add_argument("--profile", required=True)
     ec.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
-    ec.add_argument("--images-dir", help="override the manifest's qemu_images_dir")
+    # No --images-dir: the installed-image check asks the controller what it has rather than
+    # reading a directory, so there is no path left to override.
     ec.add_argument("--strict", action="store_true",
                     help="also fail on projects whose nodes cannot start here")
 

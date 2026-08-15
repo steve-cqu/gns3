@@ -9,7 +9,10 @@
 # be able to run *every* activity, not just the few it ships — see the note on `platforms:`
 # before removing any image.
 
-gns3_version: "2.2.54"
+# The gns3server the appliance is built on. Recorded in provenance next to the version the
+# controller actually reports, so a mismatch is visible in the artefact rather than only in
+# someone's memory. Bumped 2.2.54 -> 2.2.61 on 15 Aug 2026 with the rebuilt amd64 VM.
+gns3_version: "2.2.61"
 
 # Paths relative to this manifest file.
 paths:
