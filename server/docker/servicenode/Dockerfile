@@ -41,7 +41,18 @@ RUN mkdir -p /var/bind/pri /var/bind/sec /var/bind/dyn /run/named /var/log/named
  && if ! grep -q '^chrony:' /etc/group;  then addgroup -S chrony; fi \
  && if ! grep -q '^chrony:' /etc/passwd; then adduser -S -D -H -G chrony chrony; fi \
  && chown -R named:named   /var/bind /run/named /var/log/named \
- && chown -R chrony:chrony /var/lib/chrony /run/chrony
+ && chown -R chrony:chrony /var/lib/chrony /run/chrony \
+ # 0750 on /run/chrony, and it is not cosmetic. chronyd checks that directory before it will
+ # create its command socket, and at the default 0755 it refuses:
+ #     Wrong permissions on /run/chrony
+ #     Disabled command socket /run/chrony/chronyd.sock
+ # Without the socket, `chronyc clients` and `chronyc serverstats` answer "501 Not authorised"
+ # even for root on the server itself — those two commands are authorised only over the socket,
+ # never over the network, however generous cmdallow is. `chronyc clients` is a documented step
+ # in ntp-basics (instructions Task 5, solution Task 6), so this broke a student step while
+ # `chronyc tracking` kept working, which is why it survived the first build.
+ # Measured on the appliance 15 August 2026 (chrony 4.8); one chmod fixes it.
+ && chmod 750 /run/chrony
 
 # Shipped configuration. Both are heavily commented and are meant to be edited: the config IS
 # the lesson. They are also valid as they stand — `named-checkconf` passes and BIND answers for
