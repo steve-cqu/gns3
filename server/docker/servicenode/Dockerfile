@@ -75,6 +75,72 @@ COPY ntp-status.sh   /usr/local/bin/ntp-status.sh
 RUN chmod +x /usr/local/bin/start-dns.sh /usr/local/bin/start-ntp.sh \
              /usr/local/bin/dns-status.sh /usr/local/bin/ntp-status.sh
 
-# Declared here as well as in the templates' extra_volumes, so a node keeps its zone files and
-# its config even under a template someone registered by hand.
-VOLUME /var/bind /etc/bind /etc/chrony
+# ---------------------------------------------------------------------------------------------
+# Tier 5 services and operations tooling (added 15 August 2026).
+#
+# Live-verified on the appliance before building — all of these install from Alpine v3.24 for both
+# architectures and run without systemd; see gns3-dev/notes/tier5-and-spike-designs.md. They join
+# servicenode rather than getting their own images because none drags in a runtime the node does
+# not already have (python3 and openssh come from alpinenode), and the whole group stays well under
+# decision D2's 150 MB-over-alpinenode budget.
+#
+#   postgresql / valkey / kea-dhcp4  - the three "own box" data services, each with its own
+#                                      template below. PostgreSQL is the first stateful node.
+#   nfdump / softflowd               - NetFlow collection and probing: the flow view of a network,
+#                                      the third telemetry modality beside packet capture and IDS.
+#   fail2ban + nftables              - auto-ban brute-force sources; the "respond" half of
+#                                      detect-and-respond, protecting the sshd every node runs.
+#   monit / goaccess                 - cheap operations tools (service supervision, web-log
+#                                      analysis) available on any service node; no template needed.
+RUN apk add --no-cache \
+    postgresql17 postgresql17-client postgresql17-contrib pgbackrest \
+    valkey valkey-cli \
+    kea-dhcp4 kea-admin \
+    nfdump softflowd \
+    fail2ban nftables \
+    monit goaccess
+
+# Runtime directories and ownership. The service accounts (postgres, valkey, kea) are created by
+# their packages; the guards make the build work either way rather than failing on a chown for a
+# user that is not there — the same pattern as named/chrony above. The data directories are the
+# ones the templates persist, so a student's database, leases and captured flows survive a project
+# being closed.
+RUN mkdir -p /var/lib/postgresql/data /run/postgresql \
+             /var/lib/valkey /var/log/valkey \
+             /var/lib/kea /var/log/kea \
+             /var/flows \
+             /var/lib/fail2ban \
+ && if grep -q '^postgres:' /etc/passwd; then chown -R postgres:postgres /var/lib/postgresql /run/postgresql; fi \
+ && if grep -q '^valkey:'   /etc/passwd; then chown -R valkey:valkey     /var/lib/valkey /var/log/valkey; fi \
+ && if grep -q '^kea:'      /etc/passwd; then chown -R kea:kea           /var/lib/kea /var/log/kea; fi
+
+# Shipped configuration — valid as it stands and meant to be edited; the config is the lesson, the
+# same standard as named.conf above. valkey.conf ships deliberately exposed (the teaching example);
+# kea-dhcp4.conf ships as a working single-subnet server; jail.local enables the sshd jail.
+COPY valkey.conf      /etc/valkey/valkey.conf
+COPY kea-dhcp4.conf   /etc/kea/kea-dhcp4.conf
+COPY jail.local       /etc/fail2ban/jail.local
+
+# Helper scripts in /usr/local/bin (persisted, and ahead of /bin in PATH) so a student's edits
+# survive a project close — the lesson recorded in ipv6node's Dockerfile.
+COPY start-db.sh         /usr/local/bin/start-db.sh
+COPY db-status.sh        /usr/local/bin/db-status.sh
+COPY start-cache.sh      /usr/local/bin/start-cache.sh
+COPY cache-status.sh     /usr/local/bin/cache-status.sh
+COPY start-dhcp.sh       /usr/local/bin/start-dhcp.sh
+COPY dhcp-status.sh      /usr/local/bin/dhcp-status.sh
+COPY start-flow.sh       /usr/local/bin/start-flow.sh
+COPY flow-status.sh      /usr/local/bin/flow-status.sh
+COPY start-flowprobe.sh  /usr/local/bin/start-flowprobe.sh
+COPY start-fail2ban.sh   /usr/local/bin/start-fail2ban.sh
+COPY fail2ban-status.sh  /usr/local/bin/fail2ban-status.sh
+RUN chmod +x /usr/local/bin/start-db.sh /usr/local/bin/db-status.sh \
+             /usr/local/bin/start-cache.sh /usr/local/bin/cache-status.sh \
+             /usr/local/bin/start-dhcp.sh /usr/local/bin/dhcp-status.sh \
+             /usr/local/bin/start-flow.sh /usr/local/bin/flow-status.sh \
+             /usr/local/bin/start-flowprobe.sh \
+             /usr/local/bin/start-fail2ban.sh /usr/local/bin/fail2ban-status.sh
+
+# Declared here as well as in the templates' extra_volumes, so a node keeps its zone files, its
+# database, its leases and its captured flows even under a template someone registered by hand.
+VOLUME /var/bind /etc/bind /etc/chrony /var/lib/postgresql /var/lib/valkey /var/lib/kea /var/flows

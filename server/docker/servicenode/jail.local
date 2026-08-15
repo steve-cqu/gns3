@@ -1,0 +1,35 @@
+# fail2ban jail configuration for the GNS3 lab node.
+#
+# fail2ban watches a log file for repeated failures and, after too many, tells the firewall to drop
+# the offending address for a while. It is the "response" half of detect-and-respond: Suricata or a
+# log tells you an SSH brute force is happening; fail2ban does something about it automatically.
+#
+# This node ships with the sshd jail enabled, protecting the SSH server that every CQU node already
+# runs. Start it with:  start-fail2ban.sh   and watch bans arrive with:  fail2ban-status.sh
+# Run an ssh brute force at this node from Kali and watch the attacker's address get banned, then
+# see the ban expire after bantime.
+#
+# jail.local overrides the packaged jail.conf; settings here win. Edit with nano and restart.
+
+[DEFAULT]
+# Short, lab-friendly timings so a ban is visible within a tutorial and then clears itself:
+#   maxretry failures within findtime  ->  banned for bantime
+bantime  = 120
+findtime = 60
+maxretry = 3
+
+# Never ban the lab's own management ranges, so you cannot lock yourself out while testing.
+ignoreip = 127.0.0.1/8 ::1
+
+# How the ban is enforced. The appliance nodes use nftables; this action inserts and removes an
+# nft rule, which is what you inspect to prove the ban is real (see fail2ban-status.sh). If a node
+# turns out to have only legacy iptables, change this to iptables-multiport.
+banaction = nftables-multiport
+
+[sshd]
+enabled  = true
+port     = ssh
+# BusyBox/dropbear and OpenSSH log differently; the CQU nodes run OpenSSH, whose auth failures go
+# to the file below. If this jail never fires, first confirm failures are landing in this log.
+logpath  = /var/log/messages
+backend  = auto
