@@ -66,6 +66,35 @@ wireguard-tools \
 whois \
  && update-ca-certificates
 
+# wg-quick, again, in /usr/local/bin — where PATH finds it first.
+#
+# MEASURED 15 August 2026 on the T3 appliance (GNS3 2.2.61, Docker 29.6.2), and it is as odd as
+# it reads: inside a GNS3 Docker node, running the packaged `/usr/bin/wg-quick` fails at its very
+# first line with
+#
+#     /usr/bin/wg-quick: line 11: /usr/bin/readlink: Permission denied
+#
+# so `wg-quick up wg0` — a documented student step in wireguard-basics — does nothing. A
+# byte-identical COPY of that same file, in the same directory, runs perfectly; so does the
+# original under `bash /usr/bin/wg-quick`; and so does the original under a plain
+# `docker run cqugns3/alpinenode`. Only the image's own inode, executed via its shebang inside a
+# GNS3 node, fails. The cause is not established — it is not permissions (0755, no xattrs, no
+# capabilities), not seccomp (none), not noexec (the root overlay is mounted rw,relatime), and not
+# Docker (plain docker run works).
+#
+# What IS established is the shape of the workaround: a script that GNS3 has copied into one of its
+# ext4 volumes always works, which is why every other helper script in this image set — the
+# start-*.sh family in /usr/local/bin — has never hit this. /usr/local/bin is a GNS3 volume, so the
+# copy below is re-copied onto a real filesystem when a node first starts, and PATH puts
+# /usr/local/bin ahead of /usr/bin. wg-quick is the only #!/bin/bash script in the image that
+# students execute directly, so this is the only place the problem can bite.
+#
+# Do not "simplify" this to a symlink: a symlink resolves back to the failing inode. And do not
+# move it to /usr/sbin: a build-time copy anywhere outside a volume is still an image-layer file
+# at runtime, which is the failing case. Full write-up in
+# gns3-dev/notes/tier1-service-nodes-plan.md.
+RUN cp /usr/bin/wg-quick /usr/local/bin/wg-quick
+
 # Helper scripts. COPY, not ADD: these are plain local files, and ADD additionally
 # unpacks archives and fetches URLs, which is not wanted here.
 COPY setup-github.sh /bin/setup-github.sh
