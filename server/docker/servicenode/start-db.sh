@@ -65,8 +65,10 @@ INSERT INTO students (name, enrolled) VALUES
   ('Ada Lovelace','2026-03-01'),
   ('Alan Turing','2026-03-01'),
   ('Grace Hopper','2026-03-02');
-GRANT ALL ON ALL TABLES IN SCHEMA public TO student;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO student;
+-- student owns the table (not just SELECT/INSERT grants): a pg_dump taken as student then
+-- restores cleanly as student. With postgres as owner, the dump's ALTER ... OWNER lines fail
+-- with 'must be able to SET ROLE "postgres"' — found walking the backup/restore activity live.
+ALTER TABLE students OWNER TO student;
 SQL
 fi
 

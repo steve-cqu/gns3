@@ -8,7 +8,7 @@ echo "================================================"
 echo ""
 
 echo "1. Server process:"
-if pgrep -x valkey-server >/dev/null 2>&1; then
+if pgrep valkey-server >/dev/null 2>&1; then   # no -x: valkey retitles itself with its bind address
     ps -o pid,args -C valkey-server 2>/dev/null || pgrep -a valkey-server
 else
     echo "   valkey-server is NOT running — start it with start-cache.sh"
