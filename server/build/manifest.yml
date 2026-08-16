@@ -82,7 +82,9 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936
 #                    here (2 radios); the gns3-wifi-attach helper resizes the pool to the number of
 #                    wireless nodes and moves a radio into each. From the base linux-modules package
 #                    — linux-modules-extra is not needed.
-kernel_modules: [wireguard, sch_netem, mac80211_hwsim]
+#   cifs           - so a Linux Host can `mount -t cifs` a Samba share from the File Server node
+#                    (smbclient needs no module; mounting does). From the base linux-modules package.
+kernel_modules: [wireguard, sch_netem, mac80211_hwsim, cifs]
 
 # Helper scripts the VM HOST needs (installed to /usr/local/bin by the `docker` phase, executable).
 # A container cannot provide these from inside its own namespace.
@@ -345,7 +347,7 @@ nodes:
     # topology (probe builds flows -> nfcapd collects -> nfdump/flow-status.sh reads them). See
     # gns3-dev/notes/tier5-and-spike-designs.md.
     templates: [docker-dnsserver, docker-ntpserver, docker-dbserver, docker-cacheserver,
-                docker-dhcpserver, docker-flowcollector]
+                docker-dhcpserver, docker-flowcollector, docker-fileserver]
   # Prometheus + Grafana + blackbox_exporter. Own image rather than joining servicenode
   # because Grafana (331 MB) and Prometheus (224 MB) are exactly the runtime the rule above
   # splits on. Alpine-based because Grafana is not in Ubuntu's archive at any version.

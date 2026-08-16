@@ -75,7 +75,14 @@ nginx \
 fail2ban \
 wireguard-tools \
 whois \
+samba-client \
+cifs-utils \
  && update-ca-certificates
+# samba-client (smbclient) and cifs-utils (mount.cifs) let a Linux Host be a file-share CLIENT:
+# browse/copy a share with smbclient, or mount it as a folder ("mapped drive") with mount.cifs.
+# ~2 MB. The SERVER half (samba) is on servicenode's File Server template. mount.cifs needs the
+# `cifs` kernel module on the GNS3 VM host (kernel_modules in manifest.yml). See
+# gns3-dev/notes/tier2-file-backup-git.md, Module 1.
 
 # wg-quick, again, in /usr/local/bin — where PATH finds it first.
 #

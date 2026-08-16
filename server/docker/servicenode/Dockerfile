@@ -119,12 +119,25 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql \
  && if grep -q '^valkey:'   /etc/passwd; then chown -R valkey:valkey     /var/lib/valkey /var/log/valkey; fi \
  && if grep -q '^kea:'      /etc/passwd; then chown -R kea:kea           /var/lib/kea /var/log/kea; fi
 
+# File Server (Samba) — the "File Server" template. samba is the SMB/CIFS server (smbd); the client
+# tools (smbclient, mount.cifs) are on alpinenode so any Linux Host can be a client. mount.cifs on
+# the client needs the `cifs` kernel module on the VM host (kernel_modules in manifest.yml).
+# ~25 MB, keeping servicenode well under decision D2's 150 MB-over-alpinenode budget. See
+# gns3-dev/notes/tier2-file-backup-git.md, Module 1.
+RUN apk add --no-cache \
+    samba \
+    samba-common-tools
+RUN mkdir -p /srv/public /srv/private /var/lib/samba/private /run/samba /var/log/samba \
+ && if id student >/dev/null 2>&1; then chown student /srv/private; fi
+
 # Shipped configuration — valid as it stands and meant to be edited; the config is the lesson, the
 # same standard as named.conf above. valkey.conf ships deliberately exposed (the teaching example);
-# kea-dhcp4.conf ships as a working single-subnet server; jail.local enables the sshd jail.
+# kea-dhcp4.conf ships as a working single-subnet server; jail.local enables the sshd jail; smb.conf
+# ships two shares (public/guest and private/user) for the access-control lesson.
 COPY valkey.conf      /etc/valkey/valkey.conf
 COPY kea-dhcp4.conf   /etc/kea/kea-dhcp4.conf
 COPY jail.local       /etc/fail2ban/jail.local
+COPY smb.conf         /etc/samba/smb.conf
 
 # Helper scripts in /usr/local/bin (persisted, and ahead of /bin in PATH) so a student's edits
 # survive a project close — the lesson recorded in ipv6node's Dockerfile.
@@ -139,13 +152,17 @@ COPY flow-status.sh      /usr/local/bin/flow-status.sh
 COPY start-flowprobe.sh  /usr/local/bin/start-flowprobe.sh
 COPY start-fail2ban.sh   /usr/local/bin/start-fail2ban.sh
 COPY fail2ban-status.sh  /usr/local/bin/fail2ban-status.sh
+COPY start-fileserver.sh /usr/local/bin/start-fileserver.sh
+COPY fileshare-status.sh /usr/local/bin/fileshare-status.sh
 RUN chmod +x /usr/local/bin/start-db.sh /usr/local/bin/db-status.sh \
              /usr/local/bin/start-cache.sh /usr/local/bin/cache-status.sh \
              /usr/local/bin/start-dhcp.sh /usr/local/bin/dhcp-status.sh \
              /usr/local/bin/start-flow.sh /usr/local/bin/flow-status.sh \
              /usr/local/bin/start-flowprobe.sh \
-             /usr/local/bin/start-fail2ban.sh /usr/local/bin/fail2ban-status.sh
+             /usr/local/bin/start-fail2ban.sh /usr/local/bin/fail2ban-status.sh \
+             /usr/local/bin/start-fileserver.sh /usr/local/bin/fileshare-status.sh
 
 # Declared here as well as in the templates' extra_volumes, so a node keeps its zone files, its
-# database, its leases and its captured flows even under a template someone registered by hand.
-VOLUME /var/bind /etc/bind /etc/chrony /var/lib/postgresql /var/lib/valkey /var/lib/kea /var/flows
+# database, its leases, its captured flows and its shared files even under a template someone
+# registered by hand.
+VOLUME /var/bind /etc/bind /etc/chrony /var/lib/postgresql /var/lib/valkey /var/lib/kea /var/flows /srv
