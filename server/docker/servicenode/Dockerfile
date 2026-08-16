@@ -130,6 +130,12 @@ RUN apk add --no-cache \
 RUN mkdir -p /srv/public /srv/private /var/lib/samba/private /run/samba /var/log/samba \
  && if id student >/dev/null 2>&1; then chown student /srv/private; fi
 
+# Backup tooling for the backup-basics activity (Tier 2 Module 2). rsync is already on alpinenode;
+# restic adds versioned, deduplicated, encrypted snapshots — the modern backup story — in one ~25 MB
+# static binary. No new node: a servicenode node with data backs itself up, and the backup target is
+# Module 1's File Server share. See gns3-dev/notes/tier2-file-backup-git.md, Module 2.
+RUN apk add --no-cache restic
+
 # Shipped configuration — valid as it stands and meant to be edited; the config is the lesson, the
 # same standard as named.conf above. valkey.conf ships deliberately exposed (the teaching example);
 # kea-dhcp4.conf ships as a working single-subnet server; jail.local enables the sshd jail; smb.conf
