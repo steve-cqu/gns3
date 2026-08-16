@@ -1,24 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
-
 <svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://web.resource.org/cc/"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    id="svg1998"
    sodipodi:version="0.32"
-   inkscape:version="1.4.2 (2aeb623e1d, 2025-05-12)"
+   inkscape:version="0.45"
    width="66.000435"
    height="44.5159"
    version="1.0"
-   sodipodi:docname="router-frr-b.svg"
+   sodipodi:docname="rt_standard.svg"
    inkscape:output_extension="org.inkscape.output.svg.inkscape"
-   sodipodi:modified="true"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns:xlink="http://www.w3.org/1999/xlink"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg"
-   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-   xmlns:cc="http://creativecommons.org/ns#"
-   xmlns:dc="http://purl.org/dc/elements/1.1/">
+   sodipodi:modified="true">
   <metadata
      id="metadata2003">
     <rdf:RDF>
@@ -27,6 +26,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title>Router</dc:title>
         <dc:creator>
           <cc:Agent>
             <dc:title>Jeremy Grossmann</dc:title>
@@ -122,8 +122,8 @@
        y2="0.070047863" />
   </defs>
   <sodipodi:namedview
-     inkscape:window-height="1371"
-     inkscape:window-width="2494"
+     inkscape:window-height="979"
+     inkscape:window-width="1400"
      inkscape:pageshadow="2"
      inkscape:pageopacity="0.0"
      guidetolerance="10.0"
@@ -136,15 +136,11 @@
      showguides="true"
      inkscape:guide-bbox="true"
      inkscape:zoom="7.8958335"
-     inkscape:cx="27.482849"
-     inkscape:cy="24.759894"
-     inkscape:window-x="1986"
-     inkscape:window-y="32"
-     inkscape:current-layer="g4160"
-     inkscape:showpageshadow="2"
-     inkscape:pagecheckerboard="0"
-     inkscape:deskcolor="#d1d1d1"
-     inkscape:window-maximized="1" />
+     inkscape:cx="27.334225"
+     inkscape:cy="24.784192"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:current-layer="g4160" />
   <rect
      style="opacity:1;fill:#000000;fill-opacity:0.39215687;fill-rule:evenodd;stroke:none;stroke-width:0.2;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
      id="rect4558"
@@ -203,16 +199,5 @@
        id="path4833"
        d="M 53.531602,18.43708 L 48.909313,20.070823 L 38.061087,15.189284 L 32.627541,16.803341 L 35.344315,12.7682 L 48.909313,12.7682 L 43.098437,13.9689 L 53.531602,18.43708"
        style="fill:#ffffff;stroke:none;stroke-width:0.001" />
-    <text
-       xml:space="preserve"
-       style="font-size:18.6667px;text-align:start;letter-spacing:0px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke-width:1.00157"
-       x="13.804749"
-       y="39.134563"
-       id="text1"><tspan
-         sodipodi:role="line"
-         id="tspan1"
-         x="13.804749"
-         y="39.134563"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Arial;-inkscape-font-specification:Arial;fill:#000000;fill-opacity:1">FRR</tspan></text>
   </g>
-</svg>
+<g id="cqu-label"><rect x="3.30" y="32.52" width="59.40" height="12.0" rx="2.5" fill="#1f4040" stroke="#ffffff" stroke-width="0.9"/><text x="33.00" y="41.84" font-family="Arial, Helvetica, sans-serif" font-size="9.50" font-weight="bold" text-anchor="middle" fill="#ffffff">FRR</text></g></svg>
