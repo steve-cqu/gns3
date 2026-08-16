@@ -39,6 +39,7 @@ already in place (qemu) is skipped, so re-running is cheap. --force rebuilds/re-
 """
 import argparse
 import bz2
+import configparser
 import datetime
 import gzip
 import hashlib
@@ -1222,13 +1223,13 @@ def config_from_unit(unit="gns3.service"):
     """The `--config` path in gns3.service's ExecStart, or None.
 
     The fallback for a build run while the GNS3 service is down — `systemctl cat` reads the
-    unit file, so it answers whether or not anything is running.
+    unit file, so it answers whether or not anything is running. `_cmd_out` returns None
+    where there is no systemctl at all, which is the normal case on a Mac control node.
     """
-    r = subprocess.run(["systemctl", "cat", unit], stdout=subprocess.PIPE,
-                       stderr=subprocess.DEVNULL, universal_newlines=True)
-    if r.returncode != 0:
+    out = _cmd_out(["systemctl", "cat", unit])
+    if not out:
         return None
-    for line in r.stdout.splitlines():
+    for line in out.splitlines():
         if not line.strip().startswith("ExecStart"):
             continue
         argv = line.split("=", 1)[-1].split()
@@ -1353,6 +1354,66 @@ def cmd_accel(args):
     print(f"  accel  [{section}] {shown} -> {path}")
     print("  note   picked up live (gns3server watches its config); no restart needed")
     return 0
+
+
+def accel_state(m):
+    """What the `accel` settings actually are on this VM — recorded by `provenance`.
+
+    This is here because the failure it catches is invisible everywhere else. The phase spent
+    a release writing `require_kvm = false` into a file the server did not read: every build
+    went green, every check passed, and the setting was simply absent. It costs nothing on a
+    host with `/dev/kvm` — which every build host so far has had — and breaks *every* Qemu node
+    on a Credential Guard laptop and on all of arm64. A build that cannot prove the setting
+    landed cannot prove the appliance runs its Qemu nodes on the machines students actually
+    have, so the answer ships beside the OVA rather than being inferred from a green log.
+
+    `applied` is three-valued: True, False, or None when the config file is absent — usually
+    because this ran from a control node instead of on the VM, which is not the same as a
+    setting that failed to apply.
+    """
+    cfg = m.get("qemu_accel") or {}
+    settings = cfg.get("settings") or {}
+    if not settings:
+        return None
+    fallback = cfg.get("config_file", "~/.config/GNS3/2.2/gns3_server.conf")
+    path, how = server_config_path(fallback)
+    section = cfg.get("section", "Qemu")
+    want = {k.lower(): ("true" if v is True else "false" if v is False else str(v)).lower()
+            for k, v in settings.items()}
+
+    found, applied = {}, None
+    if path.exists():
+        cp = configparser.ConfigParser(strict=False)
+        try:
+            cp.read(str(path))
+            if cp.has_section(section):
+                found = {k.lower(): v.strip().lower() for k, v in cp.items(section)}
+        except configparser.Error:
+            pass
+        applied = all(found.get(k) == v for k, v in want.items())
+
+    # Every other gns3_server.conf carrying this section is inert: an explicit --config makes
+    # one file the only one loaded, and nothing merges the rest. Naming them is what turns
+    # "the setting is in a gns3_server.conf" back into "the setting is in effect".
+    ignored = []
+    other = Path(os.path.expanduser(fallback))
+    try:
+        if other != path and other.exists() and f"[{section}]" in other.read_text():
+            ignored.append(str(other))
+    except OSError:
+        pass
+
+    return {
+        "config_file": str(path),
+        "discovered_from": how,
+        "section": section,
+        "expected": want,
+        "found": {k: found.get(k) for k in want},
+        "applied": applied,
+        # Why nobody noticed: with /dev/kvm present the setting changes nothing observable.
+        "kvm_present": Path("/dev/kvm").exists(),
+        "ignored_config_files": ignored,
+    }
 
 
 def install_novnc_service(src_dir, cfg, dry_run):
@@ -1851,7 +1912,7 @@ def cmd_export_check(args):
 # --------------------------------------------------------------------------- #
 # /2 added `release` and `git`; /3 dropped `audience` when the staff appliance was retired;
 # /4 added system.auto_update_units + system.reboot_required (see the `quiesce` phase)
-PROVENANCE_SCHEMA = "gns3build-provenance/4"
+PROVENANCE_SCHEMA = "gns3build-provenance/5"      # /5 adds qemu_accel
 
 
 def write_import_record(path, profile, records, roots=None):
@@ -1980,6 +2041,10 @@ def cmd_provenance(args):
                                   ((m.get("auto_updates") or {}).get("mask_units") or [])},
             "reboot_required": Path("/var/run/reboot-required").exists(),
         },
+        # Whether Qemu nodes will start on a host without nested virtualisation. Absent from
+        # the manifest until August 2026, which is how a release shipped with it unset —
+        # see accel_state().
+        "qemu_accel": accel_state(m),
     }
 
     # Docker: the image ID is the content hash, so it identifies the exact bytes even for
@@ -2057,6 +2122,17 @@ def cmd_provenance(args):
           + (f" — MISSING: {', '.join(missing_imgs)}" if missing_imgs else ""))
     print(f"  qemu         {len(disks)} disk(s)"
           + (f" — MISSING: {', '.join(missing_disks)}" if missing_disks else ""))
+    accel = prov["qemu_accel"]
+    if accel:
+        shown = ", ".join(f"{k} = {v}" for k, v in accel["expected"].items())
+        verdict = ("applied" if accel["applied"] else
+                   "NOT APPLIED" if accel["applied"] is False else
+                   "unknown — config file not found (are you on the VM?)")
+        print(f"  accel        {verdict}: [{accel['section']}] {shown}"
+              f" in {accel['config_file']}")
+        if accel["ignored_config_files"]:
+            print(f"               ignored (not read by this server): "
+                  f"{', '.join(accel['ignored_config_files'])}")
     print(f"  templates    {len(prov['templates'])}")
     print(f"  projects     {len(projects)} "
           f"({human(sum(p['bytes'] or 0 for p in projects))} on disk)")
@@ -2083,7 +2159,11 @@ def cmd_provenance(args):
                   f"({', '.join(dirty)}). Commit and tag before cutting the OVA, or the "
                   f"recorded commit will not describe what shipped.")
 
-    return 1 if (missing_imgs or missing_disks) else 0
+    # A Qemu node that cannot start on a student's laptop is as much a broken appliance as a
+    # missing disk, and rather harder to see, so it fails the phase the same way. `None` (no
+    # config file to read) is not a failure — that is a provenance run off the VM.
+    bad_accel = bool(accel) and accel["applied"] is False
+    return 1 if (missing_imgs or missing_disks or bad_accel) else 0
 
 
 # --------------------------------------------------------------------------- #

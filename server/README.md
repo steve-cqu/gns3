@@ -373,10 +373,25 @@ is the whole of the student's VNC workflow — see [Reaching a VNC node](#reachi
 The build also writes a provenance manifest to `/home/gns3/gns3-build-provenance.json` on
 the VM (and fetches a copy to `ansible/provenance-<profile>.json`). It records the date,
 profile, GNS3 and kernel versions, whether the appliance's auto-update units are masked and
-whether it has a pending reboot, the commit of **both** repositories, every Docker image ID,
-every Qemu disk md5, every template and project, and the size + sha256 of each source
-`.gns3project`. Keep the fetched copy with the OVA: without it, two `GNS3-CQU-*.ova` files
-are indistinguishable months later.
+whether it has a pending reboot, whether Qemu acceleration is genuinely in effect (below),
+the commit of **both** repositories, every Docker image ID, every Qemu disk md5, every
+template and project, and the size + sha256 of each source `.gns3project`. Keep the fetched
+copy with the OVA: without it, two `GNS3-CQU-*.ova` files are indistinguishable months later.
+
+The `qemu_accel` block is the one that reports rather than describes — it re-reads the config
+file the server actually loads and says whether the setting is *there*:
+
+```
+  accel        applied: [Qemu] require_kvm = false in /opt/gns3/server/gns3_server.conf
+               ignored (not read by this server): /home/gns3/.config/GNS3/2.2/gns3_server.conf
+```
+
+`NOT APPLIED` **fails the phase** (exit 1), on the same footing as a missing Docker image: a
+Qemu node that will not start on a student's laptop is a broken appliance, and unlike a
+missing image nothing else in the build would notice. This exists because it happened — see
+[Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it). `applied` is also
+allowed to be `null`, meaning the config file was not found at all, which is what a
+`provenance` run from a control node rather than the VM looks like; that does not fail.
 
 The two commits are read in different places, because the phases run in different places —
 this repository on the VM, and each projects root (`gns3-dev`) on the control node during
@@ -704,6 +719,10 @@ back to `gns3.service`'s `ExecStart` if the service is down, and only then to
 
 That `WARN` is the residue of the bug — a stale `[Qemu]` section an earlier build left behind.
 It is reported rather than deleted, since the file may be hand-written; it is inert either way.
+
+Discovery makes the phase write to the right file; it does not prove the setting survived to
+the OVA. `provenance` re-reads the file and fails if it did not — see
+[Check before you export](#2-check-before-you-export).
 
 Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
 
