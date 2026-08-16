@@ -78,7 +78,11 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936
 # Loaded and persisted to /etc/modules-load.d/<mod>.conf by the `docker` phase.
 #   wireguard  - wireguard-basics activity (alpinenode/vpnrouter)
 #   sch_netem  - netem qdisc used by the NETem docker node
-kernel_modules: [wireguard, sch_netem]
+#   mac80211_hwsim - simulated 802.11 radios for the wireless nodes (cqugns3/wifinode). Loaded bare
+#                    here (2 radios); the gns3-wifi-attach helper resizes the pool to the number of
+#                    wireless nodes and moves a radio into each. From the base linux-modules package
+#                    — linux-modules-extra is not needed.
+kernel_modules: [wireguard, sch_netem, mac80211_hwsim]
 
 # Qemu hardware acceleration, written into gns3_server.conf's [Qemu] section by the `accel`
 # phase. Read gns3server/compute/qemu/qemu_vm.py:_run_with_hardware_acceleration (2.2.54)
@@ -185,14 +189,14 @@ platforms:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -352,6 +356,16 @@ nodes:
     image: cqugns3/faucetnode:latest
     source: {type: local, path: faucetnode}
     templates: [docker-faucet]
+  # Wireless node: a simulated 802.11 radio + hostapd/wpa_supplicant. One image, two templates
+  # (Access Point, Station). Needs the mac80211_hwsim kernel module (above) and the host-side
+  # gns3-wifi-attach helper (server/wifi/) to move a radio into each node after Start — a GNS3 node
+  # cannot see the host's radios from inside its own netns. Derives from alpinenode (+~8 MB). Live
+  # design and spike in gns3-dev/notes/tier5-and-spike-designs.md, Design 1.
+  wifinode:
+    kind: docker
+    image: cqugns3/wifinode:latest
+    source: {type: local, path: wifinode}
+    templates: [docker-accesspoint, docker-station]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
