@@ -199,14 +199,14 @@ platforms:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode, giteanode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode]
+             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode, giteanode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -376,6 +376,15 @@ nodes:
     image: cqugns3/wifinode:latest
     source: {type: local, path: wifinode}
     templates: [docker-accesspoint, docker-station]
+  # Gitea git server (Git Server template). Its own image: Gitea is a ~133 MB Go binary + web-app
+  # assets, the "drags in a runtime the others do not need" case D2 splits on. SQLite built in, so no
+  # database node. Web UI on port 3000 (reach it from a Firefox Host), git over HTTP. Tier 2 Module
+  # 3b — see gns3-dev/notes/tier2-file-backup-git.md.
+  giteanode:
+    kind: docker
+    image: cqugns3/giteanode:latest
+    source: {type: local, path: giteanode}
+    templates: [docker-giteanode]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
