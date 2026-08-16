@@ -36,6 +36,7 @@ be run by hand, which is the quickest way to see what it can see:
 """
 import argparse
 import configparser
+import glob
 import json
 import os
 import sys
@@ -51,29 +52,81 @@ except ImportError:
 
 # Where gns3server keeps its config. The port matters and is not always the documented
 # default: this appliance serves the web UI on 80 so students can browse to the bare IP,
-# while a stock GNS3 VM uses 3080. Read it rather than guessing.
-GNS3_CONF = "~/.config/GNS3/2.2/gns3_server.conf"
-DEFAULT_PORT = 3080
+# while a stock GNS3 VM uses 3080. Read it rather than guessing — and do not hardcode *which*
+# file to read, which is how this broke once already. The GNS3 VM up to 2.2.54 left gns3server
+# on the user path below; the 2.2.61 VM starts it with `--config /opt/gns3/server/
+# gns3_server.conf`, and an explicit --config makes that the only file loaded. Reading the old
+# path there yields no `port` at all, so the service fell back to 3080, nothing was listening,
+# and every student saw "Connection refused" on a working appliance.
+USER_CONF = "~/.config/GNS3/2.2/gns3_server.conf"
+CANDIDATE_PORTS = (80, 3080)          # this appliance, then a stock GNS3 VM
 API_TIMEOUT = 5
+PROBE_TIMEOUT = 2
+
+
+def running_config():
+    """The `--config` path of the running gns3server, or None."""
+    for cmdline in glob.glob("/proc/[0-9]*/cmdline"):
+        try:
+            with open(cmdline, "rb") as f:
+                argv = f.read().decode("utf-8", "replace").split("\0")
+        except OSError:
+            continue                  # the process exited while we were walking /proc
+        if not any(a.endswith("gns3server") for a in argv):
+            continue
+        for i, a in enumerate(argv):
+            if a.startswith("--config="):
+                return a.split("=", 1)[1]
+            if a == "--config" and i + 1 < len(argv):
+                return argv[i + 1]
+    return None
+
+
+def config_port(path):
+    """`[Server] port` from an ini file, or None if the file or the key is absent."""
+    path = os.path.expanduser(path or "")
+    if not path or not os.path.exists(path):
+        return None
+    cp = configparser.ConfigParser(strict=False)
+    try:
+        cp.read(path)
+        return cp.getint("Server", "port")
+    except (configparser.Error, ValueError):
+        return None
+
+
+def answers(port):
+    """True if a GNS3 controller answers /v2/version on localhost:port."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:%d/v2/version" % port,
+                                    timeout=PROBE_TIMEOUT) as r:
+            return "version" in json.loads(r.read().decode())
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
 
 
 def default_api():
-    """Base URL of the controller on this VM: $GNS3_SERVER, else gns3_server.conf, else :3080."""
+    """Base URL of the controller on this VM.
+
+    $GNS3_SERVER wins, then the port named by the config file the running server was actually
+    given, then the historical user path, and finally the ports themselves — a live
+    /v2/version is the only answer that cannot be stale, and it is what makes this survive the
+    next time the VM's layout moves.
+
+    Always localhost: the controller may listen on 0.0.0.0, but this service only ever talks
+    to the one on its own machine.
+    """
     env = os.environ.get("GNS3_SERVER")
     if env:
         return env.rstrip("/")
-    port = DEFAULT_PORT
-    path = os.path.expanduser(GNS3_CONF)
-    if os.path.exists(path):
-        cp = configparser.ConfigParser(strict=False)
-        try:
-            cp.read(path)
-            port = cp.getint("Server", "port", fallback=DEFAULT_PORT)
-        except (configparser.Error, ValueError):
-            pass
-    # Always localhost: the controller may listen on 0.0.0.0, but this service only ever
-    # talks to the one on its own machine.
-    return "http://127.0.0.1:%d" % port
+    for path in (running_config(), USER_CONF):
+        port = config_port(path)
+        if port:
+            return "http://127.0.0.1:%d" % port
+    for port in CANDIDATE_PORTS:
+        if answers(port):
+            return "http://127.0.0.1:%d" % port
+    return "http://127.0.0.1:%d" % CANDIDATE_PORTS[0]
 
 
 class Consoles(BasePlugin):
@@ -89,10 +142,28 @@ class Consoles(BasePlugin):
     """
 
     def __init__(self, src=None):
-        BasePlugin.__init__(self, src or default_api())
-        self.base = self.source.rstrip("/")
+        BasePlugin.__init__(self, src or "")
+        # An explicit --api is a promise; anything else is a guess we are allowed to revise.
+        self.pinned = (src or "").rstrip("/") or None
+        self.base = self.pinned or default_api()
 
     def _get(self, path):
+        try:
+            return self._fetch(path)
+        except (urllib.error.URLError, OSError):
+            # The controller may not have been up when we resolved it — this service starts
+            # alongside gns3.service, not after it, and `Restart=always` means a wrong guess
+            # would otherwise stick for the life of the VM. Re-resolve once, then retry.
+            if self.pinned:
+                raise
+            base = default_api()
+            if base == self.base:
+                raise
+            print("gns3-novnc: controller re-resolved to %s" % base, file=sys.stderr)
+            self.base = base
+            return self._fetch(path)
+
+    def _fetch(self, path):
         with urllib.request.urlopen(self.base + path, timeout=API_TIMEOUT) as r:
             return json.loads(r.read().decode())
 
@@ -175,12 +246,12 @@ def main(argv=None):
     ap.add_argument("--web", default="/usr/local/share/gns3-novnc",
                     help="web root holding index.html and the novnc symlink")
     ap.add_argument("--api", default=None,
-                    help="GNS3 controller base URL (default: from gns3_server.conf)")
+                    help="GNS3 controller base URL, pinned (default: discover it)")
     ap.add_argument("--list", action="store_true",
                     help="print the VNC consoles this service can see, then exit")
     args = ap.parse_args(argv)
 
-    plugin = Consoles(args.api or default_api())
+    plugin = Consoles(args.api)
 
     if args.list:
         print("controller: %s" % plugin.base)

@@ -1194,6 +1194,67 @@ def cmd_labnic(args):
 # --------------------------------------------------------------------------- #
 # Phase: accel — Qemu hardware acceleration in gns3_server.conf   [run on the VM]
 # --------------------------------------------------------------------------- #
+def config_from_cmdline():
+    """The `--config` path of the running gns3server, or None.
+
+    Read from /proc rather than from a constant, because the constant has already gone stale
+    once. The GNS3 VM up to 2.2.54 left gns3server on its default user path; the 2.2.61 VM
+    runs it from a venv with an explicit `--config /opt/gns3/server/gns3_server.conf` — and
+    an explicit --config makes that file the *only* one loaded, so anything written to the
+    old path is read by nobody. The running process is the one answer that cannot be wrong.
+    """
+    for cmdline in Path("/proc").glob("[0-9]*/cmdline"):
+        try:
+            argv = cmdline.read_bytes().decode("utf-8", "replace").split("\0")
+        except OSError:
+            continue                      # the process exited while we were walking /proc
+        if not any(a.endswith("gns3server") for a in argv):
+            continue
+        for i, a in enumerate(argv):
+            if a.startswith("--config="):
+                return a.split("=", 1)[1]
+            if a == "--config" and i + 1 < len(argv):
+                return argv[i + 1]
+    return None
+
+
+def config_from_unit(unit="gns3.service"):
+    """The `--config` path in gns3.service's ExecStart, or None.
+
+    The fallback for a build run while the GNS3 service is down — `systemctl cat` reads the
+    unit file, so it answers whether or not anything is running.
+    """
+    r = subprocess.run(["systemctl", "cat", unit], stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, universal_newlines=True)
+    if r.returncode != 0:
+        return None
+    for line in r.stdout.splitlines():
+        if not line.strip().startswith("ExecStart"):
+            continue
+        argv = line.split("=", 1)[-1].split()
+        for i, a in enumerate(argv):
+            if a.startswith("--config="):
+                return a.split("=", 1)[1]
+            if a == "--config" and i + 1 < len(argv):
+                return argv[i + 1]
+    return None
+
+
+def server_config_path(fallback):
+    """(path, how) for the gns3_server.conf the server on this VM actually reads.
+
+    `fallback` is the manifest's `qemu_accel.config_file` — used only when nothing on the VM
+    names a config file, which on a stock appliance means gns3server is on its built-in
+    default path. Discovery wins over the manifest deliberately: a hardcoded path is exactly
+    what broke here, and a phase that writes a file nobody reads reports success while
+    changing nothing.
+    """
+    for how, found in (("process", config_from_cmdline()), ("unit", config_from_unit())):
+        if found:
+            return Path(os.path.expanduser(found)), how
+    return Path(os.path.expanduser(fallback)), "manifest"
+
+
 def ini_set(text, section, settings):
     """Set key=value inside an INI section, returning the new text.
 
@@ -1237,14 +1298,16 @@ def cmd_accel(args):
 
     See the long comment on `qemu_accel:` in the manifest for why `require_kvm` and not
     `enable_kvm`. Nothing is restarted: gns3server watches its config files and reloads.
+
+    The file is *discovered*, not assumed — see server_config_path().
     """
     m = load_manifest(args.manifest)
     cfg = m.get("qemu_accel") or {}
     if not cfg.get("settings"):
         print("  skip   no qemu_accel.settings in the manifest")
         return 0
-    path = Path(os.path.expanduser(cfg.get("config_file",
-                                           "~/.config/GNS3/2.2/gns3_server.conf")))
+    fallback = cfg.get("config_file", "~/.config/GNS3/2.2/gns3_server.conf")
+    path, how = server_config_path(fallback)
     section = cfg.get("section", "Qemu")
     settings = {k: ("true" if v is True else "false" if v is False else str(v))
                 for k, v in cfg["settings"].items()}
@@ -1254,6 +1317,8 @@ def cmd_accel(args):
     kvm = Path("/dev/kvm").exists()
     print(f"  host   /dev/kvm {'present — Qemu nodes run accelerated' if kvm else 'ABSENT'}"
           + ("" if kvm else " — Qemu nodes fall back to TCG emulation (minutes, not seconds)"))
+    print(f"  config {path} (from the running {how})" if how != "manifest"
+          else f"  config {path} (manifest fallback — no --config on this VM)")
 
     if not path.exists():
         # gns3server only watches files that existed when it started, so creating this one
@@ -1263,14 +1328,28 @@ def cmd_accel(args):
     old = path.read_text() if path.exists() else ""
     new = ini_set(old, section, settings)
     shown = ", ".join(f"{k} = {v}" for k, v in settings.items())
+
+    # A [Qemu] section in a file the server does not load is the failure this phase used to
+    # have, and it is invisible: everything downstream succeeds and the setting is simply
+    # absent. Name the stale file rather than deleting it — it may be hand-written.
+    stale = Path(os.path.expanduser(fallback))
+    if stale != path and stale.exists() and f"[{section}]" in stale.read_text():
+        print(f"  WARN   {stale} also has a [{section}] section and is NOT read by this "
+              f"server — it is ignored, not merged")
+
     if new == old:
         print(f"  skip   {path} already has [{section}] {shown}")
         return 0
     if args.dry_run:
         print(f"  [dry-run] set [{section}] {shown} in {path}")
         return 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(new)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(new)
+    except OSError:
+        # /opt/gns3/server is gns3-owned on the appliances seen so far, but a root-owned
+        # config is a plausible variation and is not a reason to fail the build.
+        sudo_write(path, new)
     print(f"  accel  [{section}] {shown} -> {path}")
     print("  note   picked up live (gns3server watches its config); no restart needed")
     return 0

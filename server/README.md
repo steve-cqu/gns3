@@ -232,7 +232,10 @@ shell you launched it from.
 
 **The VM:**
 
-- A stock GNS3 VM 2.2.54, running, with SSH reachable and the GNS3 API on **port 80**
+- A stock GNS3 VM, running, with SSH reachable and the GNS3 API on **port 80**. Built and
+  verified on 2.2.54 and 2.2.61; the two differ in where `gns3_server.conf` lives, which the
+  build discovers rather than assumes (see
+  [Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it))
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
 - About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
@@ -626,8 +629,7 @@ which is the whole thing this phase exists to prevent.
 
 ## Qemu hardware acceleration
 
-The `accel` phase writes a `[Qemu]` section into `~/.config/GNS3/2.2/gns3_server.conf` on the
-appliance:
+The `accel` phase writes a `[Qemu]` section into the appliance's `gns3_server.conf`:
 
 ```ini
 [Qemu]
@@ -673,6 +675,35 @@ node, regardless of the hardware. `require_kvm = false` returns `False` at that 
 reloads on change, so the phase writes the file and nothing else — the build still never
 restarts the GNS3 service. The one caveat is that only files present when the server started
 are watched; this file always exists on a stock appliance, and the phase warns if it does not.
+
+### Which `gns3_server.conf` — the phase discovers it
+
+**Do not assume the path.** It moved, and the assumption failed silently:
+
+| GNS3 VM | Server config |
+|---|---|
+| up to 2.2.54 | `~/.config/GNS3/2.2/gns3_server.conf` (gns3server's own default) |
+| 2.2.61 | `/opt/gns3/server/gns3_server.conf`, passed as `--config` from `gns3.service` |
+
+An explicit `--config` makes that file the **only** one loaded — `gns3.log` shows a single
+`Config file … loaded` line, and nothing merges the user path in. So on a 2.2.61 VM the phase
+was writing `require_kvm = false` into a file the server never reads: the build went green, the
+provenance recorded it, and the setting was absent. It costs nothing where `/dev/kvm` exists,
+which is most build hosts — and breaks every Qemu node on a Credential Guard laptop and on all
+of arm64, which is exactly the population this section exists to protect.
+
+The phase now reads the `--config` of the **running gns3server** (`/proc/<pid>/cmdline`), falls
+back to `gns3.service`'s `ExecStart` if the service is down, and only then to
+`qemu_accel.config_file` in the manifest. It prints which of the three answered:
+
+```
+  config /opt/gns3/server/gns3_server.conf (from the running process)
+  WARN   /home/gns3/.config/GNS3/2.2/gns3_server.conf also has a [Qemu] section and is NOT
+         read by this server — it is ignored, not merged
+```
+
+That `WARN` is the residue of the bug — a stale `[Qemu]` section an earlier build left behind.
+It is reported rather than deleted, since the file may be hand-written; it is inert either way.
 
 Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
 
@@ -815,9 +846,29 @@ http://<gns3-vm-ip>:6080/novnc/vnc.html?path=websockify/?token=Host2&autoconnect
 
 The page cannot ask the GNS3 API for the node list itself, which is why the service serves
 `/nodes.json`: `gns3server`'s CORS whitelist is six hardcoded origins (127.0.0.1 and
-localhost on 3080 and 4200, gns3.github.io), so a page served from `:6080` is refused. The
-service finds the API's own port by reading `[Server] port` from `gns3_server.conf` — this
-appliance serves the web UI on **80**, while a stock GNS3 VM uses 3080.
+localhost on 3080 and 4200, gns3.github.io), so a page served from `:6080` is refused.
+
+**Finding the API's port.** This appliance serves it on **80** so students can browse to the
+bare IP, while a stock GNS3 VM uses 3080 — so the service resolves it rather than assuming, in
+four steps: `$GNS3_SERVER`, then `[Server] port` from the config file the running gns3server
+was *given* (see [Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it)),
+then the same key at the historical user path, and finally by asking 80 and 3080 which one
+answers `/v2/version`. A live endpoint is the only answer that cannot go stale, and it is what
+should carry this across the next time the VM's layout moves.
+
+It also **re-resolves on failure**: the unit is `After=gns3.service` but not bound to it, so it
+can start first, and `Restart=always` means a wrong guess would otherwise stick until someone
+noticed. An explicit `--api` is treated as a promise and never overridden.
+
+Getting this wrong is what the page reports as
+
+```
+cannot reach the GNS3 server: <urlopen error [Errno 111] Connection refused>
+```
+
+which reads like a firewall or a dead controller and is neither — it is the gateway talking to
+a port nothing listens on. `journalctl -u gns3-novnc` names the port it chose, which settles it
+in one line.
 
 **Checking it.** On the VM:
 
@@ -1047,6 +1098,20 @@ clean VM snapshot. Add it to `projects.txt` only if it really should ship to eve
 
 **A node fails to start after a rebuild.** If you edited a Dockerfile, the image is only
 rebuilt with `--force` — an existing image is skipped by design.
+
+**`http://<vm-ip>:6080/` says "cannot reach the GNS3 server: … Connection refused".** The
+gateway is up (it is the page saying so) and pointed at the wrong port. Check which one it
+chose, and against what:
+
+```sh
+journalctl -u gns3-novnc -n 5      # "controller http://127.0.0.1:<port>"
+curl -s http://127.0.0.1/v2/version ; curl -s http://127.0.0.1:3080/v2/version
+```
+
+Since August 2026 the service resolves the port from the running server and falls back to
+probing both, so this should self-correct — a mismatch now means neither port answered, i.e.
+`gns3.service` is genuinely down. On an appliance built before that fix, on a 2.2.61 VM, it
+fell back to 3080 and stayed there; `gns3build.py novnc` installs the fixed module.
 
 **`projects` reports MISSING.** The named project is not under any root. Every project on
 `projects.txt` is committed to `gns3-dev`, so this normally means the private repo is not

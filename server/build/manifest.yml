@@ -119,6 +119,13 @@ host_scripts:
 # gns3server watches its config files (FileWatcher, mtime, 1 s) and live-reloads, so this needs
 # no service restart — the build still never restarts GNS3. The watch is only established for
 # files that existed at startup, which this one always does.
+#
+# `config_file` is a FALLBACK, not the answer. The phase discovers the file from the running
+# gns3server's `--config` (then from gns3.service's ExecStart) and only falls back to this path
+# when neither names one. That is not tidiness: the GNS3 VM moved the file between 2.2.54 and
+# 2.2.61, an explicit --config makes it the *only* file loaded, and a phase writing to the old
+# path reported success while changing nothing at all — leaving require_kvm unset on an
+# appliance whose whole reason for this section is that it must be set.
 qemu_accel:
   config_file: ~/.config/GNS3/2.2/gns3_server.conf
   section: Qemu
