@@ -206,14 +206,16 @@ platforms:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode, giteanode]
+             frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
+             giteanode]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
-             frrnode, netemnode, servicenode, monitornode, faucetnode, wifinode, giteanode]
+             frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
+             giteanode]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -334,6 +336,31 @@ nodes:
     image: cqugns3/netemnode:latest
     source: {type: local, path: netemnode}
     templates: [docker-netem]
+  # OpenWRT with the LuCI web interface, as a container rather than a Qemu VM. Built and verified
+  # live on amd64 16 August 2026 — see gns3-dev/notes/openwrt-docker-node.md for what was measured
+  # and why each line of the Dockerfile is there.
+  #
+  # TWO ENTRIES, ONE IMAGE. openwrt/rootfs publishes one architecture per tag rather than a
+  # multi-arch manifest, and build_args is per-node rather than per-profile, so the base tag has to
+  # come from a second node entry — the same shape the Qemu openwrt/openwrt-arm64 pair already uses.
+  # Both produce cqugns3/openwrtnode:latest and both register docker-openwrt, and each profile
+  # lists only its own.
+  #
+  # This does NOT yet retire the Qemu `openwrt` node: that template keeps the plain "OpenWRT" name
+  # and the projects that reference it. Retiring it is a follow-up, and worth doing — a Docker
+  # OpenWRT starts instantly, needs no /dev/kvm, and removes the -arm64 project variants.
+  openwrtnode:
+    kind: docker
+    image: cqugns3/openwrtnode:latest
+    source: {type: local, path: openwrtnode}
+    build_args: {OPENWRT_TAG: x86-64-24.10.8}
+    templates: [docker-openwrt]
+  openwrtnode-arm64:
+    kind: docker
+    image: cqugns3/openwrtnode:latest
+    source: {type: local, path: openwrtnode}
+    build_args: {OPENWRT_TAG: armsr-armv8-24.10.8}
+    templates: [docker-openwrt]
   # Network services: BIND and chrony, plus the Tier 5 services-and-operations group added
   # 15 August 2026 (PostgreSQL, Valkey, Kea DHCP, NetFlow, and fail2ban/monit/goaccess tooling).
   # One image behind several templates. A service gets its own *template* when it occupies its own

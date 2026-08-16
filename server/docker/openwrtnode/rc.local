@@ -1,0 +1,27 @@
+#!/bin/sh
+# Runs at the end of boot, from /etc/init.d/done. Failures here are ignored.
+#
+# Adopt the GNS3 node name, so LuCI's header — and every screenshot a student puts in a journal
+# or report — says "OpenWRT1" rather than the stock "OpenWrt" on every router in the topology.
+#
+# The node name CANNOT be read from /proc/sys/kernel/hostname: Docker sets that from the node
+# name, but OpenWRT's own boot then overwrites it from UCI, so by the time this script runs it
+# says "OpenWrt" again. PID 1's environment still carries Docker's original value, and that is
+# what is read here.
+#
+# The name is only applied while the UCI hostname is still the stock "OpenWrt", or is the name
+# this script set last time. A student who renames the router in LuCI keeps their name.
+
+gns3_name=$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^HOSTNAME=//p' | head -1)
+uci_name=$(uci -q get system.@system[0].hostname)
+last_applied=$(cat /etc/gns3-hostname 2>/dev/null)
+
+if [ -n "$gns3_name" ] && [ "$gns3_name" != "$uci_name" ] &&
+   { [ "$uci_name" = "OpenWrt" ] || [ "$uci_name" = "$last_applied" ]; }; then
+	uci -q set system.@system[0].hostname="$gns3_name"
+	uci -q commit system
+	echo "$gns3_name" > /etc/gns3-hostname
+	/etc/init.d/system reload >/dev/null 2>&1
+fi
+
+exit 0

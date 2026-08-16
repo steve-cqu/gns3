@@ -1,0 +1,38 @@
+#!/bin/sh
+# First-boot customisation, run by /etc/init.d/boot's uci_apply_defaults AFTER
+# /bin/config_generate has written /etc/config/network. Removed once it returns 0.
+#
+# /etc/config/network does not exist in the image — OpenWRT generates it on first boot from
+# /etc/board.d, and the x86 board matches nothing there, so config_generate falls back to
+# putting every detected interface in the lan bridge. That would give a GNS3 node with four
+# adapters a four-port bridge and no WAN, which is not what a router looks like.
+#
+# Put eth1 on its own as the WAN, matching the Qemu OpenWRT template's convention: Ethernet0 is
+# the LAN link, Ethernet1 the WAN link, Ethernet2 and Ethernet3 are spare. That makes the wan
+# firewall zone the image already ships (input REJECT, masquerading on) mean something, and it
+# is the shape students meet in every home router.
+
+# Take eth1 out of the lan bridge if config_generate put it there.
+lan_ports="$(uci -q get network.@device[0].ports)"
+if [ -n "$lan_ports" ]; then
+	kept=""
+	for p in $lan_ports; do
+		[ "$p" = "eth1" ] && continue
+		kept="${kept:+$kept }$p"
+	done
+	uci -q delete network.@device[0].ports
+	for p in $kept; do
+		uci add_list network.@device[0].ports="$p"
+	done
+fi
+
+# Add the WAN interface if config_generate did not make one.
+if ! uci -q get network.wan >/dev/null; then
+	uci set network.wan=interface
+	uci set network.wan.device='eth1'
+	uci set network.wan.proto='dhcp'
+fi
+
+uci commit network
+
+exit 0
