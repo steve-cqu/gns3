@@ -289,6 +289,12 @@ def cmd_validate(args):
             if key not in m["nodes"]:
                 problems.append(f"platform '{platform}': unknown node '{key}'")
 
+    # Host scripts installed to the VM must have a readable source relative to the manifest.
+    for s in m.get("host_scripts", []):
+        src = (m["_dir"] / s["src"]).resolve()
+        if not src.is_file():
+            problems.append(f"host_scripts: source not found: {src}")
+
     # Validate every referenced template file (parse + required fields).
     referenced = set()
     for platform in m["platforms"]:
@@ -591,6 +597,33 @@ def ensure_kernel_modules(mods, dry_run):
         print(f"  module {mod:12} {state}")
 
 
+def install_host_scripts(m, dry_run):
+    """Install helper scripts the VM HOST needs (not a node) to /usr/local/bin, executable.
+
+    Some node features have a host-side companion that a container cannot provide from inside its
+    own namespace -- e.g. the wireless nodes need `gns3-wifi-attach` to move a simulated radio into
+    each node after the topology starts. Listed in the manifest's `host_scripts:` so a fresh
+    appliance carries them; idempotent (sudo_write no-ops when the content already matches)."""
+    scripts = m.get("host_scripts", [])
+    if not scripts:
+        return
+    print("\nHost scripts:")
+    for s in scripts:
+        src = (m["_dir"] / s["src"]).resolve()
+        dst = s["dst"]
+        if dry_run:
+            print(f"  [dry-run] install {src.name} -> {dst} (0755)")
+            continue
+        try:
+            text = src.read_text()
+        except OSError as e:
+            print(f"  FAIL   {dst}: cannot read {src} ({e})")
+            continue
+        changed = sudo_write(dst, text)
+        subprocess.run(["sudo", "chmod", "0755", dst], check=False)
+        print(f"  {'installed' if changed else 'current  '}  {dst}")
+
+
 def docker_context(m, node, tmpdir):
     """Build-context directory for a node; registry sources are fetched into tmpdir."""
     src = node["source"]
@@ -656,6 +689,7 @@ def cmd_docker(args):
 
     print("Kernel modules:")
     ensure_kernel_modules(m.get("kernel_modules", []), args.dry_run)
+    install_host_scripts(m, args.dry_run)
 
     print("\nImages:")
     built = skipped = 0

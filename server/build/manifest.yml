@@ -84,6 +84,14 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936
 #                    — linux-modules-extra is not needed.
 kernel_modules: [wireguard, sch_netem, mac80211_hwsim]
 
+# Helper scripts the VM HOST needs (installed to /usr/local/bin by the `docker` phase, executable).
+# A container cannot provide these from inside its own namespace.
+#   gns3-wifi-attach - moves a mac80211_hwsim radio into each wireless node after the topology
+#                      starts; the wireless activity's one host-side step. Paths are relative to
+#                      this manifest file.
+host_scripts:
+  - {src: ../wifi/gns3-wifi-attach.sh, dst: /usr/local/bin/gns3-wifi-attach}
+
 # Qemu hardware acceleration, written into gns3_server.conf's [Qemu] section by the `accel`
 # phase. Read gns3server/compute/qemu/qemu_vm.py:_run_with_hardware_acceleration (2.2.54)
 # before changing any of this — the defaults are a trap in two separate ways.

@@ -19,7 +19,9 @@ IMAGE=cqugns3/wifinode:latest
 RADIOS=${GNS3_WIFI_RADIOS:-4}          # how many radios to create if the module is not loaded yet
 API=${GNS3_SERVER:-http://localhost}   # only needed to resolve a project NAME to its id
 
-log(){ echo "gns3-wifi-attach: $*"; }
+# Progress/diagnostics go to STDERR, so they never pollute a function's stdout when it is captured
+# in a command substitution (wifi_containers below is read that way).
+log(){ echo "gns3-wifi-attach: $*" >&2; }
 
 # --- run iw in the HOST net+pid namespace, using the wifinode image's iw binary ---
 hostiw(){ docker run --rm --net=host --pid=host --privileged "$IMAGE" iw "$@"; }
@@ -59,12 +61,20 @@ wifi_containers(){
     local ids
     ids=$(docker ps --filter "ancestor=$IMAGE" --format '{{.ID}} {{.Names}}')
     if [ -n "$1" ]; then
-        # resolve project name -> id via the API, then keep only that project's containers
+        # Resolve project NAME (or id) -> project id via the API, then keep only that project's
+        # containers (their GNS3 name embeds the id: GNS3.<node>.<project_id>). python3 is on the
+        # GNS3 VM; parsing the JSON with it is robust where a grep/tr pipeline is not.
         local pid
-        pid=$(curl -s "$API/v2/projects" 2>/dev/null \
-              | tr ',' '\n' | grep -B1 "\"name\": \"$1\"" | grep project_id \
-              | head -1 | cut -d'"' -f4)
-        if [ -z "$pid" ]; then log "WARNING: project '$1' not found via $API — attaching to all wifi nodes"; echo "$ids"; return; fi
+        pid=$(curl -s "$API/v2/projects" 2>/dev/null | python3 -c \
+              "import json,sys
+a='$1'
+try: ps=json.load(sys.stdin)
+except Exception: ps=[]
+print(next((p['project_id'] for p in ps if a in (p.get('name'),p.get('project_id'))), ''))" 2>/dev/null)
+        if [ -z "$pid" ]; then
+            log "WARNING: project '$1' not found via $API — attaching to all wifi nodes"
+            echo "$ids"; return
+        fi
         echo "$ids" | grep "$pid"
     else
         echo "$ids"
