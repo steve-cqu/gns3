@@ -36,9 +36,17 @@ mkdir -p /var/lib/grafana /var/log/grafana
 echo "Starting Grafana..."
 grafana-server --homepath="$HOMEPATH" --config="$CONF" >"$LOG" 2>&1 &
 
-# Grafana takes a few seconds to migrate its database and bind the port on first start.
-echo "Waiting for Grafana to come up..."
-for i in $(seq 1 20); do
+# Grafana migrates its database and installs its bundled plugins before it binds the port.
+#
+# 20 seconds was not enough, and the failure was a lie: on a GNS3 VM with ONE vCPU, Grafana
+# 12.4.4 took ~90 s to answer (measured 17 Aug 2026 on a 1-core 20.04 VM — the plugin installs
+# alone, grafana-pyroscope-app and friends, run most of a second each). The old loop gave up at
+# 20 s and printed "Grafana did not answer on port 3000" with a `tail` of a log holding one
+# irrelevant line, so a student on a slower machine was told the node was broken while it was
+# still starting normally. Connection-refused returns instantly, so this loop costs nothing
+# where Grafana is quick.
+echo "Waiting for Grafana to come up (up to 2 minutes on a slow or single-core VM)..."
+for i in $(seq 1 120); do
     if curl -s -o /dev/null -m 2 "http://localhost:3000/login"; then
         break
     fi
@@ -59,8 +67,14 @@ if curl -s -o /dev/null -m 2 "http://localhost:3000/login"; then
     echo
     echo "Log: $LOG  (and /var/log/grafana/grafana.log)"
     echo "Dashboards are stored in /var/lib/grafana/grafana.db and survive a project close."
+elif pgrep -f 'grafana server' >/dev/null 2>&1; then
+    # Alive but not listening yet. That is slow, not broken, and saying so is the difference
+    # between a student waiting a minute and a student rebuilding a working node.
+    echo "Grafana is still starting (the process is running but port 3000 is not open yet)."
+    echo "Give it another minute, then check with:  monitor-status.sh"
+    echo "Watch it finish with:  tail -f /var/log/grafana/grafana.log"
 else
-    echo "Grafana did not answer on port 3000. Last lines of $LOG:"
-    tail -20 "$LOG"
+    echo "Grafana exited instead of starting. Last lines of /var/log/grafana/grafana.log:"
+    tail -20 /var/log/grafana/grafana.log 2>/dev/null || tail -20 "$LOG"
     exit 1
 fi

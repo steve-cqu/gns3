@@ -1092,16 +1092,45 @@ module *paths* differ (`fs/cifs` vs `fs/smb/client`, `wireless/` vs `wireless/vi
 phase modprobes by name, so that is invisible. `eth0/eth1/eth2` naming holds on both, so
 `labnic` is safe, and the `apt-daily*` units `quiesce` masks exist on both.
 
-What is worth actually re-testing on a 20.04 appliance rather than assuming:
+#### Measured on 20.04, 17 August 2026
 
-- **noVNC 1.0.0 vs 1.6.0** — six years of clipboard, scaling and keyboard handling. The most
-  student-visible item on this list; open a VNC node in a browser rather than trusting a green
-  `novnc` phase, which only proves files were copied.
-- **The wireless node.** The multi-AP / bridged-AP / WPA3-SAE capabilities were probed on the
-  7.0 kernel's `mac80211_hwsim` (`gns3-dev/notes/wireless-node-capabilities.md`). SAE lives in
-  the container's hostapd, but hwsim itself is six years older here.
-- **`monitornode`** — anything reading `/sys/fs/cgroup` sees a v1 hierarchy on 20.04.
-- **Qemu 8.0 vs 10.2** for the OPNsense UEFI node.
+Keep the scale of this in perspective: **20.04 is not a new risk for the Mac appliance, it is
+the status quo.** Every arm64 build there has ever been ran on this stack, because 2.2.54 is
+the only ARM64 VM there has ever been. What was untested was the node set added since the last
+Mac build — Tier 1, Tier 5, OpenWRT, Gitea, wireless, Faucet. So that is what was checked, on a
+20.04 amd64 VM standing in for the Mac (same OS, Docker, kernel and cgroup version; only the
+architecture differs).
+
+| Check | Result |
+|---|---|
+| Rebuild every locally-authored image | **built 15, skipped 0, failed 0** |
+| `readiness.sh` in each image | **READY** for all 12 that have a profile, 0 MISS, 0 FAIL |
+| Kernel modules the phase loads | `wireguard`, `sch_netem`, `mac80211_hwsim` all loaded on 5.15 |
+| noVNC end to end | VNC node started → picker listed it → websocket **101** → `RFB 003.008` banner returned through websockify 0.9.0 / noVNC 1.0.0 |
+| Wireless, WPA2 | `gns3-wifi-attach` moved a phy into each node; station associated, CCMP, ping across the link |
+| Wireless, WPA3-SAE | `key_mgmt=SAE`, `pmf=2`, `wpa_state=COMPLETED`, AP shows `[MFP]` — matching the 7.0 kernel result |
+| `monitornode` on cgroup v1 | all four services up; `node_exporter` serves 489 `node_*` metrics; Prometheus target healthy |
+| OpenWRT node | LuCI CGI present, `askconsole` inittab, `fw4`/`nft`, uci-defaults hook, 24.10.8 |
+
+Two things came out of it:
+
+- **A real defect, now fixed.** `start-grafana.sh` waited 20 s for Grafana to bind port 3000.
+  On a **one-vCPU** VM Grafana 12.4.4 takes ~90 s (plugin installs), so the script declared
+  "Grafana did not answer on port 3000" and exited 1 on a node that was starting perfectly
+  normally. The wait is now 120 s, and a timeout with the process still alive says *still
+  starting* instead of failing. Re-measured on the same 1-vCPU VM: `All four are up`, 1m13s.
+  Nothing to do with 20.04 — the 26.04 VM simply had two cores and got under the old limit.
+- **`frrnode` and `netemnode` have no `readiness.sh` profile** and exit 2 ("unknown image
+  type"). Not a 20.04 issue; a gap in the checker worth closing in `gns3-dev`.
+
+Still not covered, and honestly so:
+
+- **The noVNC 1.0.0 browser UI.** The transport is proven; six years of clipboard, scaling and
+  keyboard handling are not. That needs a human with a browser.
+- **Qemu 8.0 vs 10.2.** Less relevant than it first appeared: the amd64 `qemu-opnsense`
+  template uses no UEFI at all (`options` empty, no `bios_image`). The `-bios
+  /usr/share/qemu-efi-aarch64/QEMU_EFI.fd` path exists only in `qemu-opnsense-arm64`, which can
+  only be exercised on a Mac — where it has always run on this same Qemu.
 
 The **bundled web UI** also differs — 2.2.54 bundles web-ui 2.2.54, 2.2.61 bundles web-ui 2.2.58
 (the last bump in that range; the two VMs' bundle hashes confirm they are different builds).

@@ -378,8 +378,19 @@ nodes:
   # Appending the digest of the single image manifest inside that index sidesteps the platform
   # match entirely: buildkit filters on platform only when it has to choose *within* an index, so
   # a ref that already names one manifest is fetched as-is. `repo:tag@sha256:…` is a legal
-  # reference and the digest wins; the tag is kept for readability. Re-resolve it when bumping the
-  # OpenWRT release:
+  # reference and the digest wins; the tag is kept for readability.
+  #
+  # PROVEN, 17 Aug 2026, on a Docker 28.1.1 host, both halves back to back with `--platform
+  # linux/arm64/v8`: the plain tag reproduces the Mac's exact error, the digest form builds. The
+  # digest build emits one warning and it is the expected one, not a problem —
+  #   InvalidBaseImagePlatform: Base image … was pulled with platform "linux/aarch64_generic",
+  #   expected "linux/arm64" for current build
+  # — and the *output* image is stamped `Architecture=arm64 Os=linux`, because buildkit takes the
+  # built image's platform from the build request rather than from the base image's bogus label.
+  # That is what matters: GNS3 and Docker on the Mac see a normal arm64 image. The RUN steps were
+  # not exercised (an amd64 host has no arm64 binfmt handler); they run natively on the Mac.
+  #
+  # Re-resolve the digest when bumping the OpenWRT release:
   #   docker buildx imagetools inspect openwrt/rootfs:<tag> --raw   # or the registry API
   # and take the digest of the manifests[] entry whose platform.os is linux.
   openwrtnode-arm64:
