@@ -437,7 +437,8 @@ python3 server/build/gns3build.py freeze --profile amd64 \
         --out /home/gns3/frozen-v030-amd64.tar.gz
 ```
 
-That `docker save`s every image the profile ships (16 on amd64) through gzip in one pass, and
+That `docker save`s every image the profile ships (20 on amd64, checked 17 Aug 2026 — take it
+from `plan --profile amd64` rather than this line) through gzip in one pass, and
 writes a `.json` sidecar recording the profile, the date, the archive's sha256 and **each
 image's ID** — two archives can carry the same `:latest` tags and different bytes, and the
 sidecar is what says which. Keep both files with the OVA.
