@@ -355,11 +355,39 @@ nodes:
     source: {type: local, path: openwrtnode}
     build_args: {OPENWRT_TAG: x86-64-24.10.8}
     templates: [docker-openwrt]
+  #
+  # THE ARM TAG MUST BE PINNED BY DIGEST, AND THAT IS NOT A RE-BUILD-PROOFING PREFERENCE.
+  # openwrt/rootfs labels each tag with OpenWRT's *package architecture*, not an OCI one, and
+  # containerd's arch normaliser only rescues the x86 case (checked against the live registry
+  # 17 Aug 2026):
+  #
+  #   x86-64-24.10.8            architecture: amd64               <- normalises, matches linux/amd64
+  #   x86_64-24.10.8            architecture: amd64
+  #   armsr-armv8-24.10.8       architecture: aarch64_generic     <- normalises to nothing
+  #   aarch64_generic-24.10.8   architecture: aarch64_generic
+  #   armsr-armv8 (snapshot)    architecture: aarch64_generic
+  #   armsr-armv8-23.05.5       architecture: aarch64_generic
+  #   armsr-armv7-24.10.8       architecture: arm_cortex-a15_neon-vfpv4
+  #
+  # `aarch64` would normalise to arm64; `aarch64_generic` does not, and OpenWRT has no plain
+  # `aarch64` package arch, so NO arm tag of this image will ever match `--platform linux/arm64/v8`.
+  # A plain tag fails the first arm64 build with
+  #   ERROR: failed to solve: openwrt/rootfs:armsr-armv8-24.10.8: no match for platform in manifest
+  # which is what the 17 Aug 2026 Mac build hit. Nothing to do with the GNS3 version on the VM.
+  #
+  # Appending the digest of the single image manifest inside that index sidesteps the platform
+  # match entirely: buildkit filters on platform only when it has to choose *within* an index, so
+  # a ref that already names one manifest is fetched as-is. `repo:tag@sha256:…` is a legal
+  # reference and the digest wins; the tag is kept for readability. Re-resolve it when bumping the
+  # OpenWRT release:
+  #   docker buildx imagetools inspect openwrt/rootfs:<tag> --raw   # or the registry API
+  # and take the digest of the manifests[] entry whose platform.os is linux.
   openwrtnode-arm64:
     kind: docker
     image: cqugns3/openwrtnode:latest
     source: {type: local, path: openwrtnode}
-    build_args: {OPENWRT_TAG: armsr-armv8-24.10.8}
+    build_args:
+      OPENWRT_TAG: "armsr-armv8-24.10.8@sha256:f6dd33c1d9b7d6f1e0848f2fbb92b8d03fc9b425dc08c3574a44936b93133704"
     templates: [docker-openwrt]
   # Network services: BIND and chrony, plus the Tier 5 services-and-operations group added
   # 15 August 2026 (PostgreSQL, Valkey, Kea DHCP, NetFlow, and fail2ban/monit/goaccess tooling).

@@ -28,6 +28,11 @@
 # than a multi-arch manifest — so the manifest carries two node entries (openwrtnode and
 # openwrtnode-arm64) that differ only in this build arg and both produce this image name. That
 # mirrors what the Qemu openwrt/openwrt-arm64 entries already do.
+#
+# The arm value MUST carry a `@sha256:…` digest: every arm tag of this image is labelled with
+# OpenWRT's package architecture (`aarch64_generic`), which no Docker platform string matches, so
+# a plain tag fails with "no match for platform in manifest". See the long note above
+# openwrtnode-arm64 in server/build/manifest.yml.
 ARG OPENWRT_TAG=x86-64-24.10.8
 FROM openwrt/rootfs:${OPENWRT_TAG}
 

@@ -1294,6 +1294,75 @@ def ini_set(text, section, settings):
     return "\n".join(lines) + "\n"
 
 
+# The GNS3 VM's console screen, run from ~/.bash_profile on every interactive login —
+# including the auto-login on tty1 that students read the VM's IP address off, which both
+# getting-started guides tell them to do.
+WELCOME_SCRIPT = "/usr/local/bin/gns3welcome.py"
+WELCOME_BAD = "    except configparser.NoSectionError:\n"
+WELCOME_GOOD = "    except (configparser.NoSectionError, configparser.NoOptionError):\n"
+
+
+def patch_welcome_kvm_guard(dry_run=False, script=WELCOME_SCRIPT):
+    """Stop gns3welcome.py crashing on the [Qemu] section this phase just wrote.
+
+    `kvm_control()` in gns3welcome.py does:
+
+        config = get_server_config()                       # RawConfigParser on
+                                                           # /opt/gns3/server/gns3_server.conf
+        try:
+            if config.getboolean("Qemu", "enable_kvm") is True:
+                ...
+        except configparser.NoSectionError:
+            return
+
+    On a stock VM there is no [Qemu] section, so that raises NoSectionError, is caught, and
+    the check quietly does nothing. Once this phase writes `require_kvm`, the section exists
+    but `enable_kvm` does not — which raises **NoOptionError**, which nothing catches. The
+    script then dies with a traceback after printing the info box, and `.bash_profile` follows
+    it with "Please run 'sudo gns3restore' in case the menu is no longer showing". Students
+    still get the IP address; they also get a Python traceback telling them the appliance is
+    broken. Found 17 Aug 2026 on a 2.2.61 VM built 15 Aug, i.e. it was already shipping.
+
+    Only 2.2.61-class VMs are affected, and the reason is worth knowing: gns3welcome.py
+    hardcodes /opt/gns3/server/gns3_server.conf, which on a 2.2.54 VM does not exist (the
+    server runs without --config and this phase writes the user path instead), so the read
+    yields an empty config and NoSectionError still wins. Patching there is a harmless no-op
+    and guards against the config path moving again, so it is not conditional.
+
+    Widening the guard is the fix rather than also writing `enable_kvm`, because every value
+    of that key makes things worse. `enable_kvm = true` makes kvm_control() offer students on
+    a machine without /dev/kvm a "Disable KVM and get lower performance?" dialog, and
+    accepting writes `enable_kvm = false` and reboots — which overrides require_kvm and turns
+    acceleration off unconditionally, exactly the setting the manifest warns against.
+    `enable_kvm = false` produces the mirror-image dialog wherever /dev/kvm *does* exist.
+    Absent the key, the guard returns early and asks nothing, which is the stock behaviour.
+
+    This is a GNS3 bug (the same file catches NoOptionError correctly at line ~290) and worth
+    reporting upstream; until then the appliance carries the one-line repair.
+    """
+    p = Path(script)
+    if not p.exists():
+        return
+    src = p.read_text()
+    if WELCOME_GOOD in src:
+        print(f"  welcome {p} already tolerates [Qemu] without enable_kvm")
+        return
+    found = src.count(WELCOME_BAD)
+    if found != 1:
+        print(f"  WARN   {p}: expected 1 kvm_control() guard to widen, found {found} — "
+              f"NOT patched. Check whether the console screen still works after this build.")
+        return
+    if dry_run:
+        print(f"  [dry-run] widen the kvm_control() guard in {p}")
+        return
+    new = src.replace(WELCOME_BAD, WELCOME_GOOD)
+    try:
+        p.write_text(new)
+    except OSError:
+        sudo_write(p, new)
+    print(f"  welcome {p} kvm_control() now catches NoOptionError too")
+
+
 def cmd_accel(args):
     """Write the [Qemu] acceleration settings that keep Qemu nodes startable everywhere.
 
@@ -1340,19 +1409,22 @@ def cmd_accel(args):
 
     if new == old:
         print(f"  skip   {path} already has [{section}] {shown}")
-        return 0
-    if args.dry_run:
+    elif args.dry_run:
         print(f"  [dry-run] set [{section}] {shown} in {path}")
-        return 0
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(new)
-    except OSError:
-        # /opt/gns3/server is gns3-owned on the appliances seen so far, but a root-owned
-        # config is a plausible variation and is not a reason to fail the build.
-        sudo_write(path, new)
-    print(f"  accel  [{section}] {shown} -> {path}")
-    print("  note   picked up live (gns3server watches its config); no restart needed")
+    else:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(new)
+        except OSError:
+            # /opt/gns3/server is gns3-owned on the appliances seen so far, but a root-owned
+            # config is a plausible variation and is not a reason to fail the build.
+            sudo_write(path, new)
+        print(f"  accel  [{section}] {shown} -> {path}")
+        print("  note   picked up live (gns3server watches its config); no restart needed")
+
+    # Unconditional, including on the skip path: the [Qemu] section this phase owns is what
+    # breaks the console screen, and it is just as present on a re-run that changed nothing.
+    patch_welcome_kvm_guard(dry_run=args.dry_run)
     return 0
 
 

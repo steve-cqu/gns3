@@ -236,6 +236,14 @@ shell you launched it from.
   verified on 2.2.54 and 2.2.61; the two differ in where `gns3_server.conf` lives, which the
   build discovers rather than assumes (see
   [Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it))
+- **arm64 is capped at 2.2.54, and that is upstream's decision, not a choice made here.**
+  GNS3 ships the ARM64 VM as a release asset on `GNS3/gns3-gui`, and
+  `GNS3.VM.ARM64.2.2.54.zip` (v2.2.54, 21 Apr 2025) is the last one: every release from 2.2.55
+  on carries only the Hyper-V, KVM, VirtualBox, ESXi and VMware Workstation images, and the
+  ARM64 image in the older `GNS3/gns3-vm` repo stops at v0.15.0 (Feb 2024). Checked against the
+  releases API 17 Aug 2026. So the two appliances are built on different GNS3 versions, and the
+  build supports that rather than levelling them down — see
+  [Two appliances, two GNS3 versions](#two-appliances-two-gns3-versions)
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
 - About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
@@ -726,6 +734,52 @@ the OVA. `provenance` re-reads the file and fails if it did not — see
 
 Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
 
+### The phase also repairs the console screen
+
+Writing `require_kvm` **creates a `[Qemu]` section where a stock VM has none**, and that alone
+breaks `/usr/local/bin/gns3welcome.py` — the blue info screen, run from `~/.bash_profile` on
+every interactive login, which both getting-started guides tell students to read the VM's IP
+address off. Its `kvm_control()` ends:
+
+```python
+        if config.getboolean("Qemu", "enable_kvm") is True:
+            ...
+    except configparser.NoSectionError:
+        return
+```
+
+No section → `NoSectionError` → caught → the check quietly does nothing. Section present but no
+`enable_kvm` key → **`NoOptionError`**, which nothing catches. Students get the info box, then a
+Python traceback, then `.bash_profile`'s "Please run 'sudo gns3restore' in case the menu is no
+longer showing". The IP is still readable, so it is cosmetic — but it reads as a broken
+appliance. Found 17 Aug 2026 on a 2.2.61 VM built on the 15th, i.e. already shipping.
+
+The phase now widens that guard to `except (configparser.NoSectionError,
+configparser.NoOptionError):`, which restores the stock "say nothing" behaviour. It is
+idempotent, runs on the skip path too, and refuses to touch the file if the line it expects is
+not there exactly once:
+
+```
+  welcome /usr/local/bin/gns3welcome.py kvm_control() now catches NoOptionError too
+  welcome /usr/local/bin/gns3welcome.py already tolerates [Qemu] without enable_kvm
+```
+
+**Only 2.2.61-class VMs are affected**, for a reason worth knowing: `gns3welcome.py` hardcodes
+`/opt/gns3/server/gns3_server.conf`, which does not exist on a 2.2.54 VM (no `--config`, so
+this phase writes the user path instead). The read returns an empty config and `NoSectionError`
+still wins. The repair is applied there anyway — harmless, and it guards against the config
+path moving a third time.
+
+**Do not "fix" this by also writing `enable_kvm`.** Any value makes it worse. `true` makes
+`kvm_control()` offer a student on a machine without `/dev/kvm` a *"Disable KVM and get lower
+performance?"* dialog, and accepting writes `enable_kvm = false` and reboots — the setting the
+manifest explicitly warns against, since it overrides `require_kvm` and disables acceleration
+unconditionally. `false` produces the mirror-image dialog wherever `/dev/kvm` does exist. With
+the key absent, the guard returns early and asks nothing.
+
+This is a GNS3 bug — the same file catches `NoOptionError` correctly ~280 lines earlier — and
+is worth reporting upstream.
+
 ---
 
 ## What survives a project being closed
@@ -972,15 +1026,104 @@ ssh gns3@<vm-ip> 'uname -m; df -h /opt'       # expect aarch64 and ~10 GB free
 `aarch64` is the one that matters: the `arm64` profile builds Docker images **on the VM** so
 they come out native, which only holds if the VM really is arm64.
 
-A correct `arm64` build installs 14 Docker images, **3** Qemu disks and 18 templates
-— three rather than the PC build's four because FRR and NETem are Docker on both
-platforms. The disks should all be arm64 variants:
+A correct `arm64` build installs 20 Docker images, **3** Qemu disks and 33 templates
+— three disks rather than the four the PC build once needed, because FRR and NETem are Docker
+on both platforms. Take the counts from `gns3build.py plan --profile arm64` rather than from
+this line, which has gone stale twice as nodes were added. The disks should all be arm64
+variants:
 
 ```
 openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img
 OPNsense-24.1-ufs-efi-vm-aarch64.qcow2
 ubuntu-24.04-server-cloudimg-arm64.img
 ```
+
+### Two appliances, two GNS3 versions
+
+The PC appliance is built on a **2.2.61** VM and the Mac appliance on a **2.2.54** one, because
+2.2.54 is the last GNS3 release that shipped an ARM64 VM image at all (see
+[Before you start](#before-you-start) for the evidence). That split is deliberate and it is not
+a problem, for one reason:
+
+**Students never run the GNS3 desktop client.** Both `vm/getting-started-pc.md` and
+`vm/getting-started-mac.md` send them to the web UI the appliance serves on port 80 — the only
+software they install is the hypervisor. So the version check that would otherwise force the
+issue never runs. In GNS3 2.2 that check is a hard refusal, not a warning
+(`gns3-gui/gns3/http_client.py:437-448`, read at tag v2.2.61):
+
+```python
+if parse_version(__version__)[:3] != parse_version(params["version"])[:3]:
+    # "Client version 2.2.61 is not the same as server (controller) version 2.2.54"
+```
+
+Only a fourth component may differ (2.2.32 vs 2.2.32.1, which downgrades to a warning). So
+**anyone who does use the desktop client — staff, mostly — must install the client matching the
+appliance they are pointing it at**: 2.2.61 for a PC appliance, 2.2.54 for a Mac one, both
+still downloadable from their respective `GNS3/gns3-gui` release pages.
+
+Levelling the PC appliance back down to 2.2.54 would buy nothing students can see, and would
+give up the 2.2.55–2.2.61 fixes: a project-import symlink-traversal fix (2.2.61, and students
+import projects from Moodle), Docker container-naming and stop-state fixes (2.2.55, 2.2.60,
+2.2.61), and a telnet console hang fix (2.2.59) — consoles being the thing every activity uses.
+
+#### The GNS3 version is the smallest of the differences
+
+The appliances are two Ubuntu LTS releases and a kernel generation apart, which matters far more
+than the server version does. Measured on both live VMs, 18 Aug 2026:
+
+| | 2.2.54 VM | 2.2.61 VM |
+|---|---|---|
+| Ubuntu | **20.04.6 LTS** (standard support ended May 2025) | **26.04 LTS** |
+| Kernel | 5.15.0-136 | 7.0.0-28 |
+| Docker | 28.1.1, `overlay2` | 29.6.2, `overlayfs` (containerd snapshotter) |
+| cgroups | **v1**, `cgroupfs` driver | **v2**, `systemd` driver |
+| containerd | 1.7.27 | 2.2.6 |
+| Qemu | 8.0.4 | 10.2.1 |
+| noVNC | 1.0.0 (2018) | 1.6.0 |
+| System python3 | 3.8.10 | 3.14.4 |
+| gns3server venv python | 3.9.5 | 3.14 |
+| `gns3server` invocation | venv, **no** `--config` | venv, `--config /opt/gns3/server/…` |
+
+What this does **not** break: the node images. They are built natively on whichever VM they are
+destined for, and a container's userspace depends on the kernel, not the host distribution —
+Alpine 3.24, Ubuntu 24.04 and Debian bookworm all run on 5.15. All four `kernel_modules:`
+(`wireguard`, `sch_netem`, `mac80211_hwsim`, `cifs`) are present on the 20.04 kernel too; the
+module *paths* differ (`fs/cifs` vs `fs/smb/client`, `wireless/` vs `wireless/virtual/`) but the
+phase modprobes by name, so that is invisible. `eth0/eth1/eth2` naming holds on both, so
+`labnic` is safe, and the `apt-daily*` units `quiesce` masks exist on both.
+
+What is worth actually re-testing on a 20.04 appliance rather than assuming:
+
+- **noVNC 1.0.0 vs 1.6.0** — six years of clipboard, scaling and keyboard handling. The most
+  student-visible item on this list; open a VNC node in a browser rather than trusting a green
+  `novnc` phase, which only proves files were copied.
+- **The wireless node.** The multi-AP / bridged-AP / WPA3-SAE capabilities were probed on the
+  7.0 kernel's `mac80211_hwsim` (`gns3-dev/notes/wireless-node-capabilities.md`). SAE lives in
+  the container's hostapd, but hwsim itself is six years older here.
+- **`monitornode`** — anything reading `/sys/fs/cgroup` sees a v1 hierarchy on 20.04.
+- **Qemu 8.0 vs 10.2** for the OPNsense UEFI node.
+
+The **bundled web UI** also differs — 2.2.54 bundles web-ui 2.2.54, 2.2.61 bundles web-ui 2.2.58
+(the last bump in that range; the two VMs' bundle hashes confirm they are different builds).
+That is what students look at, so check the screenshots in `vm/using-gns3.md` against the other
+appliance when either is rebuilt.
+
+#### Why not just upgrade the ARM VM's gns3server to 2.2.61
+
+It would probably install — both VMs run gns3server from their own venv, the 2.2.54 VM's venv is
+on **Python 3.9.5**, and 2.2.61 requires `>=3.9` (2.2.56.1 dropped 3.8, which is why the *system*
+python3 on 20.04 could not host it). But it buys the version number and nothing else: the VM
+stays on Ubuntu 20.04, kernel 5.15, Docker 28, cgroup v1 and noVNC 1.0.0, which is where every
+difference in the table above actually lives. It also makes the Mac appliance non-stock, and
+"a stock GNS3 VM" is the assumption the whole build starts from. Not recommended.
+
+Levelling the *other* way — putting the PC appliance back on 2.2.54 — is worse than the version
+number suggests for the same reason: it would move the PC build back to Ubuntu 20.04, whose
+standard support ended in May 2025.
+
+`manifest.yml` carries a single `gns3_version:` used only as `manifest_expects` in provenance,
+so an arm64 build silently records `controller_version: 2.2.54` against `manifest_expects:
+2.2.61`. Read the pair, not either alone.
 
 ### Mac limitations
 
