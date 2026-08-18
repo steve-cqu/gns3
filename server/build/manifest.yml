@@ -86,6 +86,22 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936
 #                    (smbclient needs no module; mounting does). From the base linux-modules package.
 kernel_modules: [wireguard, sch_netem, mac80211_hwsim, cifs]
 
+# Host kernel settings the Docker nodes need, applied and persisted by the same phase. A container
+# shares the VM's kernel and cannot set these from inside its own namespace.
+#
+#   net.netfilter.nf_log_all_netns - let a firewall rule's `log` action actually produce output.
+#     Netfilter's logging API is not namespace-aware, so the kernel SILENTLY DISCARDS log messages
+#     from any network namespace but the initial one, to stop containers spamming the host log.
+#     Every Docker router in this appliance is in its own namespace, so with the default 0 an
+#     OpenWRT traffic rule with "Log this rule" ticked matches packets, moves its counter, and logs
+#     nothing at all — with no error anywhere to explain it. Measured 18 August 2026 while building
+#     openwrt-firewall-dmz.
+#     NB the messages land in the VM HOST's kernel log, which the node can read with `dmesg` but
+#     OpenWRT's own logd cannot, so they do not reach LuCI's Status -> System Log. The activity
+#     documents that difference rather than papering over it.
+sysctls:
+  net.netfilter.nf_log_all_netns: 1
+
 # Helper scripts the VM HOST needs (installed to /usr/local/bin by the `docker` phase, executable).
 # A container cannot provide these from inside its own namespace.
 #   gns3-wifi-attach - moves a mac80211_hwsim radio into each wireless node after the topology

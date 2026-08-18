@@ -114,6 +114,11 @@ The edit surface for one new image plus one template:
   unconfined) — capabilities are never the blocker, and no node should ask a student to enable
   anything. Kernel modules are the exception: `/lib/modules` is not mounted into nodes, so a module
   must go in `kernel_modules:` in the manifest.
+- **Host kernel settings go in `sysctls:`**, applied and persisted beside `kernel_modules:` by the
+  same phase. A container shares the VM's kernel and cannot set these itself. The one that exists,
+  `net.netfilter.nf_log_all_netns=1`, is there because netfilter's logging API is not
+  namespace-aware and the kernel otherwise **silently discards** every firewall log message a node
+  produces — a rule matches, its counter moves, and nothing is logged, with no error to explain it.
 - **Helper scripts go in `/usr/local/bin`, never `/bin`.** `/usr/local/bin` can be persisted and
   precedes `/bin` in `PATH`. A packaged script that misbehaves inside a node (see the `wg-quick`
   note) is fixed by copying it there at build time.

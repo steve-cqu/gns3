@@ -598,6 +598,30 @@ def ensure_kernel_modules(mods, dry_run):
         print(f"  module {mod:12} {state}")
 
 
+def ensure_sysctls(sysctls, dry_run):
+    """Host kernel settings a Docker node needs, applied now and persisted for the next boot.
+
+    Same class of prerequisite as `kernel_modules` — a container shares the VM's kernel and cannot
+    set these from inside its own namespace — so they live beside them in the manifest and are
+    applied in the same phase.
+    """
+    if not sysctls:
+        return
+    print("\nKernel settings:")
+    for key, value in sysctls.items():
+        value = str(value)
+        conf = f"/etc/sysctl.d/60-gns3-{key.replace('.', '-')}.conf"
+        if dry_run:
+            print(f"  [dry-run] sysctl -w {key}={value}; persist to {conf}")
+            continue
+        ok = subprocess.run(["sudo", "sysctl", "-w", f"{key}={value}"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL).returncode == 0
+        sudo_write(conf, f"{key} = {value}\n")
+        state = "set" if ok else "UNAVAILABLE (nodes needing it will not work)"
+        print(f"  sysctl {key} = {value:12} {state}")
+
+
 def install_host_scripts(m, dry_run):
     """Install helper scripts the VM HOST needs (not a node) to /usr/local/bin, executable.
 
@@ -690,6 +714,7 @@ def cmd_docker(args):
 
     print("Kernel modules:")
     ensure_kernel_modules(m.get("kernel_modules", []), args.dry_run)
+    ensure_sysctls(m.get("sysctls") or {}, args.dry_run)
     install_host_scripts(m, args.dry_run)
 
     print("\nImages:")
