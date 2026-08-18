@@ -28,6 +28,14 @@ COPY start-ipsec.sh   /usr/local/bin/start-ipsec.sh
 COPY ipsec-status.sh  /usr/local/bin/ipsec-status.sh
 RUN chmod +x /usr/local/bin/start-ipsec.sh /usr/local/bin/ipsec-status.sh
 
-# The stock /etc/swanctl/swanctl.conf from the package is left in place: it is an empty,
-# commented skeleton with the include lines already right, and the activity has students write
-# the connection stanza into it with nano.
+# The package's own /etc/swanctl/swanctl.conf is 588 lines of commented reference with exactly
+# ONE active line in it (`include conf.d/*.conf`). That is genuinely useful material — every
+# setting with its default — but it is the wrong thing to open in nano when the task is "write a
+# tunnel into this file": a student scrolls 588 lines to find somewhere to type. Found by walking
+# the activity on a live node, 18 Aug 2026.
+#
+# So the reference is kept, under a name that says what it is, and the file students actually
+# edit is a short skeleton with the two sections they have to fill in and the one-setting-per-line
+# trap stated at the top.
+RUN mv /etc/swanctl/swanctl.conf /etc/swanctl/swanctl.conf.reference
+COPY swanctl.conf /etc/swanctl/swanctl.conf
