@@ -207,7 +207,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
-             giteanode]
+             giteanode, strongswan]
     qemu:   [openwrt, opnsense, ubuntu-cloud]
     builtin: [windowshost]
   arm64:
@@ -215,7 +215,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
-             giteanode]
+             giteanode, strongswan]
     qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
@@ -316,6 +316,16 @@ nodes:
     image: cqugns3/ipv6node:latest
     source: {type: local, path: ipv6node}
     templates: [docker-ipv6node]
+  # IPsec gateway for the CLI VPN material — two of these replace the two Qemu OPNsense
+  # firewalls in the site-to-site tunnel lab. DERIVED from alpinenode (so it must appear after
+  # it in the lists above), which keeps strongSwan on the one node that needs it instead of on
+  # every node in the appliance. One package, no new dependencies. See
+  # gns3-dev/notes/opnsense-replacement.md.
+  strongswan:
+    kind: docker
+    image: cqugns3/strongswan:latest
+    source: {type: local, path: strongswan}
+    templates: [docker-ipsecgw]
   wazuh-agent:
     kind: docker
     image: cqugns3/wazuh-agent:latest
