@@ -57,6 +57,12 @@ filesystem, netplan or systemd, so they **run on the GNS3 VM itself** — which 
 are always built natively for the VM's architecture rather than cross-built. (The module docstring
 at the top of `gns3build.py` lists only the first four of those; it is one revision behind.)
 
+**Retiring a node does not delete it.** A node moved out of a platform's `qemu:`/`docker:` list into
+its `optional:` list keeps everything that defines it and is one `--with <key>` away from being in a
+build again; `plan` lists what each platform offers and `validate` still checks it. See
+*Optional nodes* in `server/README.md`. Since 19 August 2026 OPNsense is the only Qemu node a
+default build installs.
+
 **Profiles are `amd64` and `arm64`** — the architecture of the GNS3 VM, and the only axis the build
 varies on. One appliance per architecture goes to staff and students alike.
 

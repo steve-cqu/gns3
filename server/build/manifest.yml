@@ -207,10 +207,18 @@ profiles:
 #
 # This list is deliberately NOT trimmed to the projects in projects.txt. The appliance ships
 # five demonstration projects but has to run every activity, because students import the rest
-# themselves — so the images stay complete. ubuntu-cloud is the clearest case: nothing on
-# projects.txt uses it, and it exists solely to back SDN-Basics-Template's controller disk.
+# themselves — so the images stay complete.
 # NOTE: amd64 now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
 # Qemu ones — this bakes in the Qemu->Docker migration.
+#
+# `optional:` is the other half of that migration. A Qemu node whose job has moved to a
+# Docker one is RETIRED, not deleted: its `nodes:` entry, its download URL and md5 and its
+# templates/*.conf all stay exactly as they were, and it moves out of `qemu:` into
+# `optional.qemu:`. No ordinary build installs it, and `gns3build.py <phase> --with <key>`
+# (or `--with all`) puts it back for one build — which is how a special-purpose appliance,
+# say a staff VM that still wants the Qemu Ubuntu, stays a build flag instead of a git
+# revert. `validate` checks optional nodes exactly like installed ones, so a retired node
+# cannot quietly rot; `plan` lists what each platform offers.
 #
 # ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and three images
 # are derived (`FROM cqugns3/alpinenode`): ipv6node, servicenode and monitornode. Each must
@@ -224,7 +232,17 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan]
-    qemu:   [openwrt, opnsense, ubuntu-cloud]
+    qemu:   [opnsense]
+    # Retired from the default build, still one flag away — see the note above.
+    # ubuntu-cloud: retired 19 August 2026, its only consumer (the SDN controller) is now
+    # the Docker cqugns3/faucetnode. openwrt: retired 19 August 2026, when the last three
+    # activities using it (dhcp-client, dhcp-server-basics, dns-hosts) and the
+    # Small-Internet-Demo moved to cqugns3/openwrtnode; no project or test topology names
+    # it any more. frr-qemu/netem-qemu: superseded by frrnode/netemnode in the July 2026
+    # Docker migration; they had been in no platform's list since, which made them
+    # invisible to `validate` — being optional puts them back under it.
+    optional:
+      qemu: [openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
@@ -232,7 +250,9 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan]
-    qemu:   [openwrt-arm64, opnsense-arm64, ubuntu-cloud-arm64]
+    qemu:   [opnsense-arm64]
+    optional:
+      qemu: [openwrt-arm64, ubuntu-cloud-arm64]   # frr-qemu/netem-qemu are amd64-only disks
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
     # project exported on a PC is permanently amd64 — the arm64 templates installed here are
@@ -506,6 +526,11 @@ nodes:
   # extra:  companion files the node's template also needs (same keys), e.g. a cdrom ISO
 
   # --- Qemu images (amd64) ---
+  # OPTIONAL since 19 August 2026. The Docker cqugns3/openwrtnode does this node's job on both
+  # architectures, boots in seconds rather than minutes without nested virtualisation, and — the
+  # reason this one mattered most — leaves the projects that contain it architecture-neutral, so
+  # DHCP-Client-Solution no longer needs an -arm64 twin. Kept whole in case a Qemu OpenWRT is ever
+  # wanted again (a real kernel, its own network stack): `--with openwrt`.
   openwrt:
     kind: qemu
     file: openwrt-23.05.0-x86-64-generic-ext4-combined.img
@@ -520,14 +545,15 @@ nodes:
     unpack: bzip2
     md5: ea8472df2c272419b7834cddaf68048d
     templates: [qemu-opnsense]
-  # Required by SDN-Basics-Template: its SDN controller node is a qcow2 *overlay* whose
-  # backing file is this image at exactly this size, so the `resize` is not optional.
-  # (The superseded manual build never installed this image, so on a VM built that way
-  # the SDN controller node could not start at all.)
-  # SDN-Basics-Template is no longer pre-imported — at 729 MB, and ~2.2 GB once expanded, it
-  # is downloaded and imported by the student. That makes this image MORE important, not
-  # less: it is the half of the pairing the student cannot supply, and nothing on
-  # projects.txt will fail if it goes missing.
+  # OPTIONAL since 19 August 2026 — nothing installs it unless `--with ubuntu-cloud` asks.
+  # It existed to back SDN-Basics-Template's controller disk, and that controller is now the
+  # Docker cqugns3/faucetnode: sdn-basics passes on both architectures without this image
+  # (amd64 15 August, arm64 18 August 2026), and no other activity or project ever used it.
+  # Retiring it takes 561 MB + a 368 KB ISO off every appliance.
+  #
+  # Kept whole rather than deleted so a general-purpose Ubuntu VM is a build flag away. If
+  # you do bring it back, the `resize` is not optional: the old SDN controller node was a
+  # qcow2 *overlay* whose backing file is this image at exactly this size.
   ubuntu-cloud:
     kind: qemu
     file: ubuntu-24.04-server-cloudimg-amd64.img
@@ -569,8 +595,10 @@ nodes:
         md5: 9a90ee8f88736204c756015b3cd86500
     templates: [qemu-ubuntu-arm64]
 
-  # --- Qemu images available but not in the default platform lists ---
-  # (kept for reference / opt-in; FRR & NETem are now Docker, ubuntu host is Docker)
+  # --- Qemu images reachable only through `optional:` ---
+  # Superseded by frrnode/netemnode in the July 2026 Docker migration. They are listed in
+  # amd64's `optional.qemu:`, so `--with frr-qemu` still builds them and `validate` still
+  # checks their templates — which it could not while they were in no list at all.
   frr-qemu:
     kind: qemu
     file: frr-8.2.2.qcow2

@@ -87,22 +87,79 @@ def profile_platform(m, profile):
     return m["profiles"][profile]["platform"]
 
 
-def node_keys(m, platform):
+KINDS = ("docker", "qemu", "builtin")
+
+
+def optional_keys(m, platform, kind=None):
+    """Node keys a platform *can* install but does not by default.
+
+    A node retired from the appliance keeps everything that defines it — its entry under
+    `nodes:`, its download URL and md5, and its templates/*.conf — and moves from `qemu:`
+    to `optional.qemu:`. A normal build then installs nothing for it, while `--with <key>`
+    puts it back for one build. That is the difference between retiring a node and deleting
+    one, and it is what makes a special-purpose appliance (a staff VM that still wants the
+    Qemu Ubuntu, say) a build flag rather than a git revert.
+
+    `validate` covers optional nodes, so a retired one cannot rot unnoticed the way an
+    unreferenced template file used to.
+    """
+    opt = m["platforms"][platform].get("optional") or {}
+    kinds = (kind,) if kind else KINDS
+    return [k for kk in kinds for k in opt.get(kk, [])]
+
+
+def with_nodes(m, platform, spec, kind=None):
+    """Resolve a `--with` value to optional node keys: 'all', or a comma-separated list.
+
+    Naming a key that is not optional on this platform is an error rather than a no-op —
+    it is nearly always a node that was deleted outright, or a typo, and silently building
+    without it is the expensive way to find out.
+    """
+    if not spec:
+        return []
+    every = optional_keys(m, platform)
+    if spec.strip() == "all":
+        wanted = list(every)
+    else:
+        wanted = [k.strip() for k in spec.split(",") if k.strip()]
+        unknown = [k for k in wanted if k not in every]
+        if unknown:
+            sys.exit(f"--with: {', '.join(unknown)} not optional on platform '{platform}' "
+                     f"(have: {', '.join(every) or 'none'})")
+    if kind:
+        wanted = [k for k in wanted if k in optional_keys(m, platform, kind)]
+    return wanted
+
+
+def node_keys(m, platform, include_optional=False):
     """Docker, Qemu then builtin node keys for a platform, in manifest order.
 
     `builtin` nodes install nothing — they are a template over a GNS3 built-in node type
     (the Windows Host is a Cloud node bound to the lab NIC). They appear here so the
     `templates` phase and `validate` pick their templates up; the `docker` and `qemu`
     phases select by kind and so ignore them.
+
+    `include_optional` appends the platform's opt-in nodes. Checks that must cover
+    everything the manifest *can* install pass it — `validate` and the `logos` end-state
+    check; the phases that install what a normal build ships do not.
     """
     p = m["platforms"][platform]
-    return list(p.get("docker", [])) + list(p.get("qemu", [])) + list(p.get("builtin", []))
+    keys = list(p.get("docker", [])) + list(p.get("qemu", [])) + list(p.get("builtin", []))
+    if include_optional:
+        keys += [k for k in optional_keys(m, platform) if k not in keys]
+    return keys
 
 
-def template_names(m, platform):
-    """Ordered, de-duplicated list of template .conf names for a platform."""
+def template_names(m, platform, include_optional=False, extra=()):
+    """Ordered, de-duplicated list of template .conf names for a platform.
+
+    `extra` names further node keys to include — the optional nodes a `--with` asked for,
+    whose templates have to be registered alongside the default set.
+    """
     seen, out = set(), []
-    for key in node_keys(m, platform):
+    keys = node_keys(m, platform, include_optional)
+    keys += [k for k in extra if k not in keys]
+    for key in keys:
         node = m["nodes"].get(key)
         if node is None:
             sys.exit(f"platform '{platform}' references unknown node '{key}'")
@@ -121,9 +178,16 @@ def read_template(m, name):
     return json.loads(f.read_text())
 
 
-def select_nodes(m, platform, kind, only):
-    """Node keys of `kind` ('docker'|'qemu') for a platform, optionally filtered by --only."""
+def select_nodes(m, platform, kind, only, extra=()):
+    """Node keys of `kind` ('docker'|'qemu') for a platform, optionally filtered by --only.
+
+    `extra` is the optional nodes a `--with` asked for — of any kind, since one flag serves
+    every phase. Only those of this `kind` are taken, and they join the list before `--only`
+    filters it, so `--with ubuntu-cloud --only ubuntu-cloud` installs exactly that one.
+    """
     keys = list(m["platforms"][platform].get(kind, []))
+    keys += [k for k in extra
+             if k not in keys and m["nodes"].get(k, {}).get("kind") == kind]
     if only:
         wanted = [k.strip() for k in only.split(",") if k.strip()]
         unknown = [k for k in wanted if k not in keys]
@@ -286,7 +350,7 @@ def cmd_validate(args):
     problems = []
 
     for platform in m["platforms"]:
-        for key in node_keys(m, platform):
+        for key in node_keys(m, platform, include_optional=True):
             if key not in m["nodes"]:
                 problems.append(f"platform '{platform}': unknown node '{key}'")
 
@@ -299,7 +363,7 @@ def cmd_validate(args):
     # Validate every referenced template file (parse + required fields).
     referenced = set()
     for platform in m["platforms"]:
-        referenced |= set(template_names(m, platform))
+        referenced |= set(template_names(m, platform, include_optional=True))
     tid_of = {}
     for name in sorted(referenced):
         try:
@@ -339,7 +403,7 @@ def cmd_validate(args):
     # mac arch variants of a node share an id so projects stay portable.
     for platform in m["platforms"]:
         seen = {}
-        for name in template_names(m, platform):
+        for name in template_names(m, platform, include_optional=True):
             tid = tid_of.get(name)
             if tid and tid in seen:
                 problems.append(
@@ -374,25 +438,35 @@ def cmd_plan(args):
     m = load_manifest(args.manifest)
     platform = profile_platform(m, args.profile)
     p = m["platforms"][platform]
+    extra = with_nodes(m, platform, args.with_nodes)
     print(f"profile {args.profile}  (platform: {platform}, "
           f"docker --platform {p.get('docker_platform', '?')})\n")
     print("Docker images to build:")
-    for key in m["platforms"][platform].get("docker", []):
+    for key in select_nodes(m, platform, "docker", None, extra):
         n = m["nodes"][key]
         src = n["source"]
         where = src.get("path") or src.get("dir")
-        print(f"  {n['image']:32} <- {src['type']}:{where}")
+        print(f"  {n['image']:32} <- {src['type']}:{where}"
+              + ("   [--with]" if key in extra else ""))
     print("\nQemu images to download:")
-    for key in m["platforms"][platform].get("qemu", []):
+    for key in select_nodes(m, platform, "qemu", None, extra):
         n = m["nodes"][key]
-        print(f"  {n['file']:48} md5={n.get('md5','-')}")
+        print(f"  {n['file']:48} md5={n.get('md5','-')}"
+              + ("   [--with]" if key in extra else ""))
     builtin = m["platforms"][platform].get("builtin", [])
     if builtin:
         print("\nBuilt-in nodes (template only, nothing to install):")
         for key in builtin:
             print(f"  {key}")
+    off = [k for k in optional_keys(m, platform) if k not in extra]
+    if off:
+        print("\nOptional — retired from the default build, still buildable "
+              "(`--with <key>`, or `--with all`):")
+        for key in off:
+            n = m["nodes"].get(key, {})
+            print(f"  {key:22} {n.get('image') or n.get('file') or '?'}")
     print("\nTemplates to register:")
-    for name in template_names(m, platform):
+    for name in template_names(m, platform, extra=extra):
         print(f"  {name}")
     return 0
 
@@ -400,7 +474,8 @@ def cmd_plan(args):
 def cmd_templates(args):
     m = load_manifest(args.manifest)
     platform = profile_platform(m, args.profile)
-    names = template_names(m, platform)
+    names = template_names(m, platform,
+                           extra=with_nodes(m, platform, args.with_nodes))
 
     ctrl = Controller(args.server)
     try:
@@ -699,7 +774,8 @@ def docker_context(m, node, tmpdir):
 def cmd_docker(args):
     m = load_manifest(args.manifest)
     platform = profile_platform(m, args.profile)
-    keys = select_nodes(m, platform, "docker", args.only)
+    keys = select_nodes(m, platform, "docker", args.only,
+                        with_nodes(m, platform, args.with_nodes, "docker"))
     docker_platform = m["platforms"][platform].get("docker_platform")
     if not docker_platform:
         sys.exit(f"platform '{platform}': manifest has no docker_platform")
@@ -891,7 +967,8 @@ def qemu_install(node, images_dir, force, verify, dry_run):
 def cmd_qemu(args):
     m = load_manifest(args.manifest)
     platform = profile_platform(m, args.profile)
-    keys = select_nodes(m, platform, "qemu", args.only)
+    keys = select_nodes(m, platform, "qemu", args.only,
+                        with_nodes(m, platform, args.with_nodes, "qemu"))
     images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
 
     print(f"profile {args.profile}  (platform: {platform}, images: {images_dir})")
@@ -982,7 +1059,7 @@ def cmd_logos(args):
     missing = []
     if not args.dry_run:
         for platform in m["platforms"]:
-            for name in template_names(m, platform):
+            for name in template_names(m, platform, include_optional=True):
                 try:
                     sym = read_template(m, name).get("symbol", "")
                 except Exception:
@@ -2163,12 +2240,21 @@ def cmd_provenance(args):
     # Qemu: md5 comes from the sidecar the qemu phase wrote, so this costs nothing.
     images_dir = Path(args.images_dir or m.get("qemu_images_dir", "/opt/gns3/images/QEMU"))
     disks = []
-    for key in m["platforms"][platform].get("qemu", []):
+    # An optional node is recorded only when its disk is actually here: a staff build made
+    # with `--with` should say so, but an absent optional disk is not "missing" — no normal
+    # build installs it, and reporting it as missing would make every ordinary build look
+    # incomplete.
+    default_qemu = list(m["platforms"][platform].get("qemu", []))
+    for key in default_qemu + optional_keys(m, platform, "qemu"):
+        opted = key not in default_qemu
         for spec in qemu_files(m["nodes"][key]):
             f = images_dir / spec["file"]
+            if opted and not f.exists():
+                continue
             sidecar = Path(str(f) + ".md5sum")
             disks.append({
                 "node": key, "file": spec["file"],
+                "optional": opted,
                 "present": f.exists(),
                 "bytes": f.stat().st_size if f.exists() else None,
                 "md5": sidecar.read_text().strip() if sidecar.exists()
@@ -2301,7 +2387,8 @@ def cmd_build(args):
         dry_run=args.dry_run, force=args.force, only=None, skip=None, verify=False,
         images_dir=None, symbols_dir=None, dest=None, roots=args.roots,
         record=None, imports=None, out=None, projects_dir="/opt/gns3/projects",
-        strict=False, interface=None, netplan_file=None)
+        strict=False, interface=None, netplan_file=None,
+        with_nodes=args.with_nodes)
 
     print(f"build profile {args.profile}: {' -> '.join(phases)}\n")
     results = []
@@ -2326,6 +2413,12 @@ def cmd_build(args):
 
 
 # --------------------------------------------------------------------------- #
+# Shared help for the `--with` flag, which every phase that installs or registers
+# something accepts. See `optional_keys` for what optional means.
+WITH_HELP = ("comma-separated optional node keys to put back into this build (or 'all'); "
+             "`plan` lists what this platform offers")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -2336,10 +2429,12 @@ def main():
 
     pl = sub.add_parser("plan")
     pl.add_argument("--profile", required=True)
+    pl.add_argument("--with", dest="with_nodes", help=WITH_HELP)
 
     tp = sub.add_parser("templates")
     tp.add_argument("--profile", required=True)
     tp.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
+    tp.add_argument("--with", dest="with_nodes", help=WITH_HELP)
     tp.add_argument("--force", action="store_true",
                     help="overwrite templates already registered (needed after editing a "
                          "templates/*.conf; without it an existing template_id is skipped)")
@@ -2348,6 +2443,7 @@ def main():
     dk = sub.add_parser("docker", help="build node images (run on the VM)")
     dk.add_argument("--profile", required=True)
     dk.add_argument("--only", help="comma-separated node keys, e.g. frrnode,netemnode")
+    dk.add_argument("--with", dest="with_nodes", help=WITH_HELP)
     dk.add_argument("--force", action="store_true",
                     help="rebuild even if the image exists (needed after editing a Dockerfile)")
     dk.add_argument("--dry-run", action="store_true")
@@ -2373,6 +2469,7 @@ def main():
     qm = sub.add_parser("qemu", help="download + unpack disk images (run on the VM)")
     qm.add_argument("--profile", required=True)
     qm.add_argument("--only", help="comma-separated node keys, e.g. openwrt")
+    qm.add_argument("--with", dest="with_nodes", help=WITH_HELP)
     qm.add_argument("--force", action="store_true", help="re-download even if present")
     qm.add_argument("--verify", action="store_true",
                     help="re-hash images already present instead of trusting the .md5sum sidecar")
@@ -2437,6 +2534,7 @@ def main():
     bd.add_argument("--profile", required=True)
     bd.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
     bd.add_argument("--only", help=f"comma-separated phases ({', '.join(BUILD_PHASES)})")
+    bd.add_argument("--with", dest="with_nodes", help=WITH_HELP)
     bd.add_argument("--skip", help="comma-separated phases to leave out")
     bd.add_argument("--roots", help="project search dirs, passed to the projects phase")
     bd.add_argument("--force", action="store_true", help="passed to docker/qemu")

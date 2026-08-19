@@ -29,6 +29,10 @@ render (18.67 px regular is not "large text"), so the band is not decoration —
 only part of the symbol a label can legibly sit on. It also retires the -w/-b pairs the
 old symbols came in: white on its own dark band works on any canvas colour.
 
+A Qemu-backed node also gets a corner tag ("Q"), because how a node runs is not something
+the band can say and it is the difference between a node that starts in seconds and one
+that takes minutes on a machine without nested virtualisation.
+
 An UNLABELLED base is the generic member of its class — Linux Host, Linux Router, Linux
 Server — so those three keep GNS3's built-in symbol and are not generated here.
 
@@ -61,6 +65,16 @@ FONT = "Arial, Helvetica, sans-serif"
 ARC_N, ARC_R0, ARC_STEP, ARC_SW = 3, 2.6, 2.6, 1.15
 AP_LIFT = 13.0                 # headroom added above the router base for the antennas
 AP_ANTENNAS = [(26, 20, 20.5, 2.5), (40, 20, 45.5, 2.5)]     # splayed, x1 y1 -> x2 y2
+
+# Qemu tag. A Qemu-backed node costs things a Docker one does not — it boots in minutes
+# rather than seconds wherever there is no nested virtualisation, and a project containing
+# one is locked to the architecture it was exported on — so which nodes are Qemu is worth
+# seeing on the canvas rather than looking up. It is the same dark green and the same white
+# ink as the band, so the two marks read as one system: the band says WHICH node this is,
+# the corner tag says HOW IT RUNS. Top-left, because the band owns the bottom and the
+# wireless arcs own the top-right.
+QEMU_TAG = "Q"
+QEMU_W, QEMU_H, QEMU_FS, QEMU_PAD = 13.0, 11.0, 8.0, 0.9
 
 # (file stem, base, label, extra mark).  A stem of "" means "not generated".
 SYMBOLS = [
@@ -99,6 +113,16 @@ SYMBOLS = [
     ("router-openwrt",  "router", "OPENWRT",  None),
     ("router-opnsense", "router", "OPNSENSE", None),
     ("router-ap",       "router", "AP",       "antennas"),
+
+    # --- Qemu-backed nodes: the same artwork, plus the corner tag ---------
+    # Every Qemu node the manifest still defines. Two of the three are `optional:` — nothing
+    # installs them unless a build asks — and the tag is why they are drawn at all: an
+    # OpenWRT node and an OpenWRT Router node were the same router wearing the same band,
+    # with nothing on the canvas to say one of them boots for minutes on a Mac.
+    ("router-openwrt-qemu",  "router",   "OPENWRT",  "qemu"),
+    ("router-opnsense-qemu", "router",   "OPNSENSE", "qemu"),
+    ("computer-ubuntu-qemu", "computer", "UBUNTU",   "qemu"),
+    ("router-frr-qemu",      "router",   "FRR",      "qemu"),
 
     # --- observers, on the IDS box ---------------------------------------
     ("sensor-ids",   "ids", "IDS",   None),
@@ -187,18 +211,34 @@ def add_antennas(svg, rods, sw=2.0, tip=1.5):
     return svg.replace("</svg>", f'<g id="cqu-antenna">{halo}{ink}</g></svg>')
 
 
+def add_qemu_tag(svg):
+    """The corner tag marking a Qemu-backed node."""
+    cx, cy = QEMU_PAD + QEMU_W / 2, QEMU_PAD + QEMU_H / 2
+    return svg.replace("</svg>",
+        '<g id="cqu-qemu">'
+        f'<rect x="{QEMU_PAD}" y="{QEMU_PAD}" width="{QEMU_W}" height="{QEMU_H}" rx="2.5" '
+        f'fill="{BAND_FILL}" stroke="{BAND_INK}" stroke-width="0.9"/>'
+        f'<text x="{cx:.2f}" y="{cy + QEMU_FS * 0.35:.2f}" font-family="{FONT}" '
+        f'font-size="{QEMU_FS:.2f}" font-weight="bold" text-anchor="middle" '
+        f'fill="{BAND_INK}">{QEMU_TAG}</text>'
+        '</g></svg>')
+
+
 def build(base_name, label, mark):
     path = BASES / f"{base_name}.svg"
     if not path.exists():
         sys.exit(f"missing base artwork: {path}")
     svg = path.read_text()
-    if mark == "antennas":
-        svg = add_antennas(grow_top(svg, AP_LIFT), AP_ANTENNAS)
-    elif mark == "arcs":
-        w, _ = dims(svg)
-        svg = add_arcs(svg, w - 7.9, 13.0)
-    elif mark:
-        sys.exit(f"unknown mark {mark!r}")
+    for mk in [x.strip() for x in (mark or "").split(",") if x.strip()]:
+        if mk == "antennas":
+            svg = add_antennas(grow_top(svg, AP_LIFT), AP_ANTENNAS)
+        elif mk == "arcs":
+            w, _ = dims(svg)
+            svg = add_arcs(svg, w - 7.9, 13.0)
+        elif mk == "qemu":
+            svg = add_qemu_tag(svg)
+        else:
+            sys.exit(f"unknown mark {mk!r}")
     return add_band(svg, label)
 
 

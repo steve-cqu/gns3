@@ -609,6 +609,45 @@ name — they live in `projects.txt` beside it.) Adding a node means editing the
 the code. `./gns3build.py validate` checks it, and
 also cross-checks that every disk a Qemu template names is one its node actually installs.
 
+### Optional nodes — retiring one without deleting it
+
+A node whose job has moved elsewhere is **retired, not deleted**: it keeps its `nodes:` entry, its
+download URL and md5, and its `templates/*.conf`, and moves out of its platform's `qemu:` (or
+`docker:`) list into `optional:`.
+
+```yaml
+platforms:
+  amd64:
+    qemu:   [opnsense]
+    optional:
+      qemu: [openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
+```
+
+Nothing installs an optional node. Every phase that installs or registers something takes `--with`
+to put one back for a single build:
+
+```sh
+./gns3build.py plan  --profile amd64                    # what a normal build ships,
+                                                        # and what it could
+./gns3build.py build --profile amd64 --with openwrt     # this build also gets the Qemu OpenWRT
+./gns3build.py qemu  --profile amd64 --with all         # every optional node
+./gns3build.py templates --profile amd64 --with ubuntu-cloud --force
+```
+
+`--with` names a node key, not a template; naming something that is not optional on that platform is
+an error rather than a no-op, because it is nearly always a node that was deleted outright or a typo.
+
+That is what makes a special-purpose appliance a build flag rather than a git revert — a staff VM
+that still wants a full Qemu Ubuntu to demonstrate something, say. It costs nothing to keep the
+option open: `validate` covers optional nodes exactly like installed ones, so a retired node cannot
+rot unnoticed, and `plan` lists what each platform offers. (This also put `frr-qemu` and `netem-qemu`
+back under `validate` — they had been in no platform's list at all since the July 2026 Docker
+migration, which is precisely how three orphaned template files accumulated unseen.)
+
+**As of 19 August 2026 OPNsense is the only Qemu node a default build installs.** The other three
+are optional, and `provenance` records an optional disk only when a build actually installed it, so
+an ordinary build does not report them as missing.
+
 ---
 
 ## The appliance does not update itself
