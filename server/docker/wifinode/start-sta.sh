@@ -39,17 +39,28 @@ echo "Starting wpa_supplicant on $IFACE ..."
 wpa_supplicant -B -i "$IFACE" -c "$CONF" -D nl80211 -P /run/wpa_supplicant/wpa.pid \
     >/var/log/wifi/wpa_supplicant.log 2>&1
 
-# Give the four-way handshake a moment to complete.
+# Give the four-way handshake time to complete. THIRTY seconds, not ten: the poll exits the moment
+# the state reaches COMPLETED, so a longer window costs a fast host nothing and saves a slow one —
+# and ten seconds was measurably too tight. On 19 August 2026 wireless-basics failed on amd64 with
+# this script reporting "Did not associate" while the test's own check, seconds later, found the
+# handshake COMPLETED. Re-running it passed. A slower box (Apple Silicon under TCG) loses that race
+# more often, not less.
 echo "Associating (four-way handshake) ..."
 i=0; assoc=0
-while [ $i -lt 10 ]; do
+while [ $i -lt 30 ]; do
     if wpa_cli -i "$IFACE" status 2>/dev/null | grep -q 'wpa_state=COMPLETED'; then assoc=1; break; fi
     i=$((i+1)); sleep 1
 done
 
+# Set the address WHETHER OR NOT the poll won its race. This is the other half of the same defect:
+# the address used to be assigned only inside the success branch, so a station that associated a
+# second after we stopped looking was left associated with no IP — which looks like a working link
+# and cannot pass a packet, and is the hardest possible state to diagnose from the node. A late
+# association now simply starts working.
+ip addr flush dev "$IFACE" 2>/dev/null
+ip addr add "$STAIP" dev "$IFACE"
+
 if [ "$assoc" = 1 ]; then
-    ip addr flush dev "$IFACE" 2>/dev/null
-    ip addr add "$STAIP" dev "$IFACE"
     BSSID=$(wpa_cli -i "$IFACE" status 2>/dev/null | awk -F= '/^bssid=/{print $2}')
     SSID=$(wpa_cli -i "$IFACE" status 2>/dev/null | awk -F= '/^ssid=/{print $2}')
     echo "Associated to '$SSID' (AP $BSSID). This node is $STAIP on $IFACE."
@@ -57,8 +68,11 @@ if [ "$assoc" = 1 ]; then
     echo "Reach the AP:                ping 10.0.0.1"
     echo "See the link (signal, rate): wifi-status.sh"
 else
-    echo "Did not associate. Last lines of /var/log/wifi/wpa_supplicant.log:"
+    echo "Did not associate within 30s. Last lines of /var/log/wifi/wpa_supplicant.log:"
     tail -n 12 /var/log/wifi/wpa_supplicant.log 2>/dev/null | sed 's/^/   /'
     echo "Check that the AP is running (start-ap.sh) and the SSID/passphrase match."
+    echo
+    echo "$STAIP has been set on $IFACE anyway, so if the handshake completes late the link will"
+    echo "simply start working. Check with:   wifi-status.sh   then   ping 10.0.0.1"
     exit 1
 fi

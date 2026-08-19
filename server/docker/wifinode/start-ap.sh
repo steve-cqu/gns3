@@ -42,7 +42,14 @@ echo "Starting hostapd on $IFACE ..."
 # -B daemonize, -P pidfile. Logs go to the file so wifi-status.sh can show them.
 hostapd -B -P /run/hostapd/hostapd.pid "$CONF" >/var/log/wifi/hostapd.log 2>&1
 
-sleep 2
+# Poll rather than sleep a flat 2 s, for the same reason start-sta.sh polls for 30: a fixed wait is
+# a race with the slowest machine that will ever run this, and it exits as soon as hostapd is up.
+i=0
+while [ $i -lt 15 ]; do
+    pgrep -x hostapd >/dev/null 2>&1 && break
+    i=$((i+1)); sleep 1
+done
+
 if pgrep -x hostapd >/dev/null 2>&1; then
     ip addr flush dev "$IFACE" 2>/dev/null
     ip addr add "$APIP" dev "$IFACE"
