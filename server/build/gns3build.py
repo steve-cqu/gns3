@@ -422,9 +422,22 @@ def cmd_validate(args):
             if not (src_dir / f).exists():
                 problems.append(f"novnc service: missing {src_dir / f}")
 
+    # Template files no platform references at all. NOT a failure — a template staged ahead of the
+    # node that will use it is a legitimate intermediate state — but they are invisible to every
+    # check above, which only ever looks at *referenced* templates. That blind spot is how three
+    # orphans accumulated unnoticed (qemu-reactos, and qemu-frr/qemu-netem after the July 2026
+    # Docker migration). An `optional:` node counts as referencing its template, so retiring a node
+    # the supported way does not put it here.
+    orphans = sorted(f.stem for f in m["_templates_dir"].glob("*.conf")
+                     if f.stem not in referenced)
+
     print(f"manifest: {args.manifest}")
     print(f"profiles: {', '.join(m['profiles'])}")
     print(f"templates referenced: {len(referenced)}")
+    for o in orphans:
+        print(f"  WARN   template '{o}' is referenced by no node on any platform — it is installed "
+              f"on nothing. Delete it, or give its node an entry (`optional:` if it should not be "
+              f"in a default build).")
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:

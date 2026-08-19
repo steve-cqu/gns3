@@ -14,6 +14,21 @@
 # It is idempotent: a node that already has wlan0 is skipped, so it is safe to run again (e.g. after
 # starting more nodes). When a project is closed its containers are destroyed and their radios
 # return to the host pool automatically — nothing to clean up.
+#
+# EXIT STATUS — this matters more than it looks. The autotest harness runs this as a `host_setup:`
+# step and only reports a diagnostic when it fails, so a 0 returned by a run that attached NOTHING
+# is indistinguishable from a run that attached everything. That is exactly what happened in the
+# arm64 pass of 18 August 2026: wireless-basics failed on both nodes, the transcript showed this
+# helper invoked with no error, and the actual failure (no radio ever arrived) was invisible. See
+# gns3-dev/notes/tier5-and-spike-designs.md.
+#
+#   0  every node that needed a radio has one — including "they all already had one", and
+#      including "nothing is running" when no project was named
+#   1  asked to do something and did not do it: a named project matched no wireless nodes, a
+#      radio could not be moved, or nodes needed radios and none was attached
+#
+# "Nothing to do" is only success when nobody asked for anything specific. Being told to attach
+# radios in a named project and finding no nodes there is a failure, not a no-op.
 
 IMAGE=cqugns3/wifinode:latest
 RADIOS=${GNS3_WIFI_RADIOS:-4}          # how many radios to create if the module is not loaded yet
@@ -95,6 +110,9 @@ fi
 mapfile -t CONTAINERS < <(wifi_containers "$1" | awk 'NF{print $1}')
 if [ "${#CONTAINERS[@]}" -eq 0 ]; then
     log "no running wireless nodes found (image $IMAGE). Start the wireless project first."
+    # With a project named, this is a failure: the caller told us what to work on and it is not
+    # there. With no argument it is a legitimate nothing-to-do.
+    [ -n "$1" ] && { log "ERROR: asked for project '$1' and found no wireless nodes in it."; exit 1; }
     exit 0
 fi
 
@@ -105,7 +123,7 @@ for id in "${CONTAINERS[@]}"; do
 done
 [ "$need" -gt 0 ] && ensure_radios "$need"
 
-attached=0; skipped=0
+attached=0; skipped=0; failed=0
 for id in "${CONTAINERS[@]}"; do
     name=$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##')
     # already has a radio? skip (idempotent)
@@ -132,9 +150,23 @@ for id in "${CONTAINERS[@]}"; do
         attached=$((attached+1))
     else
         log "ERROR moving $phy into $name:"; sed 's/^/   /' /tmp/.wifiattach
+        failed=$((failed+1))
     fi
 done
 
-log "done: $attached attached, $skipped already had a radio."
+log "done: $attached attached, $skipped already had a radio, $failed failed."
 [ "$attached" -gt 0 ] && log "Now, on each wireless node: start-ap.sh (access point) or start-sta.sh (station)."
+
+if [ "$failed" -gt 0 ]; then
+    log "ERROR: $failed node(s) could not be given a radio."
+    exit 1
+fi
+# The case that hid the arm64 failure: nodes needed radios, the run reported no error, and not one
+# radio was actually moved. `modprobe` succeeding does not prove the radios appeared — check with
+# `ls /sys/class/ieee80211/` on the host.
+if [ "$need" -gt 0 ] && [ "$attached" -eq 0 ]; then
+    log "ERROR: $need node(s) needed a radio and none was attached — no free phys in the host pool?"
+    log "       check: ls /sys/class/ieee80211/   and   lsmod | grep mac80211_hwsim"
+    exit 1
+fi
 exit 0
