@@ -72,28 +72,57 @@ ensure_radios(){
 }
 
 # containers of wireless nodes, optionally scoped to a project name
+#
+# Scoping is by CONTAINER ID, taken from the GNS3 API (`properties.container_id` on each docker
+# node), not by container name. Names are not usable for this: GNS3 2.2.54 creates the containers
+# without a name, so Docker assigns a random one (`adoring_joliot`), while 2.2.61 names them
+# `GNS3.<node>.<project_id>`. The old code grepped the project id out of the name, which matched
+# nothing on 2.2.54 -- so every wireless node in a named project was silently filtered out and the
+# helper reported "no running wireless nodes found". That is the whole of the arm64 wireless-basics
+# failure of 20 August 2026: it read as architecture-specific only because the Mac appliance runs
+# 2.2.54 and the PC one runs 2.2.61. container_id is stable across both, and across whatever GNS3
+# names them next. gns3_autotest.py:docker_exec() reaches its containers the same way.
 wifi_containers(){
-    local ids
+    local ids rc cids
     ids=$(docker ps --filter "ancestor=$IMAGE" --format '{{.ID}} {{.Names}}')
-    if [ -n "$1" ]; then
-        # Resolve project NAME (or id) -> project id via the API, then keep only that project's
-        # containers (their GNS3 name embeds the id: GNS3.<node>.<project_id>). python3 is on the
-        # GNS3 VM; parsing the JSON with it is robust where a grep/tr pipeline is not.
-        local pid
-        pid=$(curl -s "$API/v2/projects" 2>/dev/null | python3 -c \
-              "import json,sys
-a='$1'
-try: ps=json.load(sys.stdin)
-except Exception: ps=[]
-print(next((p['project_id'] for p in ps if a in (p.get('name'),p.get('project_id'))), ''))" 2>/dev/null)
-        if [ -z "$pid" ]; then
-            log "WARNING: project '$1' not found via $API — attaching to all wifi nodes"
-            echo "$ids"; return
-        fi
-        echo "$ids" | grep "$pid"
-    else
-        echo "$ids"
+    if [ -z "$1" ]; then
+        echo "$ids"; return
     fi
+    # Resolve project NAME (or id) -> its nodes' container ids. python3 is on the GNS3 VM; parsing
+    # the JSON with it is robust where a grep/tr pipeline is not. Exit 3 = no such project,
+    # 4 = the API could not be read; both fall back to the unscoped list with a warning, which is
+    # safe because attaching a radio is idempotent and harmless on a node that is not under test.
+    cids=$(curl -s "$API/v2/projects" 2>/dev/null | python3 -c "
+import json, sys, urllib.request
+a = '$1'
+try:
+    ps = json.load(sys.stdin)
+except Exception:
+    sys.exit(4)
+pid = next((p['project_id'] for p in ps if a in (p.get('name'), p.get('project_id'))), '')
+if not pid:
+    sys.exit(3)
+try:
+    ns = json.load(urllib.request.urlopen('$API/v2/projects/%s/nodes' % pid, timeout=10))
+except Exception:
+    sys.exit(4)
+for n in ns:
+    c = (n.get('properties') or {}).get('container_id') or ''
+    if c:
+        print(c[:12])
+" 2>/dev/null)
+    rc=$?
+    if [ "$rc" -eq 3 ]; then
+        log "WARNING: project '$1' not found via $API — attaching to all wifi nodes"
+        echo "$ids"; return
+    elif [ "$rc" -ne 0 ]; then
+        log "WARNING: could not read the node list for '$1' from $API — attaching to all wifi nodes"
+        echo "$ids"; return
+    fi
+    # No started docker nodes in that project: a genuine empty result, so the caller's
+    # "no wireless nodes in this project" failure is the right answer.
+    [ -z "$cids" ] && return
+    echo "$ids" | grep -F -f <(printf '%s\n' "$cids")
 }
 
 if [ "$1" = "--status" ]; then
