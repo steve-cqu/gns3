@@ -109,6 +109,11 @@ SYMBOLS = [
     # --- forwarding, on the router ---------------------------------------
     ("router-frr",      "router", "FRR",      None),
     ("router-vpn",      "router", "VPN",      None),
+    # The IPsec Gateway (cqugns3/strongswan) had been borrowing router-vpn.svg from the
+    # WireGuard VPN Router. Two templates on one symbol is the thing the corner tag was added
+    # to stop: a tunnel lab puts both kinds of gateway on one canvas, and which is which is
+    # the whole subject of the lab.
+    ("router-ipsec",    "router", "IPSEC",    None),
     ("router-nat64",    "router", "NAT64",    None),
     ("router-openwrt",  "router", "OPENWRT",  None),
     ("router-opnsense", "router", "OPNSENSE", None),

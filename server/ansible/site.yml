@@ -88,6 +88,20 @@
     import_record_remote: /home/gns3/.gns3build-imports.json
     provenance_path: /home/gns3/gns3-build-provenance.json
 
+    # Optional nodes to add back for this build, comma-separated, or `all`. Empty for a
+    # normal build. A node retired to `optional:` in the manifest is not deleted — nothing
+    # installs it unless a build asks — so this is the flag that makes a special-purpose
+    # appliance a build option rather than a git revert:
+    #
+    #   ./build.sh "GNS3 VM" amd64 -e with_nodes=opnsense
+    #
+    # It is passed straight to `gns3build.py build --with`, which fans it out to every phase
+    # that installs or registers something (qemu, templates, docker). `gns3build.py plan
+    # --profile <p>` lists what a platform offers; an unknown key is a hard error there, not
+    # a silent no-op. Nothing else in this playbook needs it: the projects phase installs no
+    # nodes, and provenance records an optional disk when it finds one on the appliance.
+    with_nodes: ""
+
     # Set with -e release=v030 only when this build is the one going out to students.
     # It labels the provenance manifest, stamps /etc/gns3-cqu-release on the appliance so
     # it can name itself, and files a copy of the manifest under server/releases/<release>/
@@ -352,6 +366,7 @@
       ansible.builtin.shell: >-
         set -o pipefail &&
         {{ gns3build }} build --profile {{ profile }} --skip projects
+        {{ ('--with ' + with_nodes) if with_nodes else '' }}
         --server http://localhost {{ '--dry-run' if ansible_check_mode else '' }}
         2>&1 | tee {{ build_log }}
       args:

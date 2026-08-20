@@ -618,9 +618,9 @@ download URL and md5, and its `templates/*.conf`, and moves out of its platform'
 ```yaml
 platforms:
   amd64:
-    qemu:   [opnsense]
+    qemu:   []          # none — see `optional:` below
     optional:
-      qemu: [openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
+      qemu: [opnsense, openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
 ```
 
 Nothing installs an optional node. Every phase that installs or registers something takes `--with`
@@ -644,9 +644,21 @@ rot unnoticed, and `plan` lists what each platform offers. (This also put `frr-q
 back under `validate` — they had been in no platform's list at all since the July 2026 Docker
 migration, which is precisely how three orphaned template files accumulated unseen.)
 
-**As of 19 August 2026 OPNsense is the only Qemu node a default build installs.** The other three
-are optional, and `provenance` records an optional disk only when a build actually installed it, so
-an ordinary build does not report them as missing.
+**As of 20 August 2026 a default build installs no Qemu node at all.** OPNsense was the last one;
+its two activities are replaced by all-Docker equivalents (`openwrt-firewall-dmz` and
+`ipsec-swanctl`, both green on amd64 and arm64), and it went to `optional:` with the other four.
+`provenance` records an optional disk only when a build actually installed it, so an ordinary build
+does not report them as missing.
+
+That is worth stating as a property rather than a tally, because several other things follow from
+it: an OVA carries no Qemu disk (the largest single saving in the appliance — OPNsense alone is
+3.0 GiB on amd64 and 2.5 GiB on arm64), no project the appliance ships can need an `-arm64`
+variant, and `require_kvm` no longer decides whether a stock appliance works. To get a Qemu node
+back for one build, `--with` it — the whole point of retiring rather than deleting.
+
+Two autotests name the OPNsense node (`opnsense-firewall`, `ipsec-site-to-site`). Both declare
+`requires_templates: [OPNsense]` in `gns3-dev`, so on a stock appliance they record **SKIP** rather
+than failing, and they run normally on one built `--with opnsense`.
 
 ---
 
@@ -1209,15 +1221,17 @@ is affected:
 
 | Project | Qemu node(s) | Ships on the appliance? | Autotest |
 |---|---|---|---|
-| Small-Internet-Demo | amd64 OpenWrt | **yes** — needs an `-arm64` rebuild | skipped (manual) |
-| DHCP-Client-Solution | amd64 OpenWrt | no — `-arm64` rebuild exists | `dhcp-client` |
+| Small-Internet-Demo | none since 19 Aug 2026 — `Router1` is `cqugns3/openwrtnode` | **yes**, and no variant needed | skipped (manual) |
+| DHCP-Client-Solution | none since 19 Aug 2026 — rebuilt on the Docker node | no | `dhcp-client` |
 | IPsec-Site-to-Site-Solution | 2 × amd64 OPNsense | no | `ipsec-site-to-site` |
 | OPNsense-Firewall-Solution | amd64 OPNsense | no | `opnsense-firewall` |
-| SDN-Basics-Template | amd64 Ubuntu cloud image | no — downloaded by the student | skipped (GUI) |
+| SDN-Basics-Template | retired — the controller is `cqugns3/faucetnode` | no — downloaded by the student | skipped (GUI) |
 
-Only the first now affects the appliance, and it matters more than it used to: it is one of
-five projects a student sees on first boot, so on Apple Silicon a broken flagship demo is
-conspicuous. The rest are reached by import, and fail at that point rather than on the OVA.
+**None of these affects the appliance any more.** The two that did were fixed by taking the Qemu
+node out of them rather than by rebuilding them per architecture, which is the cheaper move every
+time it is available: a project with no Qemu node is one file that runs anywhere. The two OPNsense
+projects still carry theirs, but nothing installs that node by default now, so they are handouts
+for a machine that has been given it — not something an arm64 OVA can break on.
 
 `export-check` reports whichever of these are imported as `BROKEN` on an arm64 build, and
 under `-e verify=all` the Qemu ones fail with **`HTTP 403 Forbidden`** — GNS3's response when
@@ -1391,6 +1405,8 @@ python3 -c 'import zipfile,json,sys; z=zipfile.ZipFile(sys.argv[1]); \
 ```
 
 **Verification fails.** `-e verify=none` gets you a build for debugging, but do not export
-an appliance that has not passed `-e verify=all`. On a Mac, `dhcp-client`,
-`ipsec-site-to-site` and `opnsense-firewall` fail inherently — see above — so `verify=all`
-cannot go green there until those projects are rebuilt for arm64.
+an appliance that has not passed `-e verify=all`. The Mac exception that used to live here is
+gone: `dhcp-client` moved to the Docker OpenWRT node and passes, and `ipsec-site-to-site` and
+`opnsense-firewall` now SKIP on any appliance without the optional OPNsense node instead of
+erroring. Build one `--with opnsense` and they run — and on arm64 they will fail again, for the
+reason in *Projects and architecture* above.

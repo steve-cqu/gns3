@@ -232,8 +232,12 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan]
-    qemu:   [opnsense]
+    qemu:   []          # none — see `optional:` below
     # Retired from the default build, still one flag away — see the note above.
+    # opnsense: retired 20 August 2026, the last Qemu node in a default build. Its two
+    # activities (opnsense-firewall, ipsec-site-to-site) are replaced by all-Docker ones —
+    # openwrt-firewall-dmz and ipsec-swanctl, both green on amd64 18 Aug and arm64 20 Aug
+    # 2026 — and both originals stay exactly as they are for anyone who asks for the node.
     # ubuntu-cloud: retired 19 August 2026, its only consumer (the SDN controller) is now
     # the Docker cqugns3/faucetnode. openwrt: retired 19 August 2026, when the last three
     # activities using it (dhcp-client, dhcp-server-basics, dns-hosts) and the
@@ -242,7 +246,7 @@ platforms:
     # Docker migration; they had been in no platform's list since, which made them
     # invisible to `validate` — being optional puts them back under it.
     optional:
-      qemu: [openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
+      qemu: [opnsense, openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
@@ -250,16 +254,19 @@ platforms:
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan]
-    qemu:   [opnsense-arm64]
+    qemu:   []          # none — see `optional:` below
     optional:
-      qemu: [openwrt-arm64, ubuntu-cloud-arm64]   # frr-qemu/netem-qemu are amd64-only disks
+      # frr-qemu/netem-qemu are amd64-only disks, so they are absent here rather than optional.
+      qemu: [opnsense-arm64, openwrt-arm64, ubuntu-cloud-arm64]
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
     # project exported on a PC is permanently amd64 — the arm64 templates installed here are
     # not consulted for an imported node. Such a project cannot start on this platform (GNS3
     # answers 403 and logs nothing). Where an arm64 rebuild exists it is named
     # <Name>-arm64.gns3project and picked up automatically; projects with no Qemu node are
-    # unaffected and need no variant.
+    # unaffected and need no variant. Since 20 August 2026 a default build installs no Qemu
+    # node at all, so nothing the appliance ships can need one; the suffix stays for a build
+    # that asks for an optional Qemu node with `--with`.
     project_suffix: "-arm64"
 
 # ---------------------------------------------------------------------------
@@ -538,6 +545,11 @@ nodes:
     unpack: gzip
     md5: 8d53c7aa2605a8848b0b2ca759fc924f
     templates: [qemu-openwrt]
+  # OPTIONAL since 20 August 2026 — nothing installs it unless `--with opnsense` asks. It is
+  # the largest thing in either OVA (3.0 GiB amd64 / 2.5 GiB arm64) and the last Qemu node in a
+  # default build. Its two activities keep working for anyone who asks for the node; the all-
+  # Docker replacements (openwrt-firewall-dmz, ipsec-swanctl) are what a stock appliance runs.
+  # See gns3-dev/notes/opnsense-replacement.md.
   opnsense:
     kind: qemu
     file: OPNsense-24.1-nano-amd64.img
@@ -574,6 +586,11 @@ nodes:
     unpack: gzip
     md5: bbb6191154e26079b19a1337d2545442
     templates: [qemu-openwrt-arm64]
+  # OPTIONAL since 20 August 2026 — nothing installs it unless `--with opnsense` asks. It is
+  # the largest thing in either OVA (3.0 GiB amd64 / 2.5 GiB arm64) and the last Qemu node in a
+  # default build. Its two activities keep working for anyone who asks for the node; the all-
+  # Docker replacements (openwrt-firewall-dmz, ipsec-swanctl) are what a stock appliance runs.
+  # See gns3-dev/notes/opnsense-replacement.md.
   opnsense-arm64:
     kind: qemu
     file: OPNsense-24.1-ufs-efi-vm-aarch64.qcow2

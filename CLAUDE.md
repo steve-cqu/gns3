@@ -60,8 +60,8 @@ at the top of `gns3build.py` lists only the first four of those; it is one revis
 **Retiring a node does not delete it.** A node moved out of a platform's `qemu:`/`docker:` list into
 its `optional:` list keeps everything that defines it and is one `--with <key>` away from being in a
 build again; `plan` lists what each platform offers and `validate` still checks it. See
-*Optional nodes* in `server/README.md`. Since 19 August 2026 OPNsense is the only Qemu node a
-default build installs.
+*Optional nodes* in `server/README.md`. Since 20 August 2026 a default build installs **no Qemu
+node at all** — OPNsense was the last, and its two activities have all-Docker replacements.
 
 **Profiles are `amd64` and `arm64`** — the architecture of the GNS3 VM, and the only axis the build
 varies on. One appliance per architecture goes to staff and students alike.

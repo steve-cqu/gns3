@@ -44,7 +44,7 @@ gns3-vNNN/
 |---|---|---|
 | `*.ova` | The complete built appliance | The whole answer. Everything else is a fallback. |
 | `frozen-*.tar.gz` | `docker save` of all 16 node images, gzipped | Rebuild the appliance with **no network**. The `.json` sidecar records each image's ID and the archive's sha256. |
-| `qemu-images-*.tar` | OpenWRT, OPNsense, Ubuntu cloud, FRR, NETem disks | These live on SourceForge, a community mirror and a personal GitHub release. Assume at least one has 404'd. |
+| `qemu-images-*.tar` | OpenWRT, OPNsense, Ubuntu cloud, FRR, NETem disks | All five are `optional:` as of 20 August 2026, so a default build installs none of them and this archive is only worth making for an appliance built `--with`. Keep the disks anyway: they live on SourceForge, a community mirror and a personal GitHub release, and at least one will have 404'd by the time they are wanted. |
 | `gns3-vm-<version>/` | The upstream GNS3 VM the appliance is built on | GNS3 retires old downloads. 2.2.x will not be available forever. |
 | `repos/*.bundle` | Both git repositories, full history | Source of truth for Dockerfiles, activities and build scripts. |
 
@@ -181,6 +181,7 @@ release, whatever the build log said.
 ```sh
 # on the VM, after the build is verified
 python3 server/build/gns3build.py freeze --profile amd64 --out frozen-vNNN-amd64.tar.gz
+# Only if this build asked for an optional Qemu node (`--with`); a default build has none.
 tar -cf qemu-images-vNNN-amd64.tar -C /opt/gns3/images QEMU     # ~3.7 GB, mostly OPNsense
 
 # on the workstation

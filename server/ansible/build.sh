@@ -6,6 +6,7 @@
 #   ./build.sh "GNS3 VM" amd64                    # VirtualBox
 #   ./build.sh ~/VMs/GNS3.vmx arm64               # VMware Fusion
 #   ./build.sh "GNS3 VM" amd64 -e verify=all
+#   ./build.sh "GNS3 VM" amd64 -e with_nodes=opnsense   # add a retired Qemu node back
 #
 # The profile names the GNS3 VM's ARCHITECTURE, which is all the build varies on: one
 # appliance per architecture goes to staff and students alike.
