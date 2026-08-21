@@ -1,8 +1,18 @@
 FROM alpine:3.24
 
-# Add community repository
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/$(grep VERSION_ID /etc/os-release | cut -d '=' -f2 | cut -d "." -f 1,2 | tr -d \")/community" \
-    >> /etc/apk/repositories
+# NO repository line here, deliberately — the same removal alpinenode/Dockerfile documents.
+#
+# There used to be one, appending a community repository computed from VERSION_ID. It built a
+# URL without the "v" that Alpine's layout uses — .../alpine/3.24/community instead of
+# .../alpine/v3.24/community — so it 404'd, and every `apk` command on this image printed
+#
+#     WARNING: ... /alpine/3.24/community/aarch64/APKINDEX.tar.gz: HTTP 404: Not Found
+#
+# including the ones students run in the shell during the Suricata activity. Nothing was ever
+# broken by it, which is why it survived: the official alpine:3.24 image already ships BOTH
+# main and community in /etc/apk/repositories, so suricata — a community package — always
+# resolved from the base image's own line. The 21 August 2026 arm64 build installed all 49
+# packages with this block still present and 404ing, which is the proof.
 
 RUN apk add --no-cache \
     suricata \
