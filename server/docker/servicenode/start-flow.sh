@@ -18,6 +18,7 @@
 # 15 August 2026 — see gns3-dev/notes/tier5-and-spike-designs.md.
 FLOWDIR=/var/flows/nfcapd
 PORT=9995
+LOGFILE=/var/log/nfcapd.log
 
 mkdir -p "$FLOWDIR"
 
@@ -35,6 +36,15 @@ echo "Starting nfcapd, listening for NetFlow on UDP $PORT ..."
 # the 60s default a student runs flow-status.sh, sees nothing, and thinks it is broken. At 10s a
 # flow shows up within ~10s of the probe exporting it. (In nfdump 1.7 the output directory is the
 # argument to -w, not a separate -l.)
+# Give nfcapd's log somewhere to go that is not the student's console. Once daemonised, nfcapd
+# logs through syslog(3) -- NOT stderr, so redirecting the command does nothing -- and with no
+# syslogd running in the container those messages land on the console. The result was a pair of
+# statistics lines on the Collector console every 10 seconds, forever, arriving in the middle of
+# whatever else was being read; it also broke an automated console harness, whose exit markers the
+# spew occasionally interleaved with (22 August 2026, the netflow-basics walkthrough). A busybox
+# syslogd writing to a file takes them off the console and keeps them somewhere useful.
+pgrep -x syslogd >/dev/null 2>&1 || syslogd -O "$LOGFILE"
+
 nfcapd -D -w "$FLOWDIR" -p "$PORT" -t 10
 
 sleep 1
@@ -44,6 +54,7 @@ if pgrep -x nfcapd >/dev/null 2>&1; then
     echo "Point a probe at this node's address on UDP $PORT (see start-flowprobe.sh on the router)."
     echo "Generate traffic, wait ~15s, then see the flows:   flow-status.sh"
     echo "Query them directly:                               nfdump -R $FLOWDIR -s ip/bytes"
+    echo "The collector's own log:                           $LOGFILE"
 else
     echo "nfcapd did not stay running. Check the console output above."
     exit 1

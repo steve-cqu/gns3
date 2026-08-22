@@ -74,7 +74,11 @@ fi
 
 echo "PostgreSQL is running."
 echo
-echo "Connect on this node:        psql -h /run/postgresql -U postgres"
+# The local socket is initdb'd with --auth-local=peer, so the role has to match the OS user: a
+# bare `psql -U postgres` from the root console is refused with "Peer authentication failed".
+# These two lines said exactly that until 22 August 2026, and a documentation walkthrough of the
+# Database Server Basics activity caught it -- students were being told a command that never works.
+echo "Connect on this node:        su postgres -c 'psql -h /run/postgresql -d labdb'"
 echo "Connect from another node:   psql -h <this-node-ip> -U student -d labdb   (password: gns3)"
-echo "Back up the lab database:    pg_dump -h /run/postgresql -U postgres labdb > /root/labdb.sql"
+echo "Back up the lab database:    su postgres -c 'pg_dump -h /run/postgresql labdb' > /root/labdb.sql"
 echo "Check what it is doing:      db-status.sh"
