@@ -59,5 +59,14 @@ RUN groupadd --gid 20001 class \
             --gid class --uid 10001 --comment "" student \
  && echo 'student:gns3' | chpasswd
 
+# Deliberately vulnerable teaching apps for the web-attack activities, shipped so students read
+# and run a file rather than pasting ~40 lines into a console (which is where those activities
+# failed in a tutorial). vulnsite.py has a SQL-injectable login (web-app-attacks-basics);
+# xsssite.py reflects and stores unescaped HTML (xss-basics). Both are inert until run, serve on
+# :8080, and are edited in place for each activity's fix task. Placed last so the expensive apt
+# and rockyou layers above stay cached on a rebuild.
+COPY vulnsite.py /root/vulnsite.py
+COPY xsssite.py  /root/xsssite.py
+
 # Persistent volumes
 VOLUME /root/.ssh /etc/ssh /data /home/student
