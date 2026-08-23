@@ -14,6 +14,17 @@ RUN sed -i 's/Components: main restricted/Components: main restricted universe m
 # nping at all — reaching into edge from a pinned base is what ipv6node had to do for tayga,
 # and it is the thing most likely to break on a rebuild. Ubuntu carries all three in
 # universe for both architectures. nping arrives with nmap, already installed above.
+#
+# sssd / realmd / adcli / krb5-user / ldap-utils back the "Domain Client" template, which joins
+# the Samba AD Domain Controller (cqugns3/sambadc). They are here for the same reason as the
+# three above: Alpine packages NONE of sssd, realmd or adcli on any branch, so a domain-joined
+# Linux client can only be an Ubuntu node. Same image, second template — the docker-trafficgen
+# precedent: no new image for a node that is packages and a label.
+#
+# All of them are installed HERE rather than left to `realm join` because realmd's answer to a
+# missing package is to call PackageKit, which wants a working apt inside the topology. Nothing
+# in the lab has that, and an activity that silently depends on Internet access inside GNS3 is
+# the anti-pattern candidate-node-types.md exists to stop.
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
  && apt-get update && apt-get install -y --no-install-recommends \
     openssh-server openssh-client \
@@ -28,6 +39,7 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     john \
     dsniff nftables rsyslog \
     hping3 mgen tcpreplay \
+    sssd sssd-tools realmd adcli krb5-user ldap-utils \
     tzdata \
  && dpkg-reconfigure --frontend noninteractive tzdata \
  && apt-get clean && rm -rf /var/lib/apt/lists/*

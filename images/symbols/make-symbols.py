@@ -88,6 +88,9 @@ SYMBOLS = [
     ("server-git",       "server", "GIT",     None),
     ("server-mon",       "server", "MON",     None),
     ("server-kdc",       "server", "KDC",     None),
+    # The AD DC beside the KDC: auth-kerberos runs a bare MIT KDC, sambadc runs the same
+    # protocol as a directory. A lab can hold both, so they must not share a band.
+    ("server-ad",        "server", "AD",      None),
     ("server-sdn",       "server", "SDN",     None),
     # not wired to a template yet — the candidates in gns3-dev/notes/candidate-node-types.md
     ("server-web",       "server", "WEB",     None),
@@ -105,6 +108,7 @@ SYMBOLS = [
     ("computer-trafficgen", "computer", "TRAFGEN", None),
     ("computer-wazuhagent", "computer", "WAZUH",   None),
     ("computer-wifi",       "computer", "WIFI",    "arcs"),
+    ("computer-domain",     "computer", "DOMAIN",  None),
 
     # --- forwarding, on the router ---------------------------------------
     ("router-frr",      "router", "FRR",      None),

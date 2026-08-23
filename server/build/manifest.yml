@@ -231,7 +231,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
-             giteanode, strongswan]
+             giteanode, strongswan, sambadc]
     qemu:   []          # none — see `optional:` below
     # Retired from the default build, still one flag away — see the note above.
     # opnsense: retired 20 August 2026, the last Qemu node in a default build. Its two
@@ -253,7 +253,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
-             giteanode, strongswan]
+             giteanode, strongswan, sambadc]
     qemu:   []          # none — see `optional:` below
     optional:
       # frr-qemu/netem-qemu are amd64-only disks, so they are absent here rather than optional.
@@ -343,7 +343,10 @@ nodes:
     # docker-trafficgen is the same image with a different name, symbol and usage text —
     # hping3/mgen/tcpreplay live in ubuntunode because Alpine does not package them in a
     # stable branch. No new image for a node that is three packages and a label.
-    templates: [docker-ubuntuhost, docker-trafficgen]
+    # docker-domainclient is the same image again: the Domain Client that joins the Samba AD
+    # domain. sssd/realmd/adcli exist on no Alpine branch, so a domain-joined Linux client can
+    # only be an Ubuntu node — see gns3-dev/notes/directory-ad-dc-plan.md.
+    templates: [docker-ubuntuhost, docker-trafficgen, docker-domainclient]
   net_toolbox:
     kind: docker
     image: adosztal/net_toolbox:latest
@@ -511,6 +514,19 @@ nodes:
     image: cqugns3/giteanode:latest
     source: {type: local, path: giteanode}
     templates: [docker-giteanode]
+
+  # Samba Active Directory Domain Controller (Domain Controller template). The middle rung of the
+  # identity ladder: auth-kerberos teaches Kerberos as a protocol, this runs it as a directory —
+  # Kerberos, LDAP and DNS as one domain, with users and groups a Linux client can join and log
+  # in against. Its own image for D2's reason: samba-dc pulls the Samba library set, ldb, winbind
+  # and py3-dnspython behind it. Alpine builds Samba --with-ads against its bundled Heimdal, which
+  # is what makes an AD DC possible at all on this base. Pairs with the Domain Client template on
+  # ubuntunode. See gns3-dev/notes/directory-ad-dc-plan.md.
+  sambadc:
+    kind: docker
+    image: cqugns3/sambadc:latest
+    source: {type: local, path: sambadc}
+    templates: [docker-sambadc]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
