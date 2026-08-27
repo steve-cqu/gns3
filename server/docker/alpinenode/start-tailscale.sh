@@ -285,6 +285,15 @@ if [ -n "$ROUTE" ] && [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "1" ]; then
     echo "           line under eth0 in /etc/network/interfaces."
 fi
 
+# IPv6 forwarding as well, even though the lab is IPv4. tailscale up checks it and prints
+#   "Warning: IPv6 forwarding is disabled. Subnet routes and exit nodes may not work correctly."
+# which is harmless here and reads like a fault - and a warning a student cannot act on is worse
+# than no warning, because it makes the ones that matter easier to ignore. Measured 27 Aug 2026.
+if [ -n "$ROUTE" ] && [ -w /proc/sys/net/ipv6/conf/all/forwarding ] &&
+   [ "$(cat /proc/sys/net/ipv6/conf/all/forwarding)" != "1" ]; then
+    sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
+fi
+
 if daemon_alive && [ -S "$SOCK" ]; then
     echo "tailscaled is already running."
 else
