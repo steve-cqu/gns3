@@ -78,6 +78,10 @@ whois \
 samba-client \
 cifs-utils \
  && update-ca-certificates
+# tailscale is what makes the VPN Router template a VPN router - this image backs it. It is the
+# only thing in the lab set that crosses the real Internet, joining two students' GNS3 instances
+# into one network so hosts in one lab can reach hosts in the other. ~30 MB, and it is inert until
+# a student runs start-tailscale.sh (below). Activity: gns3-dev/activities/tailscale-basics.
 # samba-client (smbclient) and cifs-utils (mount.cifs) let a Linux Host be a file-share CLIENT:
 # browse/copy a share with smbclient, or mount it as a folder ("mapped drive") with mount.cifs.
 # ~2 MB. The SERVER half (samba) is on servicenode's File Server template. mount.cifs needs the
@@ -119,6 +123,24 @@ COPY setup-github.sh /bin/setup-github.sh
 COPY reset-github.sh /bin/reset-github.sh
 COPY start-sshd      /bin/start-sshd
 RUN chmod +x /bin/setup-github.sh /bin/reset-github.sh /bin/start-sshd
+
+# The Tailscale helpers for the VPN Router template: join a mesh, see what it is doing, leave it.
+# /usr/local/bin, not /bin like the three above - those pre-date the wg-quick measurement in the
+# comment block higher up, and new scripts follow the rule rather than the precedent.
+#
+# These carry the whole student-facing flow. start-tailscale.sh checks the Internet leg, DNS and
+# the coordination server before Tailscale can be blamed for any of them, works out the /16 to
+# advertise from eth0's address instead of asking a student to do it by hand, and prints the raw
+# commands it runs (--explain prints them and runs nothing) so the by-hand version of the activity
+# cannot drift from the wrapper. Nothing here joins anything on its own: the node's Tailscale state
+# lives in /var/lib/tailscale, which is deliberately not persisted, so a student is on the mesh
+# only during a session they started on purpose. See gns3-dev/notes/tailscale-easy-join.md.
+COPY start-tailscale.sh  /usr/local/bin/start-tailscale.sh
+COPY tailscale-status.sh /usr/local/bin/tailscale-status.sh
+COPY stop-tailscale.sh   /usr/local/bin/stop-tailscale.sh
+RUN chmod +x /usr/local/bin/start-tailscale.sh \
+             /usr/local/bin/tailscale-status.sh \
+             /usr/local/bin/stop-tailscale.sh
 
 # A class group and a student user. The account is what ssh-hardening restricts logins to
 # with AllowUsers. It ships with NO SSH keys: a single private key copied into every node

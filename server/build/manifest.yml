@@ -84,7 +84,14 @@ registry_base: https://raw.githubusercontent.com/GNS3/gns3-registry/eba400be9936
 #                    — linux-modules-extra is not needed.
 #   cifs           - so a Linux Host can `mount -t cifs` a Samba share from the File Server node
 #                    (smbclient needs no module; mounting does). From the base linux-modules package.
-kernel_modules: [wireguard, sch_netem, mac80211_hwsim, cifs]
+#   tun            - /dev/net/tun, which tailscaled needs to build the tailscale0 interface on the
+#                    VPN Router. Listed because the failure without it is silent and misleading:
+#                    tailscaled falls back to userspace networking, which cannot do subnet routing,
+#                    so two students' VPN Routers reach each other while the hosts behind them
+#                    never do, with nothing naming the cause. On most kernels tun is built in and
+#                    the modprobe is a harmless no-op; this pins it either way. start-tailscale.sh
+#                    checks for the device and says so rather than letting it fail later.
+kernel_modules: [wireguard, sch_netem, mac80211_hwsim, cifs, tun]
 
 # Host kernel settings the Docker nodes need, applied and persisted by the same phase. A container
 # shares the VM's kernel and cannot set these from inside its own namespace.
