@@ -17,8 +17,20 @@ NETCHECK=0
 LOG=/var/log/tailscaled.log
 SOCK=/var/run/tailscale/tailscaled.sock
 
+# A backgrounded daemon whose parent has gone leaves a zombie behind: GNS3 runs each node with
+# /bin/sh as PID 1, and that shell does not reap orphans. A zombie still matches `pgrep -x`, so the
+# naive check reports a daemon that has actually exited as still running - and then this script
+# would skip starting it and nothing would work. Measured on the appliance, 27 August 2026.
+daemon_alive() {
+    for p in $(pgrep -x tailscaled 2>/dev/null); do
+        grep -q "^State:.*Z" "/proc/$p/status" 2>/dev/null && continue
+        return 0
+    done
+    return 1
+}
+
 echo "=== 1. The Tailscale server on this node ==================================="
-if ! pgrep -x tailscaled >/dev/null 2>&1; then
+if ! daemon_alive; then
     echo "  tailscaled is NOT running, so this node is not on any mesh."
     echo
     echo "  Join with:  start-tailscale.sh --key -"
@@ -32,13 +44,17 @@ echo "  tailscaled is running (log: $LOG)"
 # carry the route fields, and this is the only node script in the image set that parses JSON -
 # everything else here stays shell.
 JSON=$(tailscale status --json 2>/dev/null)
+# What this node ASKED to advertise. `tailscale status --json` does not always carry it, and
+# `debug prefs` is not guaranteed across client versions, so this is best-effort: an empty value
+# just means section 3 reports only what was approved.
+PREFS=$(tailscale debug prefs 2>/dev/null)
 if [ -z "$JSON" ]; then
     echo "  Could not read the status. The daemon may still be starting; try again in a moment."
     exit 1
 fi
 
-echo "$JSON" | python3 -c '
-import json, sys
+echo "$JSON" | TS_PREFS="$PREFS" python3 -c '
+import json, os, sys
 
 try:
     s = json.load(sys.stdin)
@@ -79,6 +95,15 @@ approved = get(self_, "PrimaryRoutes", default=[]) or []
 # AllowedIPs/AdvertisedRoutes is what this node ASKED for; the field name varies by version, and
 # on some builds it is only visible through `tailscale debug prefs`, handled by the shell below.
 asked = get(self_, "AdvertisedRoutes", "AllowedIPs", default=None)
+if not asked:
+    # Fall back to the preferences the daemon itself reports, handed in by the shell above.
+    try:
+        prefs = json.loads(os.environ.get("TS_PREFS") or "{}")
+        asked = prefs.get("AdvertiseRoutes") or None
+    except Exception:
+        asked = None
+if asked:
+    asked = [a for a in asked if not str(a).endswith("/32") and not str(a).endswith("/128")] or None
 
 print("")
 print("=== 3. What this site offers the group ====================================")
@@ -139,11 +164,6 @@ for _, p in sorted(peers.items(), key=lambda kv: (get(kv[1], "DNSName", "HostNam
         print("        unapproved route is never sent to peers, so this is as much as this node")
         print("        can tell you - ask them to run tailscale-status.sh at their end.")
 ' || echo "  (could not read the detail - the client build may differ from the one this expects)"
-
-# What this node asked to advertise, when the JSON above did not carry it. `debug prefs` is not
-# guaranteed across client versions, so a failure here is silent rather than alarming.
-PREFS=$(tailscale debug prefs 2>/dev/null | tr -d ' "' | grep -i advertiseroutes)
-[ -n "$PREFS" ] && echo "  Prefs:        $PREFS"
 
 echo
 echo "=== 5. Routes actually installed on this node =============================="

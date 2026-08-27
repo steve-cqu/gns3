@@ -18,7 +18,19 @@ QUIET=0
 
 STATE_DIR=/var/lib/tailscale
 
-if ! pgrep -x tailscaled >/dev/null 2>&1; then
+# A backgrounded daemon whose parent has gone leaves a zombie behind: GNS3 runs each node with
+# /bin/sh as PID 1, and that shell does not reap orphans. A zombie still matches `pgrep -x`, so the
+# naive check reports a daemon that has actually exited as still running - and then this script
+# would skip starting it and nothing would work. Measured on the appliance, 27 August 2026.
+daemon_alive() {
+    for p in $(pgrep -x tailscaled 2>/dev/null); do
+        grep -q "^State:.*Z" "/proc/$p/status" 2>/dev/null && continue
+        return 0
+    done
+    return 1
+}
+
+if ! daemon_alive; then
     echo "tailscaled was not running - this node is not on any mesh."
 else
     # logout first, and while the daemon is still up: it tells the coordination server to
@@ -31,8 +43,8 @@ else
     echo "Stopping tailscaled..."
     pkill -x tailscaled
     i=0
-    while pgrep -x tailscaled >/dev/null 2>&1 && [ "$i" -lt 10 ]; do sleep 1; i=$((i + 1)); done
-    if pgrep -x tailscaled >/dev/null 2>&1; then
+    while daemon_alive && [ "$i" -lt 10 ]; do sleep 1; i=$((i + 1)); done
+    if daemon_alive; then
         echo "  WARNING: tailscaled is still running. Try again, or restart the node."
     else
         echo "  ok       tailscaled has stopped"

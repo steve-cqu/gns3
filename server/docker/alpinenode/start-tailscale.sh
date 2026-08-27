@@ -82,6 +82,19 @@ fail() {
     exit 1
 }
 
+# A backgrounded daemon whose parent has gone leaves a zombie behind: GNS3 runs each node with
+# /bin/sh as PID 1, and that shell does not reap orphans. A zombie still matches `pgrep -x`, so the
+# naive check reports a daemon that has actually exited as still running - and then this script
+# would skip starting it and nothing would work. Measured on the appliance, 27 August 2026.
+daemon_alive() {
+    for p in $(pgrep -x tailscaled 2>/dev/null); do
+        grep -q "^State:.*Z" "/proc/$p/status" 2>/dev/null && continue
+        return 0
+    done
+    return 1
+}
+
+
 CONTROL_URL="${LOGIN_SERVER:-https://controlplane.tailscale.com/}"
 CONTROL_HOST=$(printf '%s' "$CONTROL_URL" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')
 
@@ -166,9 +179,13 @@ if [ "$EXPLAIN_ONLY" = 1 ]; then
     echo "    $UP_CMD${KEY:+ --auth-key=tskey-***}"
     echo
     [ -n "$ROUTE" ] && { echo "The route it would advertise is $ROUTE,"; echo "  $ROUTE_WHY."; echo; }
+    # Only the options this run would actually use are explained. Describing --advertise-routes
+    # after --no-advertise removed it reads as though it were still in play.
     echo "What each option does:"
-    echo "  --advertise-routes  offers your inside range to the rest of the group, so their"
-    echo "                      traffic for your site is sent to this router."
+    if [ -n "$ROUTE" ]; then
+        echo "  --advertise-routes  offers your inside range to the rest of the group, so their"
+        echo "                      traffic for your site is sent to this router."
+    fi
     echo "  --accept-routes     accepts the ranges the others advertise. Without it this node"
     echo "                      ignores them and cannot reach their sites."
     echo "  --snat-subnet-routes=false"
@@ -195,6 +212,7 @@ echo "Checking this node can reach a coordination server..."
     "this node has no /dev/net/tun, so tailscaled cannot create its interface." \
 "That is a setting on the GNS3 VM, not something you can fix from here. The tun module must
 be loaded on the VM (kernel_modules in the appliance manifest). Tell your lecturer."
+echo "  ok       /dev/net/tun is present"
 
 # 2. A default route. Which interface it points at is also which leg faces the Internet, so it is
 #    worth reading out rather than assuming eth1.
@@ -267,7 +285,7 @@ if [ -n "$ROUTE" ] && [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "1" ]; then
     echo "           line under eth0 in /etc/network/interfaces."
 fi
 
-if pgrep -x tailscaled >/dev/null 2>&1 && [ -S "$SOCK" ]; then
+if daemon_alive && [ -S "$SOCK" ]; then
     echo "tailscaled is already running."
 else
     echo "Starting tailscaled (log: $LOG) ..."
