@@ -16,6 +16,18 @@
 # to nodes created after this runs. For an existing project, either add the directories by hand
 # on each node (Configure > Advanced > Additional directories) or rebuild the project.
 #
+# It also never REMOVES a directory. It adds the ones below to whatever a template already has,
+# so running it on a newer appliance that already persists more than this list leaves that alone.
+# That matters: it used to replace the list outright, which on a T3 2026 appliance would have
+# stripped /usr/local/bin from the VPN Router - the directory the Tailscale helper scripts live in
+# - and the symptom (edits to those scripts vanishing on a project close) would have been
+# impossible to connect back to this script. Fixed 28 August 2026; see
+# gns3-dev/notes/node-persistence.md.
+#
+# LIFESPAN: this is a mid-term repair for appliances built before the volumes shipped in the
+# templates themselves (13 August 2026). Students still on a T2 2026 appliance need it. Retire it,
+# and the instruction that points at it, at the end of T2 2026.
+#
 # Usage:
 #   ./vm-fix-persistence.sh              apply the changes
 #   ./vm-fix-persistence.sh --dry-run    show what would change, change nothing
@@ -59,15 +71,18 @@ LIST = "--list" in sys.argv
 #   /home             extra user accounts created during password activities (Ubuntu)
 #   /var/lib/krb5kdc  the Kerberos database created by kdb5_util
 # Templates absent from this map are left exactly as they are.
+# Kept in step with server/templates/*.conf, so a repaired appliance ends up with what a freshly
+# built one has. Suricata IDS is deliberately absent: its image declares /var/lib/suricata/rules,
+# /var/log/suricata and /etc/suricata as VOLUMEs, which covers everything the activity writes, and
+# the shipped template's extra_volumes is empty for that reason.
 WANTED = {
-    "Linux Host":    ["/etc", "/root", "/var/www"],
-    "Linux Router":  ["/etc", "/root", "/var/www"],
-    "VPN Router":    ["/etc", "/root", "/var/www"],
-    "Ansible Host":  ["/etc", "/root", "/var/www"],
-    "Ubuntu Host":   ["/etc", "/root", "/var/www", "/home"],
+    "Linux Host":    ["/etc", "/root", "/var/www", "/usr/local/bin"],
+    "Linux Router":  ["/etc", "/root", "/var/www", "/usr/local/bin"],
+    "VPN Router":    ["/etc", "/root", "/var/www", "/usr/local/bin"],
+    "Ansible Host":  ["/etc", "/root", "/var/www", "/usr/local/bin"],
+    "Ubuntu Host":   ["/etc", "/root", "/home", "/var/www", "/usr/local/bin"],
     "Kerberos Host": ["/root", "/var/lib/krb5kdc"],
-    "Suricata IDS":  ["/etc", "/root"],
-    "NAT64Router":   ["/etc", "/root"],
+    "NAT64Router":   ["/etc", "/root", "/usr/local/bin"],
 }
 
 # Port 80 on the CQU VM; 3080 is the GNS3 default, kept as a fallback for older builds.
@@ -130,8 +145,10 @@ for t in sorted(docker, key=lambda t: t["name"]):
     if name not in WANTED:
         skipped += 1
         continue
-    want = WANTED[name]
     have = t.get("extra_volumes") or []
+    # Union, order preserved: what is already there first, then anything missing. Never remove -
+    # a newer appliance may legitimately persist more than this list knows about.
+    want = have + [d for d in WANTED[name] if d not in have]
     if have == want:
         print("  ok       %-14s already %s" % (name, have))
         unchanged += 1
