@@ -737,6 +737,118 @@ def install_host_scripts(m, dry_run):
         print(f"  {'installed' if changed else 'current  '}  {dst}")
 
 
+# --------------------------------------------------------------------------- #
+# Image normalisation: make the projects built from an image importable
+# --------------------------------------------------------------------------- #
+#
+# GNS3 2.2 refuses to import a project containing an absolute symlink:
+#
+#   409  Symlink 'project-files/docker/<node>/etc/mtab' has absolute target
+#        '/proc/mounts', refusing
+#
+# A node's persisted directories are seeded from its image, so the image's links end up inside
+# every project built from it — and therefore inside every project a student exports and submits.
+# Measured 28 August 2026 on two appliances: a student-style project carried 363 absolute symlinks
+# and was refused on import, including by the appliance it was exported from.
+#
+# Relativising the image's links at BUILD time is not enough. The container runtime writes
+# /etc/mtab -> /proc/mounts into the bind at every start, after every layer has been applied, and
+# one absolute link is all it takes to be refused. Measured: build-time only took a node from 122
+# absolute links to 1, and the export was still refused, naming /etc/mtab. So the pass also has to
+# run from the node's own init, which is what node-init.sh is for.
+#
+# This is done here rather than in each Dockerfile for two reasons. The docker build context is the
+# image's own directory (see docker_context below), so a shared script cannot be COPYed from a
+# Dockerfile without duplicating it 17 times. And it has to be the LAST layer: anything installed
+# after the pass that touches ca-certificates re-creates absolute links, and a per-Dockerfile
+# convention would eventually be broken by someone appending a RUN. Doing it here is immune to
+# both. Full reasoning and the measurements: gns3-dev/notes/node-persistence.md.
+
+NORMALISE_INIT = "/sbin/node-init.sh"
+NORMALISE_SCRIPTS = ("relativise-symlinks.sh", "node-init.sh")
+
+
+def persisted_paths():
+    """Every directory any template asks GNS3 to keep, so the build-time pass covers all of them.
+
+    Read from the templates rather than hard-coded: a node that gains an `extra_volumes` entry
+    should not need this file edited too. `/etc` is included whatever the templates say, because
+    GNS3 binds `/etc/network` on every Docker node regardless.
+    """
+    paths = {"/etc"}
+    for conf in sorted((REPO_ROOT / "server" / "templates").glob("*.conf")):
+        try:
+            with open(conf) as f:
+                paths.update(json.load(f).get("extra_volumes") or [])
+        except (OSError, ValueError):
+            continue                      # a malformed template is the template phase's problem
+    return sorted(paths)
+
+
+def image_config(image, field):
+    """One field of an image's config, as a Python value ([] when absent).
+
+    `run(capture=True)` hands back a CompletedProcess, not the text — reading `.stdout` is the
+    difference between knowing an image is already normalised and rebuilding it every time.
+    """
+    r = run(["docker", "image", "inspect", image, "--format", "{{json .Config." + field + "}}"],
+            check=False, capture=True)
+    if r.returncode != 0:
+        return []
+    try:
+        return json.loads((r.stdout or "").strip()) or []
+    except ValueError:
+        return []
+
+
+def is_normalised(image):
+    return image_config(image, "Entrypoint")[:1] == [NORMALISE_INIT]
+
+
+def normalise_image(image, docker_platform):
+    """Append the normalisation layer to an image that has just been built.
+
+    The image's own entrypoint and command are preserved: the init is PREPENDED to the entrypoint
+    and `exec "$@"`s whatever follows. That matters because CMD is not a shell everywhere — it is
+    /bin/start-frr.sh on frrnode, /bin/start-netem.sh on netemnode, /bin/bash on ubuntunode — and
+    hard-coding a shell here would quietly turn those nodes into bare shells.
+    """
+    if is_normalised(image):
+        print(f"  normalise: {image} already carries {NORMALISE_INIT}")
+        return
+    entrypoint = image_config(image, "Entrypoint")
+    # Docker RESETS CMD to empty whenever a derived image sets ENTRYPOINT, so the original command
+    # has to be written back explicitly. Without this the node starts as `node-init.sh` with no
+    # arguments, `exec "$@"` has nothing to exec, and the container exits immediately — measured,
+    # not guessed, on 28 August 2026.
+    cmd_original = image_config(image, "Cmd")
+    dirs = " ".join(persisted_paths())
+    tmpdir = tempfile.mkdtemp(prefix="gns3build-normalise-")
+    try:
+        for name in NORMALISE_SCRIPTS:
+            src = HERE / name
+            if not src.exists():
+                raise FileNotFoundError(f"{src} is missing — cannot normalise {image}")
+            shutil.copy2(str(src), os.path.join(tmpdir, name))
+        # The init goes in /sbin, NOT /usr/local/bin: that path is in extra_volumes, so a project
+        # created from an older image would mask the new script with its own copy and the node
+        # would fail to start with a missing entrypoint.
+        with open(os.path.join(tmpdir, "Dockerfile"), "w") as f:
+            f.write(
+                f"FROM {image}\n"
+                f"COPY relativise-symlinks.sh /sbin/relativise-symlinks.sh\n"
+                f"COPY node-init.sh /sbin/node-init.sh\n"
+                f"RUN chmod +x /sbin/relativise-symlinks.sh /sbin/node-init.sh"
+                f" && /sbin/relativise-symlinks.sh {dirs}\n"
+                f"ENTRYPOINT {json.dumps([NORMALISE_INIT] + entrypoint)}\n"
+                + (f"CMD {json.dumps(cmd_original)}\n" if cmd_original else ""))
+        run(["docker", "build", "--platform", docker_platform, "-t", image, tmpdir])
+        print(f"  normalise: {image} — init prepended to entrypoint, "
+              f"cmd {cmd_original or '(none)'} preserved")
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def docker_context(m, node, tmpdir):
     """Build-context directory for a node; registry sources are fetched into tmpdir."""
     src = node["source"]
@@ -813,7 +925,12 @@ def cmd_docker(args):
         node = m["nodes"][key]
         image = node["image"]
         if have_docker and not args.force and image_exists(image):
-            print(f"  skip   {key:14} {image} (already built)")
+            # An image built before the normalisation layer existed produces projects that cannot
+            # be imported anywhere, and nothing else says so — a half-normalised appliance is the
+            # worst outcome, because the defect then depends on which node a student used.
+            stale = "" if not node.get("normalise", True) or is_normalised(image) \
+                else "  — NOT normalised, rebuild with --force"
+            print(f"  skip   {key:14} {image} (already built){stale}")
             skipped += 1
             continue
         src = node["source"]
@@ -831,6 +948,8 @@ def cmd_docker(args):
                 cmd += ["--build-arg", f"{k}={v}"]
             cmd.append(str(ctx))
             run(cmd)
+            if node.get("normalise", True):
+                normalise_image(image, docker_platform)
             built += 1
             print(f"=== {key}: OK")
         except Exception as e:
