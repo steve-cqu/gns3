@@ -45,6 +45,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -751,9 +752,11 @@ def install_host_scripts(m, dry_run):
 # Measured 28 August 2026 on two appliances: a student-style project carried 363 absolute symlinks
 # and was refused on import, including by the appliance it was exported from.
 #
-# Relativising the image's links at BUILD time is not enough. The container runtime writes
-# /etc/mtab -> /proc/mounts into the bind at every start, after every layer has been applied, and
-# one absolute link is all it takes to be refused. Measured: build-time only took a node from 122
+# Relativising the image's links at BUILD time is not enough. Docker writes
+# /etc/mtab -> /proc/mounts into a container's own filesystem when the container is CREATED -- it is
+# not in the image at all -- and GNS3 builds a new container every time a project is opened, so it
+# reappears each session in the persisted /etc bind. One absolute link is all it takes to be
+# refused. Measured: build-time only took a node from 122
 # absolute links to 1, and the export was still refused, naming /etc/mtab. So the pass also has to
 # run from the node's own init, which is what node-init.sh is for.
 #
@@ -766,6 +769,22 @@ def install_host_scripts(m, dry_run):
 
 NORMALISE_INIT = "/sbin/node-init.sh"
 NORMALISE_SCRIPTS = ("relativise-symlinks.sh", "node-init.sh")
+NORMALISE_LABEL = "au.edu.cqu.gns3.normalised"
+
+
+def normalise_stamp():
+    """A short hash of the two scripts, used as an image's normalisation marker.
+
+    NOT the entrypoint. Testing `Entrypoint[0] == NORMALISE_INIT` looks equivalent and is wrong in
+    both directions: the nine images built FROM cqugns3/alpinenode INHERIT its entrypoint, so they
+    would be judged already-normalised and skip the build-time pass over their own layers; and an
+    image normalised by an older version of these scripts would never be redone. Hashing the
+    scripts fixes both -- editing either one invalidates every image's marker.
+    """
+    h = hashlib.sha256()
+    for name in NORMALISE_SCRIPTS:
+        h.update((HERE / name).read_bytes())
+    return h.hexdigest()[:16]
 
 
 def persisted_paths():
@@ -785,7 +804,7 @@ def persisted_paths():
     return sorted(paths)
 
 
-def image_config(image, field):
+def image_config(image, field, strict=False):
     """One field of an image's config, as a Python value ([] when absent).
 
     `run(capture=True)` hands back a CompletedProcess, not the text — reading `.stdout` is the
@@ -794,15 +813,30 @@ def image_config(image, field):
     r = run(["docker", "image", "inspect", image, "--format", "{{json .Config." + field + "}}"],
             check=False, capture=True)
     if r.returncode != 0:
+        if strict:
+            raise RuntimeError(f"docker image inspect {image} .Config.{field} failed: "
+                               f"{(r.stdout or '').strip()[:200]}")
         return []
     try:
         return json.loads((r.stdout or "").strip()) or []
     except ValueError:
+        if strict:
+            raise RuntimeError(f"could not parse .Config.{field} of {image}")
         return []
 
 
 def is_normalised(image):
-    return image_config(image, "Entrypoint")[:1] == [NORMALISE_INIT]
+    """Does this image carry a normalisation layer built from the CURRENT scripts?
+
+    Only trustworthy for an image this engine did not just rebuild. Docker inherits BOTH the
+    entrypoint and the labels through a `FROM`, so a derived image reports its base's marker while
+    its own layers have never been swept -- measured on the appliance, 28 August 2026, after an
+    entrypoint check and then a label check both failed the same way. That is why the build path
+    below does not consult this at all and simply applies the layer every time; this is for the
+    skip path, where the image was NOT rebuilt and its own pass therefore still stands.
+    """
+    labels = image_config(image, "Labels")
+    return isinstance(labels, dict) and labels.get(NORMALISE_LABEL) == normalise_stamp()
 
 
 def normalise_image(image, docker_platform):
@@ -813,15 +847,31 @@ def normalise_image(image, docker_platform):
     /bin/start-frr.sh on frrnode, /bin/start-netem.sh on netemnode, /bin/bash on ubuntunode — and
     hard-coding a shell here would quietly turn those nodes into bare shells.
     """
-    if is_normalised(image):
-        print(f"  normalise: {image} already carries {NORMALISE_INIT}")
-        return
-    entrypoint = image_config(image, "Entrypoint")
+    # No early return on a marker. See is_normalised(): a derived image inherits its base's
+    # entrypoint AND labels, so any such check reports "already done" for an image whose own layers
+    # have never been swept. Applying the layer is a few seconds and is idempotent in effect -- the
+    # pass over already-relative links is a no-op, and the leading init is stripped before being
+    # re-prepended below -- so the safe thing is simply to always apply it.
+    # Strict from here: if inspect fails we would write a layer with no CMD, `exec "$@"` would have
+    # nothing to exec, PID 1 would exit at once -- on an image then marked normalised, so nothing
+    # would ever repair it.
+    entrypoint = image_config(image, "Entrypoint", strict=True)
+    # A shell-form ENTRYPOINT (["/bin/sh","-c","..."]) makes Docker ignore CMD, so re-appending the
+    # command would turn it into $0 of the -c script rather than an argument. No current image does
+    # this; refuse rather than silently change its semantics.
+    # An inherited (or previously applied) init is stripped so re-normalising cannot stack
+    # ["/sbin/node-init.sh", "/sbin/node-init.sh", ...] on every rebuild.
+    while entrypoint[:1] == [NORMALISE_INIT]:
+        entrypoint = entrypoint[1:]
+    if entrypoint[:2] in (["/bin/sh", "-c"], ["/bin/bash", "-c"], ["sh", "-c"], ["bash", "-c"]):
+        raise RuntimeError(f"{image} has a shell-form ENTRYPOINT {entrypoint[:2]}; normalising it "
+                           f"would change how its command is interpreted. Set `normalise: false` "
+                           f"on this node, or give the image an exec-form entrypoint.")
     # Docker RESETS CMD to empty whenever a derived image sets ENTRYPOINT, so the original command
     # has to be written back explicitly. Without this the node starts as `node-init.sh` with no
     # arguments, `exec "$@"` has nothing to exec, and the container exits immediately — measured,
     # not guessed, on 28 August 2026.
-    cmd_original = image_config(image, "Cmd")
+    cmd_original = image_config(image, "Cmd", strict=True)
     dirs = " ".join(persisted_paths())
     tmpdir = tempfile.mkdtemp(prefix="gns3build-normalise-")
     try:
@@ -829,7 +879,18 @@ def normalise_image(image, docker_platform):
             src = HERE / name
             if not src.exists():
                 raise FileNotFoundError(f"{src} is missing — cannot normalise {image}")
-            shutil.copy2(str(src), os.path.join(tmpdir, name))
+            body = src.read_text()
+            # node-init.sh sweeps the same directories the build-time pass does, so the runtime
+            # half has no blind spot the build half covers. The list is derived, so it is written
+            # in at injection rather than duplicated in the script.
+            if name == "node-init.sh":
+                body, n = re.subn(r'^DIRS="[^"]*"$', f'DIRS="{dirs}"', body, count=1,
+                                  flags=re.M)
+                if n != 1:
+                    raise RuntimeError("node-init.sh has no DIRS= line to substitute")
+            with open(os.path.join(tmpdir, name), "w") as out:
+                out.write(body)
+            os.chmod(os.path.join(tmpdir, name), 0o755)
         # The init goes in /sbin, NOT /usr/local/bin: that path is in extra_volumes, so a project
         # created from an older image would mask the new script with its own copy and the node
         # would fail to start with a missing entrypoint.
@@ -841,7 +902,10 @@ def normalise_image(image, docker_platform):
                 f"RUN chmod +x /sbin/relativise-symlinks.sh /sbin/node-init.sh"
                 f" && /sbin/relativise-symlinks.sh {dirs}\n"
                 f"ENTRYPOINT {json.dumps([NORMALISE_INIT] + entrypoint)}\n"
-                + (f"CMD {json.dumps(cmd_original)}\n" if cmd_original else ""))
+                + (f"CMD {json.dumps(cmd_original)}\n" if cmd_original else "")
+                # The marker the next build reads. Hashes the scripts, so editing either one
+                # invalidates it on every image and they are redone.
+                + f"LABEL {NORMALISE_LABEL}={normalise_stamp()}\n")
         run(["docker", "build", "--platform", docker_platform, "-t", image, tmpdir])
         print(f"  normalise: {image} — init prepended to entrypoint, "
               f"cmd {cmd_original or '(none)'} preserved")
@@ -928,9 +992,19 @@ def cmd_docker(args):
             # An image built before the normalisation layer existed produces projects that cannot
             # be imported anywhere, and nothing else says so — a half-normalised appliance is the
             # worst outcome, because the defect then depends on which node a student used.
-            stale = "" if not node.get("normalise", True) or is_normalised(image) \
-                else "  — NOT normalised, rebuild with --force"
-            print(f"  skip   {key:14} {image} (already built){stale}")
+            print(f"  skip   {key:14} {image} (already built)")
+            # ...but an image built before this change, or by an older version of the scripts,
+            # produces projects that cannot be imported anywhere. Normalising is seconds and is
+            # idempotent, so do it rather than print advice: a half-normalised appliance is the
+            # worst outcome, because the defect then depends on which node a student happened to
+            # use.
+            if node.get("normalise", True) and not is_normalised(image):
+                print("         predates the normalisation layer — applying it now")
+                try:
+                    normalise_image(image, docker_platform)
+                except Exception as e:                       # noqa: BLE001
+                    print(f"         FAILED to normalise — {e}")
+                    failures.append(key)
             skipped += 1
             continue
         src = node["source"]

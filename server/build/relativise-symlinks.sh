@@ -26,11 +26,19 @@
 
 [ $# -gt 0 ] || set -- /etc
 
+# The `while read` loop below runs in a subshell (it is on the right of a pipe), so a counter
+# incremented inside it would not survive. Tally through a file instead of guessing.
+TALLY=$(mktemp 2>/dev/null || echo /tmp/relativise.$$)
+
 fixed=0
+skipped=0
 for dir in "$@"; do
     [ -d "$dir" ] || continue
-    for link in $(find "$dir" -type l 2>/dev/null); do
-        target=$(readlink "$link") || continue
+    # `for link in $(find ...)` word-splits, so a symlink whose name contains a space is silently
+    # skipped -- and ONE absolute link left behind is all it takes for an import to be refused.
+    # Read null-free lines instead, and count anything unreadable rather than swallowing it.
+    find "$dir" -type l 2>/dev/null | while IFS= read -r link; do
+        target=$(readlink "$link" 2>/dev/null) || { echo "  ! cannot read $link" >&2; continue; }
         case "$target" in
             /*) ;;
             *) continue ;;                       # already relative
@@ -39,11 +47,23 @@ for dir in "$@"; do
         case "$parent" in
             /) continue ;;                       # a link in / has nothing to climb to
         esac
-        # One ../ per level the link's directory sits below /, so the prefix resolves to /
-        # and the absolute target can be appended with its leading slash removed.
-        up=$(printf '%s' "${parent#/}" | awk -F/ '{for (i = 1; i <= NF; i++) printf "../"}')
-        ln -sfn "${up}${target#/}" "$link" && fixed=$((fixed + 1))
+        # One ../ per level the link's directory sits below /, so the prefix resolves to / and the
+        # absolute target can be appended with its leading slash removed. Pure shell: busybox has
+        # no `realpath --relative-to`, and an awk that is missing (or differs) would produce an
+        # EMPTY prefix and write a wrong link, which is worse than doing nothing.
+        rest=${parent#/}
+        up=""
+        while [ -n "$rest" ]; do
+            up="../$up"
+            case "$rest" in
+                */*) rest=${rest#*/} ;;
+                *) rest="" ;;
+            esac
+        done
+        ln -sfn "${up}${target#/}" "$link" && echo fixed
     done
-done
+done > "$TALLY" 2>/dev/null
+fixed=$(grep -c '^fixed$' "$TALLY" 2>/dev/null || echo 0)
+rm -f "$TALLY"
 
 echo "relativise-symlinks: rewrote $fixed absolute symlink(s) under $*"
