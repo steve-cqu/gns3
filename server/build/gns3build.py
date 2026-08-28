@@ -999,12 +999,18 @@ def cmd_docker(args):
             # worst outcome, because the defect then depends on which node a student happened to
             # use.
             if node.get("normalise", True) and not is_normalised(image):
-                print("         predates the normalisation layer — applying it now")
-                try:
-                    normalise_image(image, docker_platform)
-                except Exception as e:                       # noqa: BLE001
-                    print(f"         FAILED to normalise — {e}")
-                    failures.append(key)
+                # A dry run must not touch the image. This is on the skip path, which returns
+                # BEFORE the `if args.dry_run` guard further down, so it needs its own -- found
+                # when a --dry-run rebuilt and relabelled a live appliance's alpinenode.
+                if args.dry_run:
+                    print("         [dry-run] would apply the normalisation layer")
+                else:
+                    print("         predates the normalisation layer — applying it now")
+                    try:
+                        normalise_image(image, docker_platform)
+                    except Exception as e:                   # noqa: BLE001
+                        print(f"         FAILED to normalise — {e}")
+                        failures.append(key)
             skipped += 1
             continue
         src = node["source"]
