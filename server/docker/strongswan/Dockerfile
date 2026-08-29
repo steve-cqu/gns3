@@ -6,10 +6,15 @@
 # see gns3-dev/notes/opnsense-replacement.md.
 #
 # DERIVED FROM alpinenode, deliberately, following ipv6node/servicenode/monitornode. That
-# inherits every diagnostic the VPN activities already use (ip, ping, tcpdump, nano) instead of
-# re-adding them, while keeping strongSwan off every *other* node in the appliance — which is
-# what adding the package to alpinenode itself would have done, at the cost of a --force rebuild
-# of the three images that derive from it.
+# inherits every diagnostic the VPN activities already use (ip, ping, nano) instead of re-adding
+# them, while keeping strongSwan off every *other* node in the appliance — which is what adding
+# the package to alpinenode itself would have done, at the cost of a --force rebuild of the three
+# images that derive from it.
+#
+# No tcpdump, and none is wanted: alpinenode has never shipped it, and traffic in these activities
+# is captured on the GNS3 link rather than on a node. This line used to claim otherwise, which
+# also had readiness.sh checking strongswan for a binary that could never be there (corrected
+# 29 August 2026, in the first Tier 1 sweep of the rebuilt images).
 #
 # ORDER MATTERS in manifest.yml's per-platform `docker:` list: this must appear AFTER alpinenode
 # or there is no base to build on.
