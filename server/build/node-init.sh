@@ -34,4 +34,30 @@ DIRS="/etc"
 # shellcheck disable=SC2086  # DIRS is a deliberate word-split list of paths
 /sbin/relativise-symlinks.sh $DIRS >/dev/null 2>&1 || true
 
+# Re-apply GNS3's ownership record from a home directory that used to be its own bind root.
+#
+# WHY. GNS3 writes `.gns3_perms` at the root of each bind ("mode:uid:gid:path" per line) and
+# re-applies it on later starts, which is what carries file ownership through an export and import.
+# On 29 August 2026 alpinenode's volume widened from /home/student to /home, so that record now sits
+# one level BELOW the bind root in every project exported before the change — and GNS3 reads it only
+# at the root. Without this, a student's own home arrives owned by the uid of whoever exported it
+# (1000, the gns3 account on the VM), and they cannot write their own ~/.ssh: `ssh-copy-id` fails,
+# a shipped key is unusable, and the error names permissions rather than the cause. Measured on
+# Ansible-Basics-Solution.gns3project, whose .ssh landed as 1000:1000.
+#
+# This also repairs the reverse direction, which matters more: a project a student exported from a
+# T2 2026 appliance carries exactly this layout, and lands on a T3 appliance the same way.
+#
+# It is deliberately narrow — /home/<user>/.gns3_perms only, the one bind root that moved — and it
+# applies the file GNS3 itself wrote, in GNS3's own format, so it can only restore what GNS3 would
+# have restored. Paths that no longer exist are skipped.
+for _perms in /home/*/.gns3_perms; do
+    [ -f "$_perms" ] || continue
+    while IFS=: read -r _mode _uid _gid _path; do
+        [ -n "$_path" ] && [ -e "$_path" ] || continue
+        chown "$_uid:$_gid" "$_path" 2>/dev/null || true
+        chmod "$_mode" "$_path" 2>/dev/null || true
+    done < "$_perms"
+done
+
 exec "$@"

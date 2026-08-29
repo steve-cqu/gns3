@@ -77,7 +77,16 @@ wireguard-tools \
 whois \
 samba-client \
 cifs-utils \
+sudo \
  && update-ca-certificates
+# sudo (~1 MB, added 29 August 2026) so a NON-ROOT account can do privileged work on these nodes.
+# Alpine ships neither sudo nor doas by default, which meant an automation account such as `ansible`,
+# or a per-student account created during a task, could log in and then do nothing useful — leaving
+# root-over-SSH as the only workable path, which is the practice ssh-hardening teaches against.
+# sudo rather than doas because it is Ansible's default become_method and matches ubuntunode, so one
+# playbook and one inventory work against Alpine and Ubuntu targets identically. Passwordless sudo
+# for a service account is root-equivalent in practice; the gain is auditability and revocability,
+# and any teaching material using it should say so rather than imply otherwise.
 # tailscale is what makes the VPN Router template a VPN router - this image backs it. It is the
 # only thing in the lab set that crosses the real Internet, joining two students' GNS3 instances
 # into one network so hosts in one lab can reach hosts in the other. ~30 MB, and it is inert until
@@ -158,5 +167,19 @@ RUN addgroup --gid "20001" "class" \
     student \
  && echo 'student:gns3' | chpasswd
 
-# Persistent volumes
-VOLUME /root/.ssh /etc/ssh /data /home/student
+# Persistent volumes.
+#
+# /home, NOT /home/student (widened 29 August 2026). GNS3 binds the union of an image's own VOLUMEs
+# and the template's extra_volumes, so this one line decides persistence for every image built FROM
+# this one -- servicenode, giteanode, wifinode, strongswan, monitornode, faucetnode, sambadc,
+# auth-kerberos, ipv6node -- and every template on top of them. It was /home/student, which meant
+# the shipped account's home survived a project close and any OTHER home did not: a service account
+# such as `ansible`, or a per-student account someone is asked to create as part of a task, lost
+# everything on reopen. Both are things we want to be able to set, so persist the parent.
+#
+# Cost measured before making the change: /home is empty in this image, so a node's bind seeds empty
+# and the export grows only by what somebody actually writes. See
+# gns3-dev/notes/node-persistence.md for the measurement and for why the templates were left alone
+# (extra_volumes is a delta over this list, and vm-fix-persistence.sh -- which repairs T2 2026
+# appliances -- sets only extra_volumes, so nothing here reaches a v027 VM).
+VOLUME /root/.ssh /etc/ssh /data /home
