@@ -69,8 +69,8 @@ Docker builds. The two long phases are teed to logs, and the playbook prints the
 commands at the start, before it goes quiet:
 
 ```sh
-ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build.log'   # build phases, on the VM
-tail -F gns3build-verify.log                          # verification, here
+ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build-<profile>.log'   # build phases, on the VM
+tail -F gns3build-verify-<profile>.log                          # verification, here
 ```
 
 Both are truncated at the start of each run, hence `tail -F` rather than `-f`.

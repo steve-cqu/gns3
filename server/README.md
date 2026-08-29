@@ -285,8 +285,8 @@ first build. Both long phases are teed to logs — the playbook prints these com
 it goes quiet:
 
 ```sh
-ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build.log'   # the build phases, on the VM
-tail -F ansible/gns3build-verify.log                  # the verification runs, here
+ssh gns3@<vm-ip> 'tail -F /home/gns3/gns3build-<profile>.log'   # the build phases, on the VM
+tail -F ansible/gns3build-verify-<profile>.log                  # the verification runs, here
 ```
 
 Useful flags (anything after the profile is passed to `ansible-playbook`):

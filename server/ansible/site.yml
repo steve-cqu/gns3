@@ -111,9 +111,17 @@
 
     # Ansible shows nothing while a task runs, and the build phase is half an hour of
     # docker builds. Tee the two long, silent phases to logs you can tail. Stable paths,
-    # truncated per run, so the tail command never changes (use `tail -F`).
-    build_log: /home/gns3/gns3build.log
-    verify_log: "{{ playbook_dir }}/gns3build-verify.log"
+    # truncated per run, so the tail command never changes (use `tail -F`) -- the tasks
+    # below print the exact paths once the profile is known.
+    #
+    # Both carry the profile in the name (29 Aug 2026). The VM-side log never clashed --
+    # one appliance per architecture -- but the verify log is written on the BUILD HOST,
+    # and a host that builds both profiles silently overwrote one with the other. That
+    # happened: the amd64 build log of 29 Aug 2026 exists only on the PC build host,
+    # because the arm64 run truncated the shared name. A copied-off log with no profile
+    # in it also cannot be identified later without grepping its first line.
+    build_log: /home/gns3/gns3build-{{ profile }}.log
+    verify_log: "{{ playbook_dir }}/gns3build-verify-{{ profile }}.log"
 
     # Resolved via hostvars, not bare ansible_host: inside a `delegate_to: localhost`
     # task ansible_host refers to the *delegation target*, so the bare form silently
