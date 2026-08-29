@@ -65,7 +65,15 @@ if [ "$assoc" = 1 ]; then
     SSID=$(wpa_cli -i "$IFACE" status 2>/dev/null | awk -F= '/^ssid=/{print $2}')
     echo "Associated to '$SSID' (AP $BSSID). This node is $STAIP on $IFACE."
     echo
-    echo "Reach the AP:                ping 10.0.0.1"
+    # A station cannot learn the AP's IP address from the association — it knows a BSSID, which is a
+    # MAC. So the hint below is only safe when this node kept the default address, because then the
+    # AP is start-ap.sh's matching default (10.0.0.1). In any lab that chose its own addressing,
+    # naming 10.0.0.1 sends a student to ping a host that does not exist and blame the radio.
+    if [ "$STAIP" = "10.0.0.2/24" ]; then
+        echo "Reach the AP:                ping 10.0.0.1"
+    else
+        echo "Reach the AP:                ping its address (start-ap.sh printed it on the AP)"
+    fi
     echo "See the link (signal, rate): wifi-status.sh"
 else
     echo "Did not associate within 30s. Last lines of /var/log/wifi/wpa_supplicant.log:"
@@ -73,6 +81,10 @@ else
     echo "Check that the AP is running (start-ap.sh) and the SSID/passphrase match."
     echo
     echo "$STAIP has been set on $IFACE anyway, so if the handshake completes late the link will"
-    echo "simply start working. Check with:   wifi-status.sh   then   ping 10.0.0.1"
+    if [ "$STAIP" = "10.0.0.2/24" ]; then
+        echo "simply start working. Check with:   wifi-status.sh   then   ping 10.0.0.1"
+    else
+        echo "simply start working. Check with:   wifi-status.sh   then ping the AP's address"
+    fi
     exit 1
 fi

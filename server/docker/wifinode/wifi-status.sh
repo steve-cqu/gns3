@@ -6,6 +6,12 @@
 # it shows the association (SSID, signal, rate). Run it on either node.
 
 IFACE=wlan0
+CONF=/etc/hostapd/hostapd.conf
+
+# A bridged access point puts its address on the bridge, not on the radio (start-ap.sh does this
+# when hostapd.conf carries a bridge= line). Reading wlan0 alone would report "no address" on a
+# node that is working perfectly, so read the same line start-ap.sh reads and follow it.
+BRIDGE=$(sed -n 's/^[[:space:]]*bridge=//p' "$CONF" 2>/dev/null | head -n1 | tr -d '[:space:]')
 
 echo "================================================"
 echo "Wireless Node Status"
@@ -25,7 +31,19 @@ fi
 echo ""
 
 echo "2. Addresses:"
-ip -4 addr show dev "$IFACE" 2>/dev/null | grep -E 'inet ' | sed 's/^/   /' || echo "   none on $IFACE"
+if [ -n "$BRIDGE" ] && ip link show "$BRIDGE" >/dev/null 2>&1; then
+    echo "   bridged AP: the address belongs on $BRIDGE, not on $IFACE"
+    ip -4 addr show dev "$BRIDGE" 2>/dev/null | grep -E 'inet ' | sed 's/^/   /' \
+        || echo "   none on $BRIDGE"
+    MEMBERS=$(ls /sys/class/net/"$BRIDGE"/brif 2>/dev/null | tr '\n' ' ')
+    echo "   $BRIDGE members: ${MEMBERS:-none — is the Ethernet port cabled?}"
+elif [ -n "$BRIDGE" ]; then
+    echo "   $CONF asks for bridge '$BRIDGE', but there is no such interface."
+    echo "   Run start-ap.sh — it builds the bridge before starting hostapd."
+else
+    ip -4 addr show dev "$IFACE" 2>/dev/null | grep -E 'inet ' | sed 's/^/   /' \
+        || echo "   none on $IFACE"
+fi
 echo ""
 
 if pgrep -x hostapd >/dev/null 2>&1; then
