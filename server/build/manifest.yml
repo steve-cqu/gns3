@@ -11,8 +11,16 @@
 
 # The gns3server the appliance is built on. Recorded in provenance next to the version the
 # controller actually reports, so a mismatch is visible in the artefact rather than only in
-# someone's memory. Bumped 2.2.54 -> 2.2.61 on 15 Aug 2026 with the rebuilt amd64 VM.
-gns3_version: "2.2.61"
+# someone's memory.
+#
+# 2.2.54 on BOTH architectures, decided 29 Aug 2026. This value was briefly "2.2.61" (15 Aug
+# 2026) as bookkeeping for a rebuilt amd64 VM, not as a choice; the choice has now been taken
+# the other way. GNS3 has published no ARM64 VM image since 2.2.54, and this build configures
+# a stock VM rather than installing gns3server, so arm64 cannot move — and a split would mean
+# a project exported on the Mac appliance being refused by a PC. Reverted here so provenance
+# matches what both controllers actually report. See gns3-dev/notes/gns3-vm-build-automation.md,
+# "Which GNS3 VM the next release should start from".
+gns3_version: "2.2.54"
 
 # Paths relative to this manifest file.
 paths:
