@@ -138,12 +138,13 @@ lab ranges are 10.11.x, 10.12.x and 10.13.x, one per group member."
         ROUTE_WHY="worked out from eth0's $INSIDE_IP - a /16, so you can add 10.$O2.2.0/24 behind this router later without changing anything here"
     else
         # Deliberately NOT widened. Only 10.x sites get a /16: 192.168.0.0/16 would swallow
-        # 192.168.42.0/24, the network the GNS3 NAT node uses, so this router would advertise a
-        # route to its own way out and lose the Internet. Widening anything outside the lab's own
+        # whichever 192.168.x.0/24 the GNS3 NAT node uses (192.168.122.0/24 on release v041,
+        # 192.168.42.0/24 on some earlier builds -- do not hard-code it), so this router would
+        # advertise a route to its own way out and lose the Internet. Widening anything outside the lab's own
         # 10.x ranges risks the same thing, so the interface's own prefix is offered instead.
         ROUTE="$O1.$O2.$O3.0/$PFX"
         if [ "$O1.$O2" = "192.168" ]; then
-            ROUTE_WHY="worked out from eth0's $INSIDE_IP, and NOT widened to a /16 on purpose: 192.168.0.0/16 would cover the 192.168.42.0/24 network the GNS3 NAT node uses, and this router would stop reaching the Internet"
+            ROUTE_WHY="worked out from eth0's $INSIDE_IP, and NOT widened to a /16 on purpose: 192.168.0.0/16 would cover the network the GNS3 NAT node uses, and this router would stop reaching the Internet"
         else
             ROUTE_WHY="worked out from eth0's $INSIDE_IP, and NOT widened to a /16 on purpose - only the lab's 10.x ranges are widened, because a wider range here could cover a network this router itself needs"
         fi
@@ -238,8 +239,8 @@ echo "  ok       Internet leg is $OUTSIDE ($OUTSIDE_IP), default via $(ip route 
 #    nameserver looks fine to `ip addr` and fails at the login step with an opaque error.
 nslookup "$CONTROL_HOST" >/dev/null 2>&1 || fail \
     "cannot resolve $CONTROL_HOST - this node has no working nameserver." \
-"Check /etc/resolv.conf. A NAT node supplies one over DHCP (192.168.42.1 on this
-appliance), so the usual fix is:  ifup $OUTSIDE"
+"Check /etc/resolv.conf. A NAT node supplies one over DHCP - the gateway of whatever
+subnet it hands out - so the usual fix is:  ifup $OUTSIDE"
 echo "  ok       $CONTROL_HOST resolves"
 
 # 4. Reachability. curl exits 0 on any HTTP response, including a 404, which is all that is needed
