@@ -79,6 +79,7 @@ WANTED = {
     "Linux Host":    ["/etc", "/root", "/var/www", "/usr/local/bin"],
     "Linux Router":  ["/etc", "/root", "/var/www", "/usr/local/bin"],
     "VPN Router":    ["/etc", "/root", "/var/www", "/usr/local/bin"],
+    "Cloud Gateway": ["/etc", "/root", "/var/www", "/usr/local/bin"],
     "Ansible Host":  ["/etc", "/root", "/var/www", "/usr/local/bin"],
     "Ubuntu Host":   ["/etc", "/root", "/home", "/var/www", "/usr/local/bin"],
     "Kerberos Host": ["/root", "/var/lib/krb5kdc"],

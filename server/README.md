@@ -870,7 +870,7 @@ What each template adds on top, in `templates/docker-*.conf`:
 
 | Template | `extra_volumes` | Covers |
 |---|---|---|
-| Linux Host, Linux Router, VPN Router, Ansible Host | `/etc` `/root` `/var/www` `/usr/local/bin` | `hosts`, `shadow`, `pam.d`, `ssl`, `nginx`, `wireguard`, `nftables.conf`; the openssl CA tree under `/root/ca`; web roots; exporter binaries |
+| Linux Host, Linux Router, VPN Router, Cloud Gateway, Ansible Host | `/etc` `/root` `/var/www` `/usr/local/bin` | `hosts`, `shadow`, `pam.d`, `ssl`, `nginx`, `wireguard`, `nftables.conf`; the openssl CA tree under `/root/ca`; web roots; exporter binaries |
 | Ubuntu Host | those four **plus `/home`** | extra accounts made in `password-hashing` |
 | Kerberos Host | `/root` `/var/lib/krb5kdc` | the KDC database (`/etc` is already in the image) |
 | NAT64Router | `/etc` `/root` `/usr/local/bin` | `tayga.conf`, and the three helper scripts |

@@ -356,7 +356,18 @@ nodes:
     kind: docker
     image: cqugns3/alpinenode:latest
     source: {type: local, path: alpinenode}
-    templates: [docker-linuxhost, docker-linuxrouter, docker-vpnrouter, docker-ansiblehost]
+    # docker-cloudgateway is the same image again: the lab end of a tunnel to a cloud VM. It is a
+    # VPN Router with two adapters instead of four, its own symbol, and ONE functional difference --
+    # `environment: HISTFILE=/dev/null`. That is deliberate and narrow. Shell history is left ON
+    # everywhere else on purpose (it is the clearest record of what a student actually typed, and
+    # weak-but-real authenticity evidence), but `/root` is an extra_volume, so on the one node where
+    # a cloud credential gets typed, history would ship inside the student's exported .gns3project.
+    # Setting it per-template rather than as a Dockerfile ENV keeps the blast radius to this node:
+    # a Docker ENV would have taken history off wireguard-basics, both IPsec activities,
+    # mtu-black-hole and tailscale-basics too. See gns3-dev/notes/tier6-cloud-hybrid.md, the
+    # credentials rule, and tier6-azure-spike-run.md defect 2 for the measurements behind it.
+    templates: [docker-linuxhost, docker-linuxrouter, docker-vpnrouter, docker-ansiblehost,
+                docker-cloudgateway]
   ubuntunode:
     kind: docker
     image: cqugns3/ubuntunode:latest

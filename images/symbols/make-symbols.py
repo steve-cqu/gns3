@@ -118,6 +118,12 @@ SYMBOLS = [
     # to stop: a tunnel lab puts both kinds of gateway on one canvas, and which is which is
     # the whole subject of the lab.
     ("router-ipsec",    "router", "IPSEC",    None),
+    # The Cloud Gateway: the lab end of a tunnel to a real or simulated cloud. It is the same
+    # alpinenode as the VPN Router and could have borrowed router-vpn.svg -- which is exactly the
+    # mistake the IPsec band above was added to undo. The two sit on ONE canvas in
+    # cloud-vpn-simulated and cloud-vpn-wireguard (the gateway dials out, the cloud end answers),
+    # and which is which is the subject of both activities.
+    ("router-cloudgw",  "router", "CLOUD",    None),
     ("router-nat64",    "router", "NAT64",    None),
     ("router-openwrt",  "router", "OPENWRT",  None),
     ("router-opnsense", "router", "OPNSENSE", None),
