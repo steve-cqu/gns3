@@ -78,7 +78,14 @@ whois \
 samba-client \
 cifs-utils \
 sudo \
+jq \
  && update-ca-certificates
+# jq (a few hundred KB, added 6 September 2026) — the ONE thing the image was missing for the
+# cloud/hybrid work. Every provider in the Tier 6 spike (Azure, DigitalOcean, AWS) was driven from
+# a stock node with `curl` against a REST API, and the only gap was having no way to read the JSON
+# back; tier6-cloud-hybrid.md's family E design says "the node needs nothing but jq". Decided by
+# Steve on 5 September 2026 for the next build. ca-certificates was already here, so with jq the
+# node needs no vendor CLI for any of the three providers.
 # sudo (~1 MB, added 29 August 2026) so a NON-ROOT account can do privileged work on these nodes.
 # Alpine ships neither sudo nor doas by default, which meant an automation account such as `ansible`,
 # or a per-student account created during a task, could log in and then do nothing useful — leaving

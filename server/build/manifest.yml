@@ -241,9 +241,15 @@ profiles:
 # revert. `validate` checks optional nodes exactly like installed ones, so a retired node
 # cannot quietly rot; `plan` lists what each platform offers.
 #
-# ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and three images
-# are derived (`FROM cqugns3/alpinenode`): ipv6node, servicenode and monitornode. Each must
-# appear AFTER alpinenode or its build has no base to build on. The phase also skips any image
+# ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and TEN images are
+# derived from another local image, so each must appear AFTER its base or its build has no base to
+# build on:
+#   FROM cqugns3/alpinenode (9): auth-kerberos, ipv6node, giteanode, servicenode, monitornode,
+#                                sambadc, faucetnode, strongswan, wifinode
+#   FROM cqugns3/ubuntunode (1): patchnode
+# (This said "three images ... ipv6node, servicenode and monitornode" until 6 September 2026. Six
+# more had been derived from alpinenode since without the count being updated, which understated
+# how much a change to that base costs to propagate.) The phase also skips any image
 # that already exists, so after changing alpinenode you must rebuild the derived images with
 # --force or they keep the old base.
 platforms:
