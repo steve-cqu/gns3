@@ -92,6 +92,9 @@ SYMBOLS = [
     # protocol as a directory. A lab can hold both, so they must not share a band.
     ("server-ad",        "server", "AD",      None),
     ("server-sdn",       "server", "SDN",     None),
+    # The estate's package source (patch-management). A server tower rather than a router:
+    # students meet it as a service they point apt at, not as something on the path.
+    ("server-patch",     "server", "PATCH",   None),
     # not wired to a template yet — the candidates in gns3-dev/notes/candidate-node-types.md
     ("server-web",       "server", "WEB",     None),
     ("server-proxy",     "server", "PROXY",   None),

@@ -252,7 +252,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
-             giteanode, strongswan, sambadc]
+             giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
     # Retired from the default build, still one flag away — see the note above.
     # opnsense: retired 20 August 2026, the last Qemu node in a default build. Its two
@@ -274,7 +274,7 @@ platforms:
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
-             giteanode, strongswan, sambadc]
+             giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
     optional:
       # frr-qemu/netem-qemu are amd64-only disks, so they are absent here rather than optional.
@@ -559,6 +559,19 @@ nodes:
     image: cqugns3/sambadc:latest
     source: {type: local, path: sambadc}
     templates: [docker-sambadc]
+
+  # Patch Server — the estate's package source for the patch-management activity (COIT13146
+  # Week 4). Its own image, derived from ubuntunode, because what makes it a node is CONTENT
+  # rather than software: a three-suite apt repository baked into /opt/cqu-repo at build time,
+  # so patching can be taught offline and deterministically. The real archive cannot do that —
+  # it needs Internet in the topology and gives a different answer every week, which is why
+  # nothing in the major teaches patching today. Built AFTER ubuntunode: it is FROM it.
+  # See gns3-dev/notes/patch-management-activity.md.
+  patchnode:
+    kind: docker
+    image: cqugns3/patchnode:latest
+    source: {type: local, path: patchnode}
+    templates: [docker-patchserver]
 
   # --- Built-in nodes: a template over a GNS3 built-in node type, nothing to install ---
   # The Windows Host is a Cloud node bound to the lab NIC above, where a Windows VM running
