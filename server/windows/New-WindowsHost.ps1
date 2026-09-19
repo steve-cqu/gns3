@@ -195,7 +195,7 @@ if (-not $vbox) {
 # Finding the program is not the same as the program working: a half-removed install, or a
 # launcher that rejects the name it was called by, both answer here rather than several
 # steps later, where the failure reads as something else entirely. `VBoxManage --version`
-# prints a version string and nothing else, e.g. 7.0.2r154219.
+# prints a version string and nothing else, e.g. 7.0.20r163906.
 $script:VBoxVersion = ''
 $global:LASTEXITCODE = 0
 try { $script:VBoxVersion = ((& $vbox --version 2>&1) -join '').Trim() } catch { $script:VBoxVersion = '' }
@@ -289,23 +289,10 @@ if (-not $resolved) {
 }
 $IsoPath = $resolved.Path
 
-Write-Host ""
-Write-Host "Creating the GNS3 Windows Host VM" -ForegroundColor Cyan
-if ($DryRun) { Write-Host "DRY RUN - no VM will be created." -ForegroundColor Yellow }
-Write-Host ""
-Write-Host "  name        : $Name"
-Write-Host "  iso         : $IsoPath"
-Write-Host "  lab network : Internal Network '$LabNetwork'  (must match the GNS3 VM's Adapter 3)"
-Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, EFI + TPM 2.0"
-Write-Host "  account     : $User / $Password, computer name $ComputerName"
-Write-Host "  edition     : image index $ImageIndex  (1 is Home on a retail ISO - see -? for how to list them)"
-if ($ProductKey) {
-    Write-Host "  product key : supplied - Setup will not ask"
-} else {
-    Write-Host "  product key : none - Setup WILL stop and ask for one (see -? on -ProductKey)" -ForegroundColor Yellow
-}
-Write-Host ""
-
+# Checked BEFORE describing the machine we would build. A refused run that first prints
+# "image index 1" and a yellow "Setup WILL stop and ask for a key" is describing a machine
+# it is not going to create, and the warning that does not apply is the one that reads
+# loudest.
 if (Test-VMExists $Name) {
     if (-not $Force) {
         Write-Host "A VM named '$Name' already exists." -ForegroundColor Yellow
@@ -323,6 +310,22 @@ if (Test-VMExists $Name) {
     Invoke-VBox @('unregistervm', $Name, '--delete')
     Report-Step "existing VM" "deleted"
 }
+Write-Host ""
+Write-Host "Creating the GNS3 Windows Host VM" -ForegroundColor Cyan
+if ($DryRun) { Write-Host "DRY RUN - no VM will be created." -ForegroundColor Yellow }
+Write-Host ""
+Write-Host "  name        : $Name"
+Write-Host "  iso         : $IsoPath"
+Write-Host "  lab network : Internal Network '$LabNetwork'  (must match the GNS3 VM's Adapter 3)"
+Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, EFI + TPM 2.0"
+Write-Host "  account     : $User / $Password, computer name $ComputerName"
+Write-Host "  edition     : image index $ImageIndex  (1 is Home on a retail ISO - see -? for how to list them)"
+if ($ProductKey) {
+    Write-Host "  product key : supplied - Setup will not ask"
+} else {
+    Write-Host "  product key : none - Setup WILL stop and ask for one (see -? on -ProductKey)" -ForegroundColor Yellow
+}
+Write-Host ""
 
 # --------------------------------------------------------------------------- #
 # 1. Create the VM
@@ -410,7 +413,7 @@ try {
     # operations: with an empty slot, a single call that names a medium goes down
     # VBoxManage's "mount" path and fails with "No drive attached to device slot 0 on
     # port 1 of controller 'SATA'". Attaching `emptydrive` first makes the drive exist.
-    # Found on the first real run, VirtualBox 7.0.2, 20 September 2026.
+    # Found on the first real run, VirtualBox 7.0.20, 20 September 2026.
     Invoke-VBox @('storageattach', $Name, '--storagectl', 'SATA', '--port', '1',
                   '--device', '0', '--type', 'dvddrive', '--medium', 'emptydrive')
     Invoke-VBox @('storageattach', $Name, '--storagectl', 'SATA', '--port', '1',
@@ -498,14 +501,14 @@ try {
 # an unattended install has nobody to answer it: the prompt times out, the empty disk has
 # nothing to boot, and the machine lands in VirtualBox's "failed to boot" dialog.
 #
-# VirtualBox 7.0.2 does not patch the prompt out. Its auxiliary disc carries the answer
+# VirtualBox 7.0.20 does not patch the prompt out. Its auxiliary disc carries the answer
 # file, the post-install command and the Guest Additions - and no boot files - so it is the
 # Windows ISO itself that boots, prompt and all. Windows Setup reads the answer file off
 # that second disc regardless, which is why everything after this point works.
 #
 # So tap a key. 39 b9 is space down, space up. The first taps land while the VM is still
 # coming up and fail harmlessly; the loop is over long before Setup draws anything, so no
-# keystroke strays into the installer. Proven on VirtualBox 7.0.2, 20 September 2026.
+# keystroke strays into the installer. Proven on VirtualBox 7.0.20, 20 September 2026.
 # --------------------------------------------------------------------------- #
 if (-not $NoStart -and -not $DryRun) {
     Write-Host ""

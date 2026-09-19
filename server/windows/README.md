@@ -72,7 +72,7 @@ counterpart to TCPView.
 ## The first real run — 20 September 2026
 
 `New-WindowsHost.ps1` met a hypervisor for the first time on 20 September 2026: **VirtualBox
-7.0.2 on a Linux host**, a retail Windows 11 25H2 x64 consumer ISO, against a live GNS3
+7.0.20 on a Linux host**, a retail Windows 11 25H2 x64 consumer ISO, against a live GNS3
 appliance. It built the machine, Windows installed, and the machine joined a topology and
 answered ssh from a GNS3 node. Two cycles were run: the first needed a person at two screens
 and found six defects; the second closed both screens. `new-windows-host.sh` and the ARM64
@@ -117,7 +117,7 @@ cycle that used `-NoStart` to read the prepared machine before booting it:
   arrived, and the VM dropped into VirtualBox's *failed to boot* dialog. The auxiliary disc
   VirtualBox generates is **not bootable** — `cat` its `.viso` and it lists
   `autounattend.xml`, `VBOXPOST.CMD` and a copy of the Guest Additions, and no boot files —
-  so it is the retail Windows ISO that boots, prompt and all, and 7.0.2 does not patch that
+  so it is the retail Windows ISO that boots, prompt and all, and 7.0.20 does not patch that
   out. The script now taps space once a second for twelve seconds after starting the VM
   (`controlvm … keyboardputscancode 39 b9`). Windows Setup reads the answer file off the
   auxiliary disc regardless of what booted, which is why everything downstream already
@@ -238,7 +238,7 @@ drops those unless the adapter is allowed to receive them.
 VBoxManage modifyvm "GNS3 VM" --nic3 intnet --intnet3 cqulab --nicpromisc3 allow-all
 ```
 
-**Check it with `showvminfo`, not `--machinereadable`.** On VirtualBox 7.0.2 the machine-readable
+**Check it with `showvminfo`, not `--machinereadable`.** On VirtualBox 7.0.20 the machine-readable
 output carries no `nicpromisc3` key at all, so grepping for one reports nothing on a correctly
 configured VM. The human-readable form always says:
 
