@@ -492,6 +492,32 @@ try {
 }
 
 # --------------------------------------------------------------------------- #
+# 5. Press the key nobody is there to press
+#
+# The retail ISO's EFI bootloader asks you to "Press any key to boot from CD or DVD", and
+# an unattended install has nobody to answer it: the prompt times out, the empty disk has
+# nothing to boot, and the machine lands in VirtualBox's "failed to boot" dialog.
+#
+# VirtualBox 7.0.2 does not patch the prompt out. Its auxiliary disc carries the answer
+# file, the post-install command and the Guest Additions - and no boot files - so it is the
+# Windows ISO itself that boots, prompt and all. Windows Setup reads the answer file off
+# that second disc regardless, which is why everything after this point works.
+#
+# So tap a key. 39 b9 is space down, space up. The first taps land while the VM is still
+# coming up and fail harmlessly; the loop is over long before Setup draws anything, so no
+# keystroke strays into the installer. Proven on VirtualBox 7.0.2, 20 September 2026.
+# --------------------------------------------------------------------------- #
+if (-not $NoStart -and -not $DryRun) {
+    Write-Host ""
+    Write-Host "Boot prompt"
+    for ($i = 0; $i -lt 12; $i++) {
+        Start-Sleep -Seconds 1
+        Invoke-VBox @('controlvm', $Name, 'keyboardputscancode', '39', 'b9') -AllowFailure -Quiet | Out-Null
+    }
+    Report-Step "boot prompt" "space sent for 12 s - nothing else would press it"
+}
+
+# --------------------------------------------------------------------------- #
 # Summary
 # --------------------------------------------------------------------------- #
 Write-Host ""
