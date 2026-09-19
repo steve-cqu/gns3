@@ -385,15 +385,22 @@ try {
         Report-Ok "openssh package" "already installed"
         $sshInstalled = $true
     } else {
+        $elapsed = ''
         if (-not $DryRun) {
-            # Windows fetches this from Windows Update and shows no progress of its own,
-            # so several minutes pass with a still screen and nothing to read. Say what is
-            # happening before it starts, or it looks hung. Asked for on the first real
-            # unattended run, 20 September 2026.
-            Write-Host "  working  openssh package            downloading from Windows Update - this takes a few minutes" -ForegroundColor DarkGray
+            # This is slower than its size suggests, and the wait reads as a hang. The
+            # payload is a few MB; the time goes on component-based servicing against the
+            # live image - single-threaded, disk-bound - and on a machine minutes old it
+            # queues behind Windows Update's first scan. Say so before it starts, and
+            # report how long it took, so the next person has a number rather than a fear.
+            # Asked for on the first real unattended run, 20 September 2026.
+            Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
+            Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
             Add-WindowsCapability -Online -Name $cap.Name | Out-Null
+            $sw.Stop()
+            $elapsed = " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
         }
-        Report-Changed "openssh package" "installed"
+        Report-Changed "openssh package" "installed$elapsed"
         $sshInstalled = $true
     }
 } catch {

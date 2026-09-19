@@ -21,7 +21,7 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 | `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
-| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-ImageIndex` picks the Windows edition; `-List`, `-DryRun` and `-Force`. |
+| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-ImageIndex` picks the Windows edition and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
 | `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. |
 | `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. |
 | `make-unattend-iso.sh` | staff, on a Mac or Linux | Builds `cqu-unattend.iso` from one of those answer files plus `configure-windows-host.ps1`. Students never run this — they get the ISO, or install by hand. |
@@ -73,9 +73,10 @@ counterpart to TCPView.
 
 `New-WindowsHost.ps1` met a hypervisor for the first time on 20 September 2026: **VirtualBox
 7.0.2 on a Linux host**, a retail Windows 11 25H2 x64 consumer ISO, against a live GNS3
-appliance. It built the machine and Windows installed and joined a topology — but the install
-**was not unattended**, and two screens still needed a person. `new-windows-host.sh` and the
-ARM64 answer file have still never been run.
+appliance. It built the machine, Windows installed, and the machine joined a topology and
+answered ssh from a GNS3 node. Two cycles were run: the first needed a person at two screens
+and found six defects; the second closed both screens. `new-windows-host.sh` and the ARM64
+answer file have still never been run.
 
 **What the run proved:**
 
@@ -109,12 +110,33 @@ ARM64 answer file have still never been run.
 - **The SATA controller had two ports.** The disk and the Windows ISO fill both, leaving the
   unattended installer nowhere for its own media. Now four.
 
-**Two things are still broken, and both stop the install being unattended:**
+**Two defects stopped it being unattended. Both were closed the same day**, in a second
+cycle that used `-NoStart` to read the prepared machine before booting it:
 
-| What | What is known |
-|---|---|
-| **Nothing presses "Press any key to boot from CD or DVD."** The firmware shows the prompt, no key arrives, and the VM drops to VirtualBox's *failed to boot* dialog. A person mounted the ISO by hand and pressed a key to get past it | The auxiliary ISO VirtualBox generates carries a no-prompt boot image, so the firmware is booting the raw Windows ISO instead of it. Next step is `-NoStart`, then read where the media actually landed before starting the VM |
-| **The generated answer file's `<ProductKey>` element is empty**, so 25H2 Setup asks for a key | Everything else in that file worked — the account, the hostname, the image index and the post-install command all applied. `VBoxManage unattended` takes `--product-key`, and Microsoft publishes a generic volume-licence key per edition, which selects an edition without activating. The script does not pass one yet |
+- **Nothing pressed "Press any key to boot from CD or DVD."** The prompt appeared, no key
+  arrived, and the VM dropped into VirtualBox's *failed to boot* dialog. The auxiliary disc
+  VirtualBox generates is **not bootable** — `cat` its `.viso` and it lists
+  `autounattend.xml`, `VBOXPOST.CMD` and a copy of the Guest Additions, and no boot files —
+  so it is the retail Windows ISO that boots, prompt and all, and 7.0.2 does not patch that
+  out. The script now taps space once a second for twelve seconds after starting the VM
+  (`controlvm … keyboardputscancode 39 b9`). Windows Setup reads the answer file off the
+  auxiliary disc regardless of what booted, which is why everything downstream already
+  worked.
+- **The generated answer file's `<ProductKey>` element was empty**, and 25H2 Setup treats
+  that as unanswered and stops. `-ProductKey` now passes `--key` through, which puts the key
+  into that element. **Microsoft's generic volume-licence key for the edition is accepted
+  from a retail consumer ISO** — verified with the Education GVLK, which answers Setup's
+  question without activating anything.
+
+**The second cycle then installed unattended, start to finish.** Nothing was typed inside
+Windows at any point, and the machine came up as: `Get-WindowsEdition -Online` → `Education`
+(from `-ImageIndex 4`), `whoami` → `winhost\gns3` and `$env:COMPUTERNAME` → `WINHOST` (from
+the answer file), and `Ethernet 2` holding `10.10.1.20` (from the post-install command).
+
+**One thing is still unproven: the script has not done all of this in a single command.**
+The keypress fix was tested with the VM started by hand, and the script's own
+`--start-vm=gui` path then loops in the same way — the same sequence, but an inference until
+a run proves it. Run it once, unattended, before handing it to anybody.
 
 **Still unverified — the Mac half**, unchanged from the draft:
 
