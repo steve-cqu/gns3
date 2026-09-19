@@ -382,10 +382,21 @@ try {
                   '--size', "$($DiskGB * 1024)", '--format', 'VDI')
     Report-Step "disk" "${DiskGB} GB at $diskPath"
 
+    # Four ports, not two. The disk and the Windows ISO take the first two, but
+    # `unattended install` then attaches media of its own - the auxiliary ISO carrying the
+    # answer file, and the Guest Additions ISO - and needs somewhere to put them.
     Invoke-VBox @('storagectl', $Name, '--name', 'SATA', '--add', 'sata',
-                  '--controller', 'IntelAHCI', '--portcount', '2', '--bootable', 'on')
+                  '--controller', 'IntelAHCI', '--portcount', '4', '--bootable', 'on')
     Invoke-VBox @('storageattach', $Name, '--storagectl', 'SATA', '--port', '0',
                   '--device', '0', '--type', 'hdd', '--medium', $diskPath)
+
+    # Two calls, not one. Creating the drive and inserting the disc are separate
+    # operations: with an empty slot, a single call that names a medium goes down
+    # VBoxManage's "mount" path and fails with "No drive attached to device slot 0 on
+    # port 1 of controller 'SATA'". Attaching `emptydrive` first makes the drive exist.
+    # Found on the first real run, VirtualBox 7.0.2, 20 September 2026.
+    Invoke-VBox @('storageattach', $Name, '--storagectl', 'SATA', '--port', '1',
+                  '--device', '0', '--type', 'dvddrive', '--medium', 'emptydrive')
     Invoke-VBox @('storageattach', $Name, '--storagectl', 'SATA', '--port', '1',
                   '--device', '0', '--type', 'dvddrive', '--medium', $IsoPath)
     Report-Step "controller" "SATA (AHCI), disk on port 0, ISO on port 1"
