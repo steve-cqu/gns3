@@ -2,17 +2,20 @@
 
 Hints and issues with using Oracle VirtualBox for GNS3 VM. You should only need this if you have problems. To get started with GNS3, see instructions for [PC](./getting-started-pc.md) or [Mac](./getting-started-mac.md).
 
-# Installing VirtualBox
+## Installing VirtualBox
 
-## VirtualBox in CQUniversity
+### On a managed or lab computer
 
-Most CQU computer labs have VirtualBox already installed. You can go direct to the [Getting Started](./getting-started-pc.md) instructions.
+A computer lab often has VirtualBox installed already — if yours does, go straight to the
+[Getting Started](./getting-started-pc.md) instructions. On a managed work laptop you may need
+your IT department's software portal rather than a download.
 
-CQU staff can install VirtualBox on their CQU laptops via the Company Portal. 
+**At CQU:** most computer labs have VirtualBox installed, and staff can install it on a CQU
+laptop through the Company Portal. The CQU network may block the VirtualBox (and other Oracle)
+website — that does not stop VirtualBox running, but it can stop you reading the documentation
+or downloading it for a personal machine, for which you will need your own internet connection.
 
-Please note there may be restrictions on accessing the VirtualBox (and other Oracle) website while inside the CQU network. This does not prevent you from running VirtualBox, but may stop you from viewing VirtualBox documentation or downloading for your personal computer. In that case you will need to use your own Internet connection (i.e., mobile phone or home internet).
-
-## Installing VirtualBox on Personal Device
+### Installing VirtualBox on Personal Device
 
 VirtualBox is free software available via [www.virtualbox.org/](https://www.virtualbox.org/). You can download and install for your personal device (e.g., personal laptop). 
 
@@ -22,11 +25,11 @@ For Apple laptops with Apple Silicon (M1, M2, ... chips, mainly since 2020), a d
 
 For computers running Linux natively, install VirtualBox and then follow the [Getting Started on a PC](./getting-started-pc.md) instructions.
 
-# Setting Up VirtualBox
+## Setting Up VirtualBox
 
 Assume you have VirtualBox installed, then the only setup that may be needed is to allow *Host-only Networks*. 
 
-## Host-only Networks in VirtualBox
+### Host-only Networks in VirtualBox
 
 From the *File* menu select *Tools* then *Network Manager*:
 
@@ -43,9 +46,9 @@ Example settings are:
 
 If there is no Host-only Network, then click *Create* and add one with the above settings. You may need administrator rights on your computer do make those changes.
 
-# Troubleshooting GNS3 and VirtualBox
+## Troubleshooting GNS3 and VirtualBox
 
-## Import of Appliance (.ova) Fails
+### Import of Appliance (.ova) Fails
 
 If you attempt to import the .ova file into VirtualBox but it produces an error, the most common causes are:
 - Insufficient disk space on your computer
@@ -59,9 +62,9 @@ Note that you can delete the .ova file *after* the import is successful. But you
 
 A corrupt .ova may occur if the download was interrupted. Check with your teacher or colleagues to confirm the expected size of the .ova.
 
-## Error Starting VM: network adpaters
+### Error Starting VM: network adapters
 
-If you receive an error when trying to start the GNS3 VM that mentions network adapters, then a common cause is Host-only Networks not setup correct, including using a different name on yuor computer compared to the original GNS3 VM.
+If you receive an error when trying to start the GNS3 VM that mentions network adapters, then a common cause is Host-only Networks not setup correct, including using a different name on your computer compared to the original GNS3 VM.
 
 One quick fix is to stop the VM, go to Settings and Network, and then click on both Adapter 1 tab and Adapter 2 tab and the click Ok.
 
