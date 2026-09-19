@@ -54,7 +54,7 @@ files that would otherwise ride into the OVA.
 | | |
 |---|---|
 | `-e profile=…` | **required** — `amd64` or `arm64`, the architecture of the GNS3 VM |
-| `-e verify=smoke` | default: four fast activities spanning docker, qemu and the custom images |
+| `-e verify=smoke` | default: four fast activities (`ping-basics`, `stp-basics`, `ospf-basics`, `port-scanning`) covering the stock and custom Docker images. No Qemu node is in a default build, so none is exercised |
 | `-e verify=all` | every activity with a test manifest — slow, and what you want before exporting an OVA |
 | `-e verify=none` | skip verification (iterating on the build itself) |
 | `-e gns3_dev_repo=…` | path to the private `gns3-dev` checkout (default: alongside `gns3`) |
@@ -96,7 +96,7 @@ The `amd64` (VirtualBox) path is validated end to end: build, idempotent re-run
 OVA.
 
 The `arm64` (VMware Fusion, Apple Silicon) path was validated on 2026-07-26: a clean run
-finished green — Homebrew rsync, 14 arm64 Docker images, 3 arm64 Qemu disks (md5s confirmed
+finished green — Homebrew rsync, every arm64 Docker image, the Qemu disks of the day (md5s confirmed
 against real downloads for the first time), templates, logos, noVNC, projects imported, smoke
 verification passed, export-check clean, provenance written and fetched.
 

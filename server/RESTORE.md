@@ -18,7 +18,7 @@ term is worth more here than one that silently patches itself.
 | Release | `vNNN` |
 | Built | *date* |
 | Built by | *name* |
-| GNS3 version | *e.g. 2.2.61* — the appliance is pinned to the 2.2 line; **do not move to GNS3 3.x** |
+| GNS3 version | **2.2.54** on both architectures since 29 August 2026 — the appliance is pinned to the 2.2 line; **do not move to GNS3 3.x** |
 | Terms shipped to | *e.g. T3 2026, T1 2027* |
 | `gns3` repo tag | `vNNN` |
 | `gns3-dev` repo tag | `vNNN` |
@@ -43,7 +43,7 @@ gns3-vNNN/
 | File | What it is | Why it is here |
 |---|---|---|
 | `*.ova` | The complete built appliance | The whole answer. Everything else is a fallback. |
-| `frozen-*.tar.gz` | `docker save` of all 16 node images, gzipped | Rebuild the appliance with **no network**. The `.json` sidecar records each image's ID and the archive's sha256. |
+| `frozen-*.tar.gz` | `docker save` of every node image the profile installs, gzipped — run `gns3build.py plan --profile P` for the current set rather than trusting a count written here | Rebuild the appliance with **no network**. The `.json` sidecar records each image's ID and the archive's sha256. |
 | `qemu-images-*.tar` | OpenWRT, OPNsense, Ubuntu cloud, FRR, NETem disks | All five are `optional:` as of 20 August 2026, so a default build installs none of them and this archive is only worth making for an appliance built `--with`. Keep the disks anyway: they live on SourceForge, a community mirror and a personal GitHub release, and at least one will have 404'd by the time they are wanted. |
 | `gns3-vm-<version>/` | The upstream GNS3 VM the appliance is built on | GNS3 retires old downloads. 2.2.x will not be available forever. |
 | `repos/*.bundle` | Both git repositories, full history | Source of truth for Dockerfiles, activities and build scripts. |
@@ -130,6 +130,8 @@ are outside anyone's control:
 | Docker Hub `alpine:3.24`, `ubuntu:24.04`, `debian:bookworm-slim`, `ubuntu:focal` | Tags persist but are rebuilt; content differs unless digest-pinned |
 | Alpine CDN, **v3.24 main + community** | Alpine branches go EOL after ~2 years and leave the mirrors |
 | Ubuntu **focal** archive (`net_toolbox`) | Already moving to `old-releases.ubuntu.com`; `apt-get update` fails |
+| Docker Hub `openwrt/rootfs` | `openwrtnode`'s base; upstream retags and prunes, and the build pins a tag, not a digest |
+| The **GNS3 registry** Dockerfiles (`openvswitch`, `ipterm-base`, `ipterm`, `webterm`, `kali`) | Fetched from a pinned commit on `raw.githubusercontent.com` and sha256-checked, so a moved file fails loudly — but if GitHub stops serving that commit there is no fallback copy in this repo |
 | **`alpine/edge/testing`** for `tayga` (`ipv6node`) | A rolling branch — it *will* have moved |
 | `packages.wazuh.com/4.x` | 4.x moves on |
 

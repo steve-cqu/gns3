@@ -55,7 +55,8 @@
       - "{{ extra_project_dir }}"
 
     # Verification gate: none | smoke | all.
-    #   smoke - a few fast activities spanning docker + qemu + the custom images
+    #   smoke - four fast activities over the stock and custom Docker images (no Qemu
+    #           node is in a default build, so none is exercised)
     #   all   - every activity with a test manifest; slow (tens of minutes), and what
     #           you want before exporting an OVA
     verify: smoke

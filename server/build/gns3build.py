@@ -17,17 +17,25 @@ Subcommands
   quiesce                   mask Ubuntu's unattended-upgrade timers       [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
   novnc                     install noVNC + the gns3-novnc service        [run on the VM]
+  labnic                    bring up the Windows Host lab NIC (eth2)      [run on the VM]
   projects  --profile P     import the .gns3project files named in projects.txt
   build     --profile P     every phase above, in order
+
+Archive (see RESTORE.md)
+  freeze    --profile P     `docker save` every node image to a restorable archive
+  thaw      --profile P     load a frozen archive back into the VM's docker daemon
 
 Before cutting an OVA:
   export-check --profile P  fail unless the VM carries exactly projects.txt
   provenance   --profile P  record what this appliance actually contains
 
 `validate`/`plan`/`templates`/`projects` work from anywhere (they take --server URL,
-default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `logos` and `novnc` touch the
-local docker daemon and filesystem, so they run **on the GNS3 VM** — the Ansible wrapper
-syncs this tree there and invokes them over SSH.
+default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `accel`, `quiesce`, `logos`,
+`novnc`, `labnic`, `freeze` and `thaw` touch the local docker daemon, filesystem or systemd,
+so they run **on the GNS3 VM** — the Ansible wrapper syncs this tree there and invokes them
+over SSH. `export-check` must also run on the VM: its staged-file scan reads a filesystem, so
+a remote run honestly reports NOT CHECKED and a run through an SSH tunnel would scan the
+client's disk.
 
 Profiles are amd64 and arm64, naming the architecture of the GNS3 VM: that picks the Docker
 platform, the Qemu disks, the templates and any project variants. It is the only axis the
@@ -1411,6 +1419,8 @@ def cmd_quiesce(args):
 
 # --------------------------------------------------------------------------- #
 # Phase: novnc — browser access to VNC nodes (runs on the VM)
+#
+# The `labnic` phase follows further down, below the novnc helpers.
 # --------------------------------------------------------------------------- #
 def apt_installed(pkg):
     r = subprocess.run(["dpkg-query", "-W", "-f=${Status}", pkg],

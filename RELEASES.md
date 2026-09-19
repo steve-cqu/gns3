@@ -32,6 +32,23 @@ They are the best available evidence, not a recorded fact:
 
 Every release from v030 on is stamped at build time and needs no reconstruction.
 
+### Keys in this repository's history
+
+Four private SSH keys are retrievable from this repository's git history:
+`server/docker/{alpinenode,ubuntunode}/gns3_student_{ed25519,rsa}_key.prv`, added in September 2025
+and June 2026 and removed on 5 August 2026.
+
+**They authorise nothing.** They were the shared lab key pair baked into the `alpinenode` and
+`ubuntunode` images up to `v027`, whose containers run with the published lab password `gns3`
+anyway and exist only inside a student's own virtual network. They grant no access to any CQU
+system, to any appliance built since, or to anything on the internet. The images stopped shipping
+them on 5 August 2026, when the shared pair was removed and `start-sshd` reworked.
+
+They are documented here rather than purged. Rewriting history would change every commit hash —
+including the ones the rows above cite as the definition of what each cohort received — and the
+provenance record is worth more than removing keys that authorise nothing. Decided 19 September
+2026 (public-repo review, D10).
+
 ### Post-release fixes
 
 Listed because a fix means some students' appliances no longer match the release they were
@@ -101,7 +118,10 @@ repo.
    git -C gns3-dev tag -a v030 -m "GNS3 VM v030 — T3 2026"
    git -C gns3 push origin v030 && git -C gns3-dev push origin v030
    ```
-5. Add the row above, with the OVA filenames, sizes and sha256 sums.
+5. Add the row above, with the OVA filenames, sizes and sha256 sums. **Neither existing row
+   has them** — both were reconstructed after the fact — so v030 is the first release that can
+   honour this, and the size is what `vm/virtualbox.md` tells students to check with you when
+   they suspect a corrupt download.
 5a. **Archive the release to the shared drive.** The appliance is frozen for years, not months,
    and a from-source rebuild in 2028 depends on upstreams that will have moved or gone. Freeze
    the built images, tar the Qemu disks, bundle both repos, and copy
@@ -109,7 +129,8 @@ repo.
    opens that folder later which restore path to use. Commands are in `RESTORE.md` under
    *Making the archive*. Do this **after** `verify=all` passes, never before: an archive of an
    unverified set is worse than none, because it looks authoritative.
-6. Publish the handout projects for the term alongside the OVA: the templates students
-   complete, the solutions for staff, and `SDN-Basics-Template` (729 MB — too large for a
-   Moodle upload, so it is hosted with the OVA and linked from there).
+6. Publish the handout projects for the term: the templates students complete and the
+   solutions for staff, through Moodle. Nothing is too large to upload any more —
+   `SDN-Basics-Template` (729 MB) was the only project that had to be hosted beside the OVA,
+   and it was retired in August 2026 when the SDN controller became `cqugns3/faucetnode`.
 7. Tell students which version to use this term, and to delete the previous one.

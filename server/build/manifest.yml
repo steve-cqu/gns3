@@ -256,7 +256,7 @@ platforms:
   amd64:
     docker_platform: linux/amd64      # docker build --platform
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
-             net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
+             net_toolbox, auth-kerberos, ipv6node, suricata,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
@@ -272,19 +272,31 @@ platforms:
     # it any more. frr-qemu/netem-qemu: superseded by frrnode/netemnode in the July 2026
     # Docker migration; they had been in no platform's list since, which made them
     # invisible to `validate` — being optional puts them back under it.
+    #
+    # kali: retired 19 September 2026. At ~2.9 GB it was roughly half the Docker footprint
+    # and about half the OVA, and no activity, test or project used it — a whole-word grep
+    # of "Kali" across all 94 activities/*/ directories returns nothing — while it was
+    # rebuilt from source on every `docker` run. `--with kali` brings it back, and
+    # net_toolbox and alpinenode already carry nmap.
+    # wazuh-agent: retired the same day. Its only consumer is wazuh-basics, which is
+    # `book: excluded`, has no -test.yaml, needs a Wazuh Manager this appliance does not
+    # ship and is not building, and was excluded from the T3 2026 release on 19 Sep 2026.
+    # Both: gns3-dev/notes/public-repo-review.md P9, decisions D9 and 2.2.
     optional:
       qemu: [opnsense, openwrt, ubuntu-cloud, frr-qemu, netem-qemu]
+      docker: [kali, wazuh-agent]
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
-             net_toolbox, auth-kerberos, ipv6node, wazuh-agent, suricata, kali,
+             net_toolbox, auth-kerberos, ipv6node, suricata,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
     optional:
       # frr-qemu/netem-qemu are amd64-only disks, so they are absent here rather than optional.
       qemu: [opnsense-arm64, openwrt-arm64, ubuntu-cloud-arm64]
+      docker: [kali, wazuh-agent]        # retired 19 Sep 2026; see the amd64 note above
     builtin: [windowshost]
     # A .gns3project records each Qemu node's emulator path and disk *inside the file*, so a
     # project exported on a PC is permanently amd64 — the arm64 templates installed here are

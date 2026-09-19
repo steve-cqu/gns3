@@ -5,4 +5,4 @@
 # the durable statement of what a cohort is running. See ../../RELEASES.md.
 .gns3build-imports.json
 provenance-*.json
-gns3build-verify.log
+gns3build-verify*.log        # site.yml writes one per profile

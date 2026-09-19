@@ -20,8 +20,14 @@ clicks. The consequence is worth stating plainly, because it is easy to get back
 
 > The appliance is the **runtime**, not the content. It must be able to run *every* activity,
 > not just the five projects it carries. Never trim the image set in `manifest.yml` to match
-> `projects.txt` — `ubuntu-cloud` is installed for a project nobody ships, and a student who
-> imports `SDN-Basics-Template` needs it there.
+> `projects.txt` — `sambadc`, `giteanode` and `wifinode` are installed for activities whose
+> projects students import from Moodle, and an appliance without them fails those activities
+> with nothing on screen to explain why.
+
+> The distinction that makes that rule usable: trim an image when **no activity uses it at
+> all**, not when no shipped *project* uses it. That is why `kali` and `wazuh-agent` moved to
+> `optional:` on 19 September 2026 — a whole-word search across every activity found no
+> consumer for either — while every image above stays.
 
 Because `export-check` only inspects the projects the appliance ships, it can no longer prove
 the image set covers everything. **`-e verify=all` is what proves that** — it imports each
@@ -48,12 +54,18 @@ The Docker images are always built **on the VM**, so they come out native for it
 architecture — there is no cross-building. FRR and NETem are Docker nodes on both
 architectures, since no arm64 Qemu images exist for them.
 
-> **Tested status.** Both paths were validated live under the previous two-appliance scheme:
-> `amd64` on VirtualBox through to exported OVAs, `arm64` on Apple Silicon through to a green
-> build and OVA including `vmrun` IP discovery. `verify=all` has never been exercised on a Mac.
-> The single-appliance change (August 2026) has not yet been run end to end on hardware — it
-> touches the project list and the export gate, not any image phase, but the first build after
-> it should be treated as a validation run.
+> **Tested status.** Both appliances were rebuilt from scratch on 29 August 2026, on GNS3
+> 2.2.54, and verified: **`verify=all` is green on both architectures** — 76 activities
+> attempted per architecture, 70 PASS, 6 SKIP, 0 FAIL — with node persistence proved end to end
+> on each. That run superseded the older caveat that `verify=all` had never been exercised on a
+> Mac, and it was the first full exercise of the single-appliance scheme. It found and fixed six
+> defects, several of them in the verification rather than the images, which is the class of bug
+> that makes a green sweep meaningless. The full account is
+> `gns3-dev/notes/rebuild-2026-08-29.md`, and it is the handover into the next build.
+>
+> **No OVA was cut from that rebuild.** The export path itself was last exercised under the
+> previous scheme: `amd64` on VirtualBox through to an exported OVA, `arm64` on Apple Silicon
+> through to a green build and OVA including `vmrun` IP discovery.
 
 ---
 
@@ -73,11 +85,11 @@ architectures, since no arm64 Qemu images exist for them.
   - `gns3/` — this repo (public: build tooling, Dockerfiles, templates, logos)
   - `gns3-dev/` — the private repo (the `.gns3project` files and `tools/gns3_autotest.py`)
 
-`infiles/` is **no longer needed to build the appliance.** Every project on `projects.txt` is
-committed to `gns3-dev`, so a fresh checkout of the two repos is the whole prerequisite. The
-729 MB `SDN-Basics-Template.gns3project` still lives out of git in `infiles/` and is still
-worth having on the build host if you want to test that import by hand, but its absence no
-longer changes what the appliance contains.
+`infiles/` is **not needed to build the appliance.** Every project on `projects.txt` is
+committed to `gns3-dev`, so a fresh checkout of the two repos is the whole prerequisite. The one
+project that ever needed to live outside git — the 729 MB `SDN-Basics-Template.gns3project` —
+was retired in August 2026 when the SDN controller became the Docker `cqugns3/faucetnode`, and
+nothing replaced it.
 
 ### Setting up a PC build host
 
@@ -105,9 +117,6 @@ ssh-copy-id gns3@<vm-ip>
 mkdir -p ~/git && cd ~/git
 git clone https://github.com/steve-cqu/gns3.git
 git clone <gns3-dev remote>               # private: needs GitHub auth on this account
-
-# 6. The oversized projects that git cannot hold, beside the repos.
-mkdir -p ~/git/infiles                    # put SDN-Basics-Template.gns3project (729 MB) here
 ```
 
 Check it took:
@@ -241,9 +250,8 @@ shell you launched it from.
   `GNS3.VM.ARM64.2.2.54.zip` (v2.2.54, 21 Apr 2025) is the last one: every release from 2.2.55
   on carries only the Hyper-V, KVM, VirtualBox, ESXi and VMware Workstation images, and the
   ARM64 image in the older `GNS3/gns3-vm` repo stops at v0.15.0 (Feb 2024). Checked against the
-  releases API 17 Aug 2026. So the two appliances are built on different GNS3 versions, and the
-  build supports that rather than levelling them down — see
-  [Two appliances, two GNS3 versions](#two-appliances-two-gns3-versions)
+  releases API 17 Aug 2026. That is the constraint behind pinning **2.2.54 on both**
+  architectures — see [One GNS3 version on both appliances](#one-gns3-version-on-both-appliances)
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
 - About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
@@ -711,126 +719,40 @@ The `accel` phase writes a `[Qemu]` section into the appliance's `gns3_server.co
 require_kvm = false
 ```
 
-That one line is the difference between "Qemu nodes work everywhere" and "Qemu nodes work only
-on hardware with nested virtualisation". It is worth understanding, because the obvious setting
-is the wrong one.
+No Qemu node is in a default build, so this matters only to an appliance built `--with` one —
+but when it matters it is the difference between "Qemu nodes work everywhere" and "Qemu nodes
+work only on hardware with nested virtualisation", and the obvious setting is the wrong one.
 
-**What GNS3 2.2.54 actually does** (`gns3server/compute/qemu/qemu_vm.py`,
-`_run_with_hardware_acceleration`):
+**Why.** In GNS3 2.2, `require_hardware_acceleration` defaults to `true` and "require" means
+*raise*. So out of the box a host without nested virtualisation fails every Qemu node with
+`KVM acceleration cannot be used (/dev/kvm doesn't exist)` — which is the normal state of a
+managed Windows laptop, where Credential Guard has Hyper-V holding VT-x so VirtualBox cannot
+pass it through. Docker nodes are unaffected, so most activities still work and only the Qemu
+ones break, making the fault look stranger than it is.
 
-| Setting | Default | Meaning |
-|---|---|---|
-| `enable_hardware_acceleration` | `true` | use KVM/HAXM at all |
-| `require_hardware_acceleration` | `true` | a missing `/dev/kvm` **raises**, rather than falling back |
-| `enable_kvm`, `require_kvm` | unset | pre-2.0 names, still honoured on Linux and they **override** the two above |
+**`require_kvm = false`, not `enable_kvm = false`.** The first keeps acceleration wherever it
+exists and falls back to TCG emulation where it does not, at no cost on capable hardware. The
+second turns acceleration off *unconditionally*, including on machines that have it — OPNsense
+boots in about 20 seconds with KVM and takes minutes without. The older troubleshooting notes
+recommended the second; it is the wrong lever for an appliance handed to a cohort.
 
-Both defaults are `true` and "require" means *raise*. So out of the box, a host without nested
-virtualisation fails every Qemu node with `KVM acceleration cannot be used (/dev/kvm doesn't
-exist)`. That is not hypothetical: a managed Windows laptop with Credential Guard enabled has
-Hyper-V holding VT-x, so VirtualBox cannot pass it through and the guest has no `/dev/kvm`.
-Docker nodes are unaffected — they share the host kernel — so most activities still work and
-only the Qemu ones break, which makes the fault look stranger than it is.
+**On arm64 it is mandatory, not a nicety.** The acceleration check runs *before* the
+architecture check and its list of supported binaries is x86-only, so with the defaults
+`qemu-system-aarch64` raises on every Qemu node regardless of the hardware.
 
-**`require_kvm = false`, not `enable_kvm = false`.** The two do different things:
+**The phase finds the config file rather than assuming it** — it reads the `--config` of the
+running gns3server, falls back to `gns3.service`, then to `qemu_accel.config_file` in the
+manifest, and prints which answered. It also repairs the appliance's welcome screen, which a
+stock GNS3 crashes once a `[Qemu]` section exists. Both behaviours exist because of real
+defects that shipped; the accounts are in `gns3-dev/notes/build-engine-field-notes.md`,
+*The `accel` phase: two bugs it exists to defeat*.
 
-- `require_kvm = false` — keep acceleration wherever it exists, and fall back to TCG emulation
-  where it does not. No penalty on capable hardware.
-- `enable_kvm = false` — turn acceleration off *unconditionally*, including on machines that
-  have it. OPNsense boots in about 20 seconds with KVM and takes minutes without, so this
-  costs every capable machine that difference. It is what the older troubleshooting notes
-  recommended, and it is the wrong lever for an appliance handed to a whole cohort.
+**No restart.** `gns3server` watches its config files and reloads on change, so the phase writes
+the file and nothing else — the build never restarts the GNS3 service.
 
-**On arm64 this is mandatory, not a nicety.** The acceleration check runs *before* the
-architecture check, and its list of supported binaries is x86-only (`qemu-system-x86_64`,
-`qemu-system-i386`, `qemu-kvm`). With the defaults, `qemu-system-aarch64` therefore raises
-`Hardware acceleration can only be used with the following Qemu executables: …` on every Qemu
-node, regardless of the hardware. `require_kvm = false` returns `False` at that point instead.
-
-**No restart.** `gns3server` watches its config files (`FileWatcher`, mtime, one second) and
-reloads on change, so the phase writes the file and nothing else — the build still never
-restarts the GNS3 service. The one caveat is that only files present when the server started
-are watched; this file always exists on a stock appliance, and the phase warns if it does not.
-
-### Which `gns3_server.conf` — the phase discovers it
-
-**Do not assume the path.** It moved, and the assumption failed silently:
-
-| GNS3 VM | Server config |
-|---|---|
-| up to 2.2.54 | `~/.config/GNS3/2.2/gns3_server.conf` (gns3server's own default) |
-| 2.2.61 | `/opt/gns3/server/gns3_server.conf`, passed as `--config` from `gns3.service` |
-
-An explicit `--config` makes that file the **only** one loaded — `gns3.log` shows a single
-`Config file … loaded` line, and nothing merges the user path in. So on a 2.2.61 VM the phase
-was writing `require_kvm = false` into a file the server never reads: the build went green, the
-provenance recorded it, and the setting was absent. It costs nothing where `/dev/kvm` exists,
-which is most build hosts — and breaks every Qemu node on a Credential Guard laptop and on all
-of arm64, which is exactly the population this section exists to protect.
-
-The phase now reads the `--config` of the **running gns3server** (`/proc/<pid>/cmdline`), falls
-back to `gns3.service`'s `ExecStart` if the service is down, and only then to
-`qemu_accel.config_file` in the manifest. It prints which of the three answered:
-
-```
-  config /opt/gns3/server/gns3_server.conf (from the running process)
-  WARN   /home/gns3/.config/GNS3/2.2/gns3_server.conf also has a [Qemu] section and is NOT
-         read by this server — it is ignored, not merged
-```
-
-That `WARN` is the residue of the bug — a stale `[Qemu]` section an earlier build left behind.
-It is reported rather than deleted, since the file may be hand-written; it is inert either way.
-
-Discovery makes the phase write to the right file; it does not prove the setting survived to
-the OVA. `provenance` re-reads the file and fails if it did not — see
+Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance. `provenance`
+re-reads the file and fails if the setting did not survive — see
 [Check before you export](#2-check-before-you-export).
-
-Change the values in `qemu_accel.settings` in `manifest.yml`, not on the appliance.
-
-### The phase also repairs the console screen
-
-Writing `require_kvm` **creates a `[Qemu]` section where a stock VM has none**, and that alone
-breaks `/usr/local/bin/gns3welcome.py` — the blue info screen, run from `~/.bash_profile` on
-every interactive login, which both getting-started guides tell students to read the VM's IP
-address off. Its `kvm_control()` ends:
-
-```python
-        if config.getboolean("Qemu", "enable_kvm") is True:
-            ...
-    except configparser.NoSectionError:
-        return
-```
-
-No section → `NoSectionError` → caught → the check quietly does nothing. Section present but no
-`enable_kvm` key → **`NoOptionError`**, which nothing catches. Students get the info box, then a
-Python traceback, then `.bash_profile`'s "Please run 'sudo gns3restore' in case the menu is no
-longer showing". The IP is still readable, so it is cosmetic — but it reads as a broken
-appliance. Found 17 Aug 2026 on a 2.2.61 VM built on the 15th, i.e. already shipping.
-
-The phase now widens that guard to `except (configparser.NoSectionError,
-configparser.NoOptionError):`, which restores the stock "say nothing" behaviour. It is
-idempotent, runs on the skip path too, and refuses to touch the file if the line it expects is
-not there exactly once:
-
-```
-  welcome /usr/local/bin/gns3welcome.py kvm_control() now catches NoOptionError too
-  welcome /usr/local/bin/gns3welcome.py already tolerates [Qemu] without enable_kvm
-```
-
-**Only 2.2.61-class VMs are affected**, for a reason worth knowing: `gns3welcome.py` hardcodes
-`/opt/gns3/server/gns3_server.conf`, which does not exist on a 2.2.54 VM (no `--config`, so
-this phase writes the user path instead). The read returns an empty config and `NoSectionError`
-still wins. The repair is applied there anyway — harmless, and it guards against the config
-path moving a third time.
-
-**Do not "fix" this by also writing `enable_kvm`.** Any value makes it worse. `true` makes
-`kvm_control()` offer a student on a machine without `/dev/kvm` a *"Disable KVM and get lower
-performance?"* dialog, and accepting writes `enable_kvm = false` and reboots — the setting the
-manifest explicitly warns against, since it overrides `require_kvm` and disables acceleration
-unconditionally. `false` produces the mirror-image dialog wherever `/dev/kvm` does exist. With
-the key absent, the guard returns early and asks nothing.
-
-This is a GNS3 bug — the same file catches `NoOptionError` correctly ~280 lines earlier — and
-is worth reporting upstream.
 
 ---
 
@@ -887,32 +809,26 @@ directories its image declares; **FRR** writes `vtysh` output to `/etc/frr`; **F
 its browser profile under `/root`; **Wazuh Agent** keeps its key and config under `/var/ossec`;
 **NETem**'s settings are `tc` state in the kernel, so no directory would help.
 
-### Verified on hardware, 13 August 2026
+### Why these directories, and what it cost
 
-Two `Linux Host` nodes on 192.168.56.108, identical edits, project closed and reopened. The control
-node had image defaults only; the other had the four directories above.
+Measured on hardware on 13 August 2026: two `Linux Host` nodes, identical edits, project closed
+and reopened. Without `extra_volumes` an edit to `/etc`, `/root`, `/var/www` or `/usr/local/bin`
+is **lost**; with them it is kept. `/home/student` survives either way.
 
-| Edit | Control | With `extra_volumes` |
-|---|---|---|
-| entry appended to `/etc/hosts` | **lost** | kept |
-| file in `/etc`, `/root`, `/var/www`, `/usr/local/bin` | **lost** | kept |
-| file in `/home/student` | kept | kept |
+Three things worth knowing, all of which the full write-up explains:
 
-Three things that came out of it and are not obvious:
+- **`/etc/hosts` cannot be kept any other way.** Docker mounts it as an individual file and a
+  volume must be a directory, so `/etc` is the only route — and `/etc/hosts` is the single
+  most-referenced path in the activity handouts.
+- **There is no stale-DNS risk** from keeping `/etc`: `/etc/resolv.conf` is empty on these nodes
+  to begin with, so there is nothing to freeze.
+- **Renaming a node after its first start leaves `/etc/hosts` stale**, holding the old name, and
+  the node can no longer resolve itself. The student guide says to name nodes before starting
+  them, and how to repair one afterwards.
 
-- **`/etc/hosts` cannot be kept any other way.** Docker mounts it as an individual file, and a
-  volume must be a directory — so `/etc` is the only route. It is also the single most-referenced
-  path in the activity handouts (`dns-hosts` is built on editing it), and it was being lost on every
-  reopen.
-- **There is no stale-DNS risk.** Keeping `/etc` does shadow Docker's managed `/etc/resolv.conf`
-  with a first-start snapshot, but that file is *empty* on these nodes to begin with, so there is
-  nothing to freeze. `/etc/hostname` is likewise empty and unused — the container hostname comes
-  from Docker's own config and follows a rename correctly.
-- **A rename after first start leaves `/etc/hosts` stale**, holding `127.0.1.1 <old-name>`. The node
-  can no longer resolve its own name. The student guide (`gns3-dev/guides/gns3-saving-work.md`) now
-  says to name nodes before starting them, and how to fix one afterwards.
-
-Cost measured on the same nodes: **2.9 MB per node** with `/etc` kept, against 856 KB without.
+Cost: about 2 MB more per node. The measurement tables, the `apk add` corollary (installed
+software does *not* survive a close, while what it wrote does) and the history of the change are
+in `gns3-dev/notes/node-persistence.md`.
 
 ### Applying a change
 
@@ -1090,122 +1006,26 @@ OPNsense-24.1-ufs-efi-vm-aarch64.qcow2
 ubuntu-24.04-server-cloudimg-arm64.img
 ```
 
-### Two appliances, two GNS3 versions
+### One GNS3 version on both appliances
 
-The PC appliance is built on a **2.2.61** VM and the Mac appliance on a **2.2.54** one, because
-2.2.54 is the last GNS3 release that shipped an ARM64 VM image at all (see
-[Before you start](#before-you-start) for the evidence). That split is deliberate and it is not
-a problem, for one reason:
+Both appliances are built on a **stock GNS3 VM 2.2.54**, on both architectures. `gns3_version:`
+in `server/build/manifest.yml` pins it and the comment there carries the reasoning; the short
+version is that **GNS3 has published no ARM64 VM image after 2.2.54**, and a split would mean a
+project exported on the Mac appliance being refused by a PC.
 
-**Students never run the GNS3 desktop client.** Both `vm/getting-started-pc.md` and
-`vm/getting-started-mac.md` send them to the web UI the appliance serves on port 80 — the only
-software they install is the hypervisor. So the version check that would otherwise force the
-issue never runs. In GNS3 2.2 that check is a hard refusal, not a warning
-(`gns3-gui/gns3/http_client.py:437-448`, read at tag v2.2.61):
+This was briefly 2.2.61 on amd64 (15 August 2026) as bookkeeping for a rebuilt VM rather than as
+a choice. It was reverted on 29 August 2026, and the evidence behind that — a full stack
+comparison of the two VMs and a verification run of the whole node set on Ubuntu 20.04 — is in
+`gns3-dev/notes/gns3-vm-build-automation.md`, *Which GNS3 VM the next release should start from*.
 
-```python
-if parse_version(__version__)[:3] != parse_version(params["version"])[:3]:
-    # "Client version 2.2.61 is not the same as server (controller) version 2.2.54"
-```
+Two consequences worth knowing:
 
-Only a fourth component may differ (2.2.32 vs 2.2.32.1, which downgrades to a warning). So
-**anyone who does use the desktop client — staff, mostly — must install the client matching the
-appliance they are pointing it at**: 2.2.61 for a PC appliance, 2.2.54 for a Mac one, both
-still downloadable from their respective `GNS3/gns3-gui` release pages.
-
-Levelling the PC appliance back down to 2.2.54 would buy nothing students can see, and would
-give up the 2.2.55–2.2.61 fixes: a project-import symlink-traversal fix (2.2.61, and students
-import projects from Moodle), Docker container-naming and stop-state fixes (2.2.55, 2.2.60,
-2.2.61), and a telnet console hang fix (2.2.59) — consoles being the thing every activity uses.
-
-#### The GNS3 version is the smallest of the differences
-
-The appliances are two Ubuntu LTS releases and a kernel generation apart, which matters far more
-than the server version does. Measured on both live VMs, 18 Aug 2026:
-
-| | 2.2.54 VM | 2.2.61 VM |
-|---|---|---|
-| Ubuntu | **20.04.6 LTS** (standard support ended May 2025) | **26.04 LTS** |
-| Kernel | 5.15.0-136 | 7.0.0-28 |
-| Docker | 28.1.1, `overlay2` | 29.6.2, `overlayfs` (containerd snapshotter) |
-| cgroups | **v1**, `cgroupfs` driver | **v2**, `systemd` driver |
-| containerd | 1.7.27 | 2.2.6 |
-| Qemu | 8.0.4 | 10.2.1 |
-| noVNC | 1.0.0 (2018) | 1.6.0 |
-| System python3 | 3.8.10 | 3.14.4 |
-| gns3server venv python | 3.9.5 | 3.14 |
-| `gns3server` invocation | venv, **no** `--config` | venv, `--config /opt/gns3/server/…` |
-
-What this does **not** break: the node images. They are built natively on whichever VM they are
-destined for, and a container's userspace depends on the kernel, not the host distribution —
-Alpine 3.24, Ubuntu 24.04 and Debian bookworm all run on 5.15. All four `kernel_modules:`
-(`wireguard`, `sch_netem`, `mac80211_hwsim`, `cifs`) are present on the 20.04 kernel too; the
-module *paths* differ (`fs/cifs` vs `fs/smb/client`, `wireless/` vs `wireless/virtual/`) but the
-phase modprobes by name, so that is invisible. `eth0/eth1/eth2` naming holds on both, so
-`labnic` is safe, and the `apt-daily*` units `quiesce` masks exist on both.
-
-#### Measured on 20.04, 17 August 2026
-
-Keep the scale of this in perspective: **20.04 is not a new risk for the Mac appliance, it is
-the status quo.** Every arm64 build there has ever been ran on this stack, because 2.2.54 is
-the only ARM64 VM there has ever been. What was untested was the node set added since the last
-Mac build — Tier 1, Tier 5, OpenWRT, Gitea, wireless, Faucet. So that is what was checked, on a
-20.04 amd64 VM standing in for the Mac (same OS, Docker, kernel and cgroup version; only the
-architecture differs).
-
-| Check | Result |
-|---|---|
-| Rebuild every locally-authored image | **built 15, skipped 0, failed 0** |
-| `readiness.sh` in each image | **READY** for all 12 that have a profile, 0 MISS, 0 FAIL |
-| Kernel modules the phase loads | `wireguard`, `sch_netem`, `mac80211_hwsim` all loaded on 5.15 |
-| noVNC end to end | VNC node started → picker listed it → websocket **101** → `RFB 003.008` banner returned through websockify 0.9.0 / noVNC 1.0.0 |
-| Wireless, WPA2 | `gns3-wifi-attach` moved a phy into each node; station associated, CCMP, ping across the link |
-| Wireless, WPA3-SAE | `key_mgmt=SAE`, `pmf=2`, `wpa_state=COMPLETED`, AP shows `[MFP]` — matching the 7.0 kernel result |
-| `monitornode` on cgroup v1 | all four services up; `node_exporter` serves 489 `node_*` metrics; Prometheus target healthy |
-| OpenWRT node | LuCI CGI present, `askconsole` inittab, `fw4`/`nft`, uci-defaults hook, 24.10.8 |
-
-Two things came out of it:
-
-- **A real defect, now fixed.** `start-grafana.sh` waited 20 s for Grafana to bind port 3000.
-  On a **one-vCPU** VM Grafana 12.4.4 takes ~90 s (plugin installs), so the script declared
-  "Grafana did not answer on port 3000" and exited 1 on a node that was starting perfectly
-  normally. The wait is now 120 s, and a timeout with the process still alive says *still
-  starting* instead of failing. Re-measured on the same 1-vCPU VM: `All four are up`, 1m13s.
-  Nothing to do with 20.04 — the 26.04 VM simply had two cores and got under the old limit.
-- **`frrnode` and `netemnode` have no `readiness.sh` profile** and exit 2 ("unknown image
-  type"). Not a 20.04 issue; a gap in the checker worth closing in `gns3-dev`.
-
-Still not covered, and honestly so:
-
-- **The noVNC 1.0.0 browser UI.** The transport is proven; six years of clipboard, scaling and
-  keyboard handling are not. That needs a human with a browser.
-- **Qemu 8.0 vs 10.2.** Less relevant than it first appeared: the amd64 `qemu-opnsense`
-  template uses no UEFI at all (`options` empty, no `bios_image`). The `-bios
-  /usr/share/qemu-efi-aarch64/QEMU_EFI.fd` path exists only in `qemu-opnsense-arm64`, which can
-  only be exercised on a Mac — where it has always run on this same Qemu.
-
-The **bundled web UI** also differs — 2.2.54 bundles web-ui 2.2.54, 2.2.61 bundles web-ui 2.2.58
-(the last bump in that range; the two VMs' bundle hashes confirm they are different builds).
-That is what students look at, so check the screenshots in `vm/using-gns3.md` against the other
-appliance when either is rebuilt.
-
-#### Why not just upgrade the ARM VM's gns3server to 2.2.61
-
-It would probably install — both VMs run gns3server from their own venv, the 2.2.54 VM's venv is
-on **Python 3.9.5**, and 2.2.61 requires `>=3.9` (2.2.56.1 dropped 3.8, which is why the *system*
-python3 on 20.04 could not host it). But it buys the version number and nothing else: the VM
-stays on Ubuntu 20.04, kernel 5.15, Docker 28, cgroup v1 and noVNC 1.0.0, which is where every
-difference in the table above actually lives. It also makes the Mac appliance non-stock, and
-"a stock GNS3 VM" is the assumption the whole build starts from. Not recommended.
-
-Levelling the *other* way — putting the PC appliance back on 2.2.54 — is worse than the version
-number suggests for the same reason: it would move the PC build back to Ubuntu 20.04, whose
-standard support ended in May 2025.
-
-`manifest.yml` carries a single `gns3_version:` used only as `manifest_expects` in provenance,
-so an arm64 build silently records `controller_version: 2.2.54` against `manifest_expects:
-2.2.61`. Read the pair, not either alone.
-
+- **Students never run the GNS3 desktop client**, so its version check never arises. Both
+  getting-started guides send them to the web interface the appliance serves on port 80; the only
+  software they install is the hypervisor.
+- **Anyone who does use the desktop client — staff, mostly — must install 2.2.54 to match.** In
+  GNS3 2.2 the client/controller version check is a hard refusal, not a warning; only a fourth
+  component may differ (2.2.32 vs 2.2.32.1).
 ### Mac limitations
 
 The `arm64` profile builds arm64 Docker images and downloads arm64 Qemu disks. FRR and NETem
@@ -1313,23 +1133,12 @@ had ever run. Logins:
 
 ## The previous manual build
 
-Until July 2026 this directory held a set of shell scripts run by hand on the VM —
-`vm-install-nodes.sh`, `vm-install-containers.sh`, `vm-install-qemuvms.sh`,
-`vm-install-templates.sh`, `vm-install-logos.sh`, `vm-install-vnc.sh`,
-`vm-import-projects.sh` — driven by `nodelist-{pc,mac}.txt` and the
-`templates_*.conf` bundles. Every one of them is now a `gns3build.py` phase, so they were
-removed once both OVAs had been built and verified by the pipeline. `git log --diff-filter=D`
-finds them if you ever need to look.
-
-Nothing was lost in the move: every template in the old bundles is in `templates/`, and
-every node in the old nodelists is in `manifest.yml`. The manifest also carries nodes the
-nodelists lacked — notably `ubuntu-cloud`, whose absence meant SDN-Basics-Template's
-controller node could never start on a VM built the old way.
-
-The rewrite also fixed what the scripts got wrong: no idempotency (`docker build
---no-cache` every time, Qemu images re-downloaded on every run), a hardcoded `python3.9`
-path for the logos, and hand-assembly of `gns3_controller.conf` with a `head -n -1` to
-strip a trailing comma, in place of the REST API.
+Until July 2026 this directory held shell scripts run by hand on the VM — `vm-install-nodes.sh`
+and its siblings, driven by `nodelist-{pc,mac}.txt` and `templates_*.conf` bundles. Every one is
+now a `gns3build.py` phase, and they were removed once both OVAs had been built and verified by
+the pipeline. Nothing was lost: every template in the old bundles is in `templates/` and every
+node in the old nodelists is in `manifest.yml`. `git log --diff-filter=D` finds the scripts if
+you ever need one.
 
 ---
 
@@ -1367,12 +1176,14 @@ archive. The phase then tests the file locally and tells you which side is at fa
 corrupt or unreadable local copy, or a clean file and therefore a server-side problem
 (usually no space on the VM — these projects expand to several times their stored size).
 
-The out-of-git projects in `infiles/` are the ones this happens to, because nothing checks
-their integrity between builds. Every successful build records their size and sha256 in
-`ansible/provenance-<profile>.json`, so compare against that:
+Since August 2026 every project on `projects.txt` is committed to `gns3-dev`, so git is the
+integrity check and this is rare. It was common while the largest project lived out of git in
+`infiles/`, where nothing verified it between builds. Every successful build still records each
+source project's size and sha256 in `ansible/provenance-<profile>.json`, which is the durable
+statement of what a file should be:
 
 ```sh
-sha256sum infiles/SDN-Basics-Template.gns3project
+sha256sum <the project it named>
 python3 -c "
 import json,glob
 for f in glob.glob('ansible/provenance-*.json'):
@@ -1381,8 +1192,7 @@ for f in glob.glob('ansible/provenance-*.json'):
 "
 ```
 
-That record is the only durable statement of what those files should be — which is the
-reason it exists.
+If the local file is clean, the fault is on the VM — nearly always no space on `/opt`.
 
 **The playbook reports no hosts matched.** `build.sh` refuses to continue in that case
 rather than reporting a successful build that did nothing. Check the VM name/`.vmx` path,
