@@ -1,7 +1,11 @@
-# Building the CQU GNS3 VM (staff only)
+# Building the appliance
 
-How to turn a fresh GNS3 VM into the appliance handed out to students. One command does the
-build; you cut the OVA yourself.
+How to turn a fresh GNS3 VM into the CQU GNS3 lab appliance. One command does the build; you cut
+the OVA yourself.
+
+This is a working runbook rather than an introduction — it assumes you know what GNS3 is and
+that you have a VM to build on. If you arrived here wanting to *use* the appliance rather than
+make one, [the repository README](../README.md) is the way in.
 
 **One appliance per architecture**, given to staff and students alike:
 
@@ -14,60 +18,34 @@ There used to be a second, staff-only appliance carrying the 17 solution project
 OVAs a release and two export passes, for a few megabytes of project data. It was retired in
 August 2026. Solutions now reach staff through Moodle, like every other handout.
 
-**What ships on the appliance is demonstration projects only.** The templates students
-complete, and the solutions, are downloaded and imported — importing a `.gns3project` is two
-clicks. The consequence is worth stating plainly, because it is easy to get backwards:
+## Building without `gns3-dev`
 
-> The appliance is the **runtime**, not the content. It must be able to run *every* activity,
-> not just the five projects it carries. Never trim the image set in `manifest.yml` to match
-> `projects.txt` — `sambadc`, `giteanode` and `wifinode` are installed for activities whose
-> projects students import from Moodle, and an appliance without them fails those activities
-> with nothing on screen to explain why.
+Most of this runbook assumes the private `gns3-dev` repository is checked out beside this one,
+because that is where the projects and the activity test harness live. **It is not required to
+build a working appliance.** Everything that defines the appliance — the node images, the GNS3
+templates, the symbols, the noVNC service, the host configuration — is in this repository.
 
-> The distinction that makes that rule usable: trim an image when **no activity uses it at
-> all**, not when no shipped *project* uses it. That is why `kali` and `wazuh-agent` moved to
-> `optional:` on 19 September 2026 — a whole-word search across every activity found no
-> consumer for either — while every image above stays.
+Two phases reach into it, and neither stops you:
 
-Because `export-check` only inspects the projects the appliance ships, it can no longer prove
-the image set covers everything. **`-e verify=all` is what proves that** — it imports each
-activity from `gns3-dev` and exercises it. Run it before cutting a release.
+| Phase | Without `gns3-dev` |
+|---|---|
+| `projects` | Already tolerant by design. It looks for each name in `projects.txt` under its roots, prints `MISSING <name> (not under any root — skipped)` for each one it cannot find, and **exits 0** — a not-found project is explicitly not a failure. You get every node type and no demonstration projects. |
+| `verify` | Needs the activities, so turn it off with `-e verify=none`. You lose the *proof* that the images work, not the images. |
 
-**The profile names the GNS3 VM's architecture**, which is the only axis the build varies on:
+So the whole build is:
 
-| Profile | Docker | Qemu disks | Usual hypervisor |
-|---|---|---|---|
-| `amd64` | `linux/amd64` | amd64 | VirtualBox, on Windows or Linux |
-| `arm64` | `linux/arm64/v8` | arm64 (`-arm64` templates) | VMware Fusion, on Apple Silicon |
+```sh
+cd server/ansible
+./build.sh "GNS3 VM" amd64 -e verify=none
+```
 
-The hypervisor is a **separate** concern and matters in exactly one place: `build.sh`
-discovering the VM's IP. It defaults to VirtualBox for `amd64` and Fusion for `arm64`,
-which covers the two setups in use, and `GNS3_HYPERVISOR=vbox|vmware` overrides that guess.
-Anything else — Hyper-V on a Windows-on-ARM machine, a VM you reach over the network — needs
-no support beyond `GNS3_VM_IP=<ip>`, since discovery is all that differs.
+The result is the same appliance a CQU build produces, minus five demonstration projects — the
+same node types, templates and symbols, from the same manifest. Confirm what it will carry with
+`gns3build.py plan --profile amd64` before building, and what it does carry with `provenance`
+afterwards.
 
-Naming the profiles by architecture rather than by machine (they were `pc-*`/`mac-*` until
-July 2026) is what makes that separation expressible: nothing about an arm64 appliance is
-Apple-specific.
-
-The Docker images are always built **on the VM**, so they come out native for its
-architecture — there is no cross-building. FRR and NETem are Docker nodes on both
-architectures, since no arm64 Qemu images exist for them.
-
-> **Tested status.** Both appliances were rebuilt from scratch on 29 August 2026, on GNS3
-> 2.2.54, and verified: **`verify=all` is green on both architectures** — 76 activities
-> attempted per architecture, 70 PASS, 6 SKIP, 0 FAIL — with node persistence proved end to end
-> on each. That run superseded the older caveat that `verify=all` had never been exercised on a
-> Mac, and it was the first full exercise of the single-appliance scheme. It found and fixed six
-> defects, several of them in the verification rather than the images, which is the class of bug
-> that makes a green sweep meaningless. The full account is
-> `gns3-dev/notes/rebuild-2026-08-29.md`, and it is the handover into the next build.
->
-> **No OVA was cut from that rebuild.** The export path itself was last exercised under the
-> previous scheme: `amd64` on VirtualBox through to an exported OVA, `arm64` on Apple Silicon
-> through to a green build and OVA including `vmrun` IP discovery.
-
----
+Build a topology by hand and start every node as your own check. A node type that installs but
+cannot start is the failure worth catching, and the GNS3 web interface shows it immediately.
 
 ## Before you start
 
