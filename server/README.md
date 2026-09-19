@@ -22,7 +22,9 @@ August 2026. Solutions now reach staff through Moodle, like every other handout.
 
 Most of this runbook assumes the private `gns3-dev` repository is checked out beside this one,
 because that is where the projects and the activity test harness live. **It is not required to
-build a working appliance.** Everything that defines the appliance — the node images, the GNS3
+build a working appliance**, and every `gns3-dev/…` path mentioned in this repository — in this
+file, in the manifest, in the Dockerfiles — is a provenance reference rather than a link: it
+records where a measurement or decision is written down, and it will not resolve for you. Everything that defines the appliance — the node images, the GNS3
 templates, the symbols, the noVNC service, the host configuration — is in this repository.
 
 Two phases reach into it, and neither stops you:

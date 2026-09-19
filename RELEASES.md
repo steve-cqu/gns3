@@ -19,8 +19,13 @@ in mind — their `-student` / `-staff` filenames are not a naming convention th
 
 | Version | Term | Released | `gns3` | `gns3-dev` | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `v027` | T2 2026 | 23 Jun 2026 | [`509278c`](https://github.com/steve-cqu/gns3/commit/509278c) (19 Jun 2026) | [`7e444b5`](https://github.com/steve-cqu/gns3-dev/commit/7e444b5) (23 Jun 2026) | One post-release fix issued — see below |
-| `v022` | T1 2026 | ~mid-Mar 2026 | [`5937d74`](https://github.com/steve-cqu/gns3/commit/5937d74) (4 Nov 2025) | [`2e77343`](https://github.com/steve-cqu/gns3-dev/commit/2e77343) (3 Nov 2025) | First release |
+| `v027` | T2 2026 | 23 Jun 2026 | [`509278c`](https://github.com/steve-cqu/gns3/commit/509278c) (19 Jun 2026) | `7e444b5` (23 Jun 2026) | One post-release fix issued — see below |
+| `v022` | T1 2026 | ~mid-Mar 2026 | [`5937d74`](https://github.com/steve-cqu/gns3/commit/5937d74) (4 Nov 2025) | `2e77343` (3 Nov 2025) | First release |
+
+`gns3-dev` is the **private** repository holding the activities and project files, so its
+commit hashes are recorded here as plain text rather than links — they identify the build to
+anyone who can reach that repository, and resolve to nothing for anyone who cannot. Every other
+`gns3-dev/…` path in this repository is a provenance reference of the same kind.
 
 Both rows were reconstructed on 5 Aug 2026, after the fact — neither build stamped itself.
 They are the best available evidence, not a recorded fact:

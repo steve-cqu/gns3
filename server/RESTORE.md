@@ -36,7 +36,7 @@ gns3-vNNN/
   qemu-images-vNNN.tar             + .sha256   the Qemu disk images
   gns3-vm-<version>/                           the upstream GNS3 VM appliance
   repos/gns3.bundle                            full git history + tags
-  repos/gns3-dev.bundle
+  repos/gns3-dev.bundle          # the private activities repo, travelling as a git bundle
   RESTORE.md                                   this file
 ```
 
