@@ -73,6 +73,17 @@
 .PARAMETER Locale
     Installation locale. Defaults to en_AU.
 
+.PARAMETER ImageIndex
+    Which Windows edition to install from the ISO. A retail "consumer editions" ISO holds
+    a dozen, and index 1 - the default, here and in Windows Setup - is Home. Home has no
+    Remote Desktop server, so if you want RDP, pick an Education or Pro index instead.
+
+    The indexes differ per ISO. Ask yours which it has, before installing:
+
+        VBoxManage unattended detect --iso=<path to the .iso>
+
+    On the 25H2 consumer ISO of September 2026, Education is 4 and Pro is 6.
+
 .PARAMETER SkipConfigure
     Do not run configure-windows-host.ps1 after the install. The machine then installs but
     does not answer a ping - you run the script yourself, per Step 5 of the guide.
@@ -112,6 +123,7 @@ param(
     [string] $ComputerName = 'WinHost',
     [string] $LabIPAddress = '10.10.1.20',
     [string] $Locale       = 'en_AU',
+    [int]    $ImageIndex   = 1,
     [switch] $SkipConfigure,
     [switch] $NoStart,
     [switch] $Force,
@@ -275,6 +287,7 @@ Write-Host "  iso         : $IsoPath"
 Write-Host "  lab network : Internal Network '$LabNetwork'  (must match the GNS3 VM's Adapter 3)"
 Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, EFI + TPM 2.0"
 Write-Host "  account     : $User / $Password, computer name $ComputerName"
+Write-Host "  edition     : image index $ImageIndex  (1 is Home on a retail ISO - see -? for how to list them)"
 Write-Host ""
 
 if (Test-VMExists $Name) {
@@ -422,6 +435,7 @@ $unattendArgs = @(
     "--full-user-name=GNS3 Lab",
     "--hostname=$ComputerName.lab",
     "--locale=$Locale",
+    "--image-index=$ImageIndex",
     "--install-additions"
 )
 
