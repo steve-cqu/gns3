@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    autounattend.xml - answers Windows Setup's questions for the GNS3 Windows Host.
+
+    ARCHITECTURE: x64 (Intel/AMD) Windows 11. The companion file is autounattend-arm64.xml; they differ only in
+    processorArchitecture, and Windows Setup ignores a file whose architecture is not its
+    own, silently, so a Mac that ends up installing by hand was probably given the x64 one.
+
+    HOW IT IS USED. Windows Setup looks for a file named exactly autounattend.xml in the
+    root of any attached removable media. make-unattend-iso.sh builds a small ISO holding
+    this file under that name, plus configure-windows-host.ps1, and new-windows-host.sh
+    attaches it as a second CD. Nothing here is specific to VMware: the same ISO works on
+    any hypervisor, and on real hardware from a USB stick.
+
+    WHAT IT SETS UP
+      - wipes disk 0 and lays out a standard UEFI disk (EFI, MSR, Windows)
+      - installs Windows 11 Pro. Pro rather than Home because Home has no Remote Desktop
+      - skips the product key prompt. Unactivated Windows 11 runs indefinitely for lab work
+      - creates the local account gns3/gns3 and logs it in automatically
+      - names the machine WinHost
+      - skips the "Let us connect you to a network" screen, which otherwise refuses to let
+        Setup continue on a machine whose network driver is not loaded yet
+      - runs configure-windows-host.ps1 from this same ISO at first logon, which is what
+        makes the machine answer a ping and accept ssh
+
+    WHAT IT DOES NOT DO. It does not activate Windows, does not install VMware Tools or
+    Guest Additions, and does not touch the GNS3 VM.
+
+    CHANGING THE ACCOUNT. The password sits in clear text below, twice. This is a lab
+    machine on an isolated network and the guide publishes the same credentials, so there
+    is nothing here to protect. If you reuse this file for anything real, that is the first
+    thing to change, along with the AutoLogon block.
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+    <settings pass="windowsPE">
+
+        <component name="Microsoft-Windows-International-Core-WinPE"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <SetupUILanguage>
+                <UILanguage>en-US</UILanguage>
+            </SetupUILanguage>
+            <InputLocale>en-AU</InputLocale>
+            <SystemLocale>en-AU</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UserLocale>en-AU</UserLocale>
+        </component>
+
+        <component name="Microsoft-Windows-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+
+            <!--
+                Windows 11's hardware checks are MET on both supported paths, not bypassed:
+                VirtualBox 7 gives the VM a TPM 2.0 and EFI firmware, and Fusion adds a
+                software TPM. So the three bypass keys below stay commented out.
+
+                Uncomment this block ONLY if you are installing somewhere that cannot
+                provide a TPM. The "no-tpm" option of new-windows-host.sh is the case it
+                exists for. A machine installed this way works, but Microsoft does not
+                support it and feature updates may refuse to install.
+
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>2</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>3</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+            -->
+
+            <DiskConfiguration>
+                <!--
+                    WillWipeDisk wipes disk 0 without asking. That is correct for a VM the
+                    installer script just created, and catastrophic anywhere else, which is
+                    why this ISO is built per use rather than left on a USB stick in a
+                    drawer.
+                -->
+                <Disk wcm:action="add">
+                    <DiskID>0</DiskID>
+                    <WillWipeDisk>true</WillWipeDisk>
+                    <CreatePartitions>
+                        <CreatePartition wcm:action="add">
+                            <Order>1</Order>
+                            <Type>EFI</Type>
+                            <Size>260</Size>
+                        </CreatePartition>
+                        <CreatePartition wcm:action="add">
+                            <Order>2</Order>
+                            <Type>MSR</Type>
+                            <Size>128</Size>
+                        </CreatePartition>
+                        <CreatePartition wcm:action="add">
+                            <Order>3</Order>
+                            <Type>Primary</Type>
+                            <Extend>true</Extend>
+                        </CreatePartition>
+                    </CreatePartitions>
+                    <ModifyPartitions>
+                        <ModifyPartition wcm:action="add">
+                            <Order>1</Order>
+                            <PartitionID>1</PartitionID>
+                            <Format>FAT32</Format>
+                            <Label>System</Label>
+                        </ModifyPartition>
+                        <ModifyPartition wcm:action="add">
+                            <Order>2</Order>
+                            <PartitionID>2</PartitionID>
+                        </ModifyPartition>
+                        <ModifyPartition wcm:action="add">
+                            <Order>3</Order>
+                            <PartitionID>3</PartitionID>
+                            <Format>NTFS</Format>
+                            <Label>Windows</Label>
+                            <Letter>C</Letter>
+                        </ModifyPartition>
+                    </ModifyPartitions>
+                </Disk>
+                <WillShowUI>OnError</WillShowUI>
+            </DiskConfiguration>
+
+            <ImageInstall>
+                <OSImage>
+                    <InstallFrom>
+                        <!--
+                            The edition name must match one the ISO actually carries. If
+                            Setup stops here asking which edition to install, that is what
+                            went wrong: run dism /Get-WimInfo against the mounted ISO's
+                            sources/install.wim and copy a name out of its output.
+                        -->
+                        <MetaData wcm:action="add">
+                            <Key>/IMAGE/NAME</Key>
+                            <Value>Windows 11 Pro</Value>
+                        </MetaData>
+                    </InstallFrom>
+                    <InstallTo>
+                        <DiskID>0</DiskID>
+                        <PartitionID>3</PartitionID>
+                    </InstallTo>
+                </OSImage>
+            </ImageInstall>
+
+            <UserData>
+                <!-- An empty Key skips the product key page without supplying one. -->
+                <ProductKey>
+                    <Key></Key>
+                    <WillShowUI>Never</WillShowUI>
+                </ProductKey>
+                <AcceptEula>true</AcceptEula>
+                <FullName>GNS3 Lab</FullName>
+                <Organization>CQUniversity</Organization>
+            </UserData>
+
+        </component>
+    </settings>
+
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <ComputerName>WinHost</ComputerName>
+            <TimeZone>E. Australia Standard Time</TimeZone>
+        </component>
+
+        <component name="Microsoft-Windows-Deployment"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <!--
+                BypassNRO lets OOBE finish without a network. It matters most on Apple
+                Silicon, where Windows 11 ARM64 may have no driver for the virtual adapter
+                until VMware Tools is installed, and without this Setup simply will not
+                continue. Microsoft removed the bypassnro.cmd script during the 24H2 cycle;
+                this registry value is the equivalent, and the interactive escape hatch is
+                Fn+Shift+F10 then: start ms-cxh:localonly
+            -->
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Description>Allow OOBE to complete without a network</Description>
+                    <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+    </settings>
+
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-International-Core"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <InputLocale>en-AU</InputLocale>
+            <SystemLocale>en-AU</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UserLocale>en-AU</UserLocale>
+        </component>
+
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+
+            <OOBE>
+                <HideEULAPage>true</HideEULAPage>
+                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                <ProtectYourPC>3</ProtectYourPC>
+                <SkipMachineOOBE>true</SkipMachineOOBE>
+                <SkipUserOOBE>true</SkipUserOOBE>
+            </OOBE>
+
+            <UserAccounts>
+                <LocalAccounts>
+                    <LocalAccount wcm:action="add">
+                        <Name>gns3</Name>
+                        <DisplayName>GNS3 Lab</DisplayName>
+                        <Group>Administrators</Group>
+                        <Password>
+                            <Value>gns3</Value>
+                            <PlainText>true</PlainText>
+                        </Password>
+                    </LocalAccount>
+                </LocalAccounts>
+            </UserAccounts>
+
+            <!--
+                Log in automatically once, so FirstLogonCommands below actually runs with
+                nobody at the keyboard. LogonCount 1 means this stops after the first boot
+                and the machine asks for the password from then on.
+            -->
+            <AutoLogon>
+                <Enabled>true</Enabled>
+                <LogonCount>1</LogonCount>
+                <Username>gns3</Username>
+                <Password>
+                    <Value>gns3</Value>
+                    <PlainText>true</PlainText>
+                </Password>
+            </AutoLogon>
+
+            <FirstLogonCommands>
+                <!--
+                    Run configure-windows-host.ps1 off this ISO. The drive letter of a CD is
+                    not predictable, so the command searches every filesystem drive for the
+                    script rather than assuming D:. If the ISO was built without the script,
+                    or Windows has not mounted it yet, nothing happens and the machine is
+                    simply unconfigured: run the script by hand, per Step 5 of the guide,
+                    which is the documented path anyway.
+                -->
+                <SynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Description>Configure this machine as the GNS3 Windows Host</Description>
+                    <CommandLine>powershell.exe -ExecutionPolicy Bypass -Command "$s = Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root 'configure-windows-host.ps1' } | Where-Object { Test-Path $_ } | Select-Object -First 1; if ($s) { &amp; $s -LabAdapter 'Ethernet 2' -IPAddress 10.10.1.20 -ComputerName WinHost }"</CommandLine>
+                </SynchronousCommand>
+            </FirstLogonCommands>
+
+        </component>
+    </settings>
+
+</unattend>

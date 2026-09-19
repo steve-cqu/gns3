@@ -21,6 +21,10 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 | `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
+| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-List`, `-DryRun` and `-Force`. |
+| `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. |
+| `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. |
+| `make-unattend-iso.sh` | staff, on a Mac or Linux | Builds `cqu-unattend.iso` from one of those answer files plus `configure-windows-host.ps1`. Students never run this — they get the ISO, or install by hand. |
 
 Both are idempotent, take `-DryRun`, and are safe to re-run after a part-finished attempt.
 
@@ -65,19 +69,32 @@ Event ID 3 records each network connection with the process that owns it and whe
 inbound or outbound — something Windows does not log natively, and the retrospective
 counterpart to TCPView.
 
-## Still to come
+## The installers are drafts — read this before handing one to a student
 
-Planned, not yet written — see the increments in `gns3-dev/notes/windows-host-node.md`:
+`New-WindowsHost.ps1`, `new-windows-host.sh` and the two answer files were written on
+19 September 2026 and **have never been run against a hypervisor.** They are checked as far
+as they can be checked without one: both shell scripts pass `sh -n`, the PowerShell parses,
+both XML files are well-formed, and the first-logon command was extracted from the XML and
+parsed on its own. That is not the same as working.
 
-- `New-WindowsHost.ps1` — creates the VM on a PC with `VBoxManage unattended install`
-- `new-windows-host.sh` — the VMware Fusion equivalent for Apple Silicon
-- `autounattend.xml`, `autounattend-arm64.xml`, `cqu-unattend.iso`, `make-unattend-iso.sh` —
-  the answer file Fusion needs, since it has no unattended-install CLI
+Four things are most likely to need a change on the first real run, and each is commented
+where it sits:
+
+| Where | What is unverified |
+|---|---|
+| `New-WindowsHost.ps1`, secure boot | `modifynvram enrollmssignatures` has moved between VirtualBox releases. A failure here is reported and tolerated — TPM 2.0 and EFI alone are enough to install Windows 11 |
+| `New-WindowsHost.ps1`, `--post-install-command` | The quoting reaches Windows through two layers. If it does not run, nothing is broken: run `configure-windows-host.ps1` by hand |
+| `new-windows-host.sh`, `guestOS` | `arm-windows11-64` / `windows11-64`. If Fusion rejects the VM, this is the line to change; `--list` prints what would be asked for |
+| `new-windows-host.sh`, `e1000e` | Chosen over Fusion's default `vmxnet3`, which Windows 11 ARM64 has no in-box driver for. **This is a hypothesis about fixing the "no network until VMware Tools" problem, not a measurement** |
+
+Use `--dry-run` (`-DryRun`) first on both. Each prints every command it would run, and the
+Fusion one prints the whole `.vmx`, so the first test can be read before it is executed.
 
 Both installers finish by running `configure-windows-host.ps1` in the guest, so that script
-is the one piece a student can always fall back to running by hand.
+is the one piece a student can always fall back to running by hand — and it *is* proven, on
+a real Windows 11 VM on both architectures.
 
-## Using it now, before the installers exist
+## Installing by hand
 
 Install Windows 11 into a VM yourself, give it two adapters (one NAT for the internet, one
 on the lab network), then open PowerShell **as Administrator** inside that VM:
