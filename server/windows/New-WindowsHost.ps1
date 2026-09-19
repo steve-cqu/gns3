@@ -142,13 +142,19 @@ function Find-VBoxManage {
     $cmd = Get-Command VBoxManage.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
 
-    $candidates = @(
-        (Join-Path $env:VBOX_MSI_INSTALL_PATH 'VBoxManage.exe'),
-        (Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Oracle\VirtualBox\VBoxManage.exe')
-    )
+    # Each of these environment variables is empty on a machine that has never had
+    # VirtualBox installed - including a Windows PC where it simply is not installed yet.
+    # Join-Path throws on an empty path, and $ErrorActionPreference is 'Stop', so building
+    # this list unconditionally killed the script right here with "Cannot bind argument to
+    # parameter 'Path' because it is null" - instead of reaching the message below that
+    # says what to do about it. Found 20 September 2026.
+    $candidates = @()
+    if ($env:VBOX_MSI_INSTALL_PATH) { $candidates += (Join-Path $env:VBOX_MSI_INSTALL_PATH 'VBoxManage.exe') }
+    if ($env:ProgramFiles)          { $candidates += (Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe') }
+    if (${env:ProgramFiles(x86)})   { $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Oracle\VirtualBox\VBoxManage.exe') }
+
     foreach ($c in $candidates) {
-        if ($c -and (Test-Path $c)) { return $c }
+        if (Test-Path $c) { return $c }
     }
     return $null
 }
@@ -160,6 +166,24 @@ if (-not $vbox) {
     Write-Host "VirtualBox does not put it on the PATH, so this is normal even on a machine"
     Write-Host "where VirtualBox works. Either install VirtualBox 7 from https://www.virtualbox.org/,"
     Write-Host "or if it is already installed, open its folder and run this script from there."
+    exit 1
+}
+
+# Finding the program is not the same as the program working: a half-removed install, or a
+# launcher that rejects the name it was called by, both answer here rather than several
+# steps later, where the failure reads as something else entirely. `VBoxManage --version`
+# prints a version string and nothing else, e.g. 7.0.2r154219.
+$script:VBoxVersion = ''
+$global:LASTEXITCODE = 0
+try { $script:VBoxVersion = ((& $vbox --version 2>&1) -join '').Trim() } catch { $script:VBoxVersion = '' }
+if ($LASTEXITCODE -ne 0 -or $script:VBoxVersion -notmatch '^\d+\.\d+') {
+    Write-Host "VBoxManage was found, but it did not run." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  $vbox"
+    if ($script:VBoxVersion) { Write-Host "  answered: $script:VBoxVersion" }
+    Write-Host ""
+    Write-Host "Nothing has been changed. Check that VirtualBox itself starts, then run this"
+    Write-Host "script again. Every step below depends on this one program."
     exit 1
 }
 
@@ -193,8 +217,7 @@ if ($List) {
     Write-Host ""
     Write-Host "Windows Host - what is already here" -ForegroundColor Cyan
     Write-Host ""
-    $ver = (& $vbox --version 2>&1) -join ''
-    Report-Ok "VirtualBox" "$ver  ($vbox)"
+    Report-Ok "VirtualBox" "$script:VBoxVersion  ($vbox)"
 
     if (Test-VMExists $Name) {
         $info = & $vbox showvminfo $Name --machinereadable 2>&1
