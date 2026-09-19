@@ -385,7 +385,14 @@ try {
         Report-Ok "openssh package" "already installed"
         $sshInstalled = $true
     } else {
-        if (-not $DryRun) { Add-WindowsCapability -Online -Name $cap.Name | Out-Null }
+        if (-not $DryRun) {
+            # Windows fetches this from Windows Update and shows no progress of its own,
+            # so several minutes pass with a still screen and nothing to read. Say what is
+            # happening before it starts, or it looks hung. Asked for on the first real
+            # unattended run, 20 September 2026.
+            Write-Host "  working  openssh package            downloading from Windows Update - this takes a few minutes" -ForegroundColor DarkGray
+            Add-WindowsCapability -Online -Name $cap.Name | Out-Null
+        }
         Report-Changed "openssh package" "installed"
         $sshInstalled = $true
     }

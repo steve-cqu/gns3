@@ -84,6 +84,16 @@
 
     On the 25H2 consumer ISO of September 2026, Education is 4 and Pro is 6.
 
+.PARAMETER ProductKey
+    Product key passed to Windows Setup. Leave it off and Setup asks for one - VirtualBox
+    generates an answer file with an empty product-key element, which Windows 11 25H2
+    treats as unanswered, and the install stops on that screen.
+
+    This does not have to be anybody's real key. Microsoft publishes a generic
+    volume-licence key (a GVLK) for each edition: it selects the edition, it does not
+    activate, and it is meant to be written down in exactly this sort of file. Use the one
+    matching -ImageIndex.
+
 .PARAMETER SkipConfigure
     Do not run configure-windows-host.ps1 after the install. The machine then installs but
     does not answer a ping - you run the script yourself, per Step 5 of the guide.
@@ -124,6 +134,7 @@ param(
     [string] $LabIPAddress = '10.10.1.20',
     [string] $Locale       = 'en_AU',
     [int]    $ImageIndex   = 1,
+    [string] $ProductKey   = '',
     [switch] $SkipConfigure,
     [switch] $NoStart,
     [switch] $Force,
@@ -288,6 +299,11 @@ Write-Host "  lab network : Internal Network '$LabNetwork'  (must match the GNS3
 Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, EFI + TPM 2.0"
 Write-Host "  account     : $User / $Password, computer name $ComputerName"
 Write-Host "  edition     : image index $ImageIndex  (1 is Home on a retail ISO - see -? for how to list them)"
+if ($ProductKey) {
+    Write-Host "  product key : supplied - Setup will not ask"
+} else {
+    Write-Host "  product key : none - Setup WILL stop and ask for one (see -? on -ProductKey)" -ForegroundColor Yellow
+}
 Write-Host ""
 
 if (Test-VMExists $Name) {
@@ -449,6 +465,10 @@ $unattendArgs = @(
     "--image-index=$ImageIndex",
     "--install-additions"
 )
+
+# Without this, VirtualBox writes an empty <ProductKey> element into the answer file and
+# Windows 11 25H2 Setup stops to ask. Found on the first real run, 20 September 2026.
+if ($ProductKey) { $unattendArgs += "--key=$ProductKey" }
 
 if (-not $SkipConfigure) {
     # Runs inside Windows once the install finishes. It fetches the same script the guide

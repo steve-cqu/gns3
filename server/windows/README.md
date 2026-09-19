@@ -21,7 +21,7 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 | `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
-| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-List`, `-DryRun` and `-Force`. |
+| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-ImageIndex` picks the Windows edition; `-List`, `-DryRun` and `-Force`. |
 | `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. |
 | `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. |
 | `make-unattend-iso.sh` | staff, on a Mac or Linux | Builds `cqu-unattend.iso` from one of those answer files plus `configure-windows-host.ps1`. Students never run this — they get the ISO, or install by hand. |
@@ -69,21 +69,57 @@ Event ID 3 records each network connection with the process that owns it and whe
 inbound or outbound — something Windows does not log natively, and the retrospective
 counterpart to TCPView.
 
-## The installers are drafts — read this before handing one to a student
+## The first real run — 20 September 2026
 
-`New-WindowsHost.ps1`, `new-windows-host.sh` and the two answer files were written on
-19 September 2026 and **have never been run against a hypervisor.** They are checked as far
-as they can be checked without one: both shell scripts pass `sh -n`, the PowerShell parses,
-both XML files are well-formed, and the first-logon command was extracted from the XML and
-parsed on its own. That is not the same as working.
+`New-WindowsHost.ps1` met a hypervisor for the first time on 20 September 2026: **VirtualBox
+7.0.2 on a Linux host**, a retail Windows 11 25H2 x64 consumer ISO, against a live GNS3
+appliance. It built the machine and Windows installed and joined a topology — but the install
+**was not unattended**, and two screens still needed a person. `new-windows-host.sh` and the
+ARM64 answer file have still never been run.
 
-Four things are most likely to need a change on the first real run, and each is commented
-where it sits:
+**What the run proved:**
+
+- The machine it builds is right — EFI, TPM 2.0, 4 GB, 64 GB disk, NAT plus the `cqulab`
+  adapter — and Windows 11 installs on it without bypassing any requirement.
+- **`--post-install-command` survives the quoting**, which this file called the least-tested
+  part of the script. Windows fetched `configure-windows-host.ps1` from GitHub over NAT and
+  ran it at first logon with nobody watching.
+- **Automation reproduces the hand-run result.** Lab adapter resolved to `Ethernet 2` with no
+  ambiguity, profile Public → Private, `10.10.1.20/24`, inbound ICMP allowed, OpenSSH
+  installed and running, Remote Desktop enabled.
+- **End to end from inside GNS3**: `ping` both ways — `ttl=128` from Windows, `ttl=64` from
+  the Alpine node — and `ssh gns3@10.10.1.20 ipconfig` returning both adapters.
+- **`--image-index` reaches Windows Setup.** That is how the edition is chosen, and it changes
+  what this file used to say about Home. See *Windows licensing* below.
+
+**Four defects found and fixed during the run**, all in `New-WindowsHost.ps1`:
+
+- **`Find-VBoxManage` crashed instead of reporting.** It built its candidate paths with
+  `Join-Path` on environment variables that are empty on any machine without VirtualBox
+  installed — so the friendly "VirtualBox was not found, install it from virtualbox.org"
+  message was unreachable by exactly the student who needs it. The candidates are now built
+  conditionally.
+- **Nothing checked that `VBoxManage` runs.** A launcher that rejected the name it was called
+  by had its error text printed in the slot where a version belongs, and `-List` then reported
+  a VM as absent when it had simply failed to ask. A `--version` check now gates everything.
+- **The ISO attach was one call and had to be two.** `storageattach … --type dvddrive --medium
+  <iso>` against an empty slot goes down VBoxManage's *mount* path and fails with `No drive
+  attached to device slot 0 on port 1 of controller 'SATA'`. Attaching `emptydrive` first
+  creates the drive; the disc goes in second.
+- **The SATA controller had two ports.** The disk and the Windows ISO fill both, leaving the
+  unattended installer nowhere for its own media. Now four.
+
+**Two things are still broken, and both stop the install being unattended:**
+
+| What | What is known |
+|---|---|
+| **Nothing presses "Press any key to boot from CD or DVD."** The firmware shows the prompt, no key arrives, and the VM drops to VirtualBox's *failed to boot* dialog. A person mounted the ISO by hand and pressed a key to get past it | The auxiliary ISO VirtualBox generates carries a no-prompt boot image, so the firmware is booting the raw Windows ISO instead of it. Next step is `-NoStart`, then read where the media actually landed before starting the VM |
+| **The generated answer file's `<ProductKey>` element is empty**, so 25H2 Setup asks for a key | Everything else in that file worked — the account, the hostname, the image index and the post-install command all applied. `VBoxManage unattended` takes `--product-key`, and Microsoft publishes a generic volume-licence key per edition, which selects an edition without activating. The script does not pass one yet |
+
+**Still unverified — the Mac half**, unchanged from the draft:
 
 | Where | What is unverified |
 |---|---|
-| `New-WindowsHost.ps1`, secure boot | `modifynvram enrollmssignatures` has moved between VirtualBox releases. A failure here is reported and tolerated — TPM 2.0 and EFI alone are enough to install Windows 11 |
-| `New-WindowsHost.ps1`, `--post-install-command` | The quoting reaches Windows through two layers. If it does not run, nothing is broken: run `configure-windows-host.ps1` by hand |
 | `new-windows-host.sh`, `guestOS` | `arm-windows11-64` / `windows11-64`. If Fusion rejects the VM, this is the line to change; `--list` prints what would be asked for |
 | `new-windows-host.sh`, `e1000e` | Chosen over Fusion's default `vmxnet3`, which Windows 11 ARM64 has no in-box driver for. **This is a hypothesis about fixing the "no network until VMware Tools" problem, not a measurement** |
 
@@ -92,7 +128,31 @@ Fusion one prints the whole `.vmx`, so the first test can be read before it is e
 
 Both installers finish by running `configure-windows-host.ps1` in the guest, so that script
 is the one piece a student can always fall back to running by hand — and it *is* proven, on
-a real Windows 11 VM on both architectures.
+a real Windows 11 VM on both architectures, and now under automation as well.
+
+### A Linux host is not a case this script knows about
+
+The plan contemplates two hosts: a PC running VirtualBox and a Mac running Fusion. A Linux
+machine running VirtualBox is neither, and nothing here accounts for it — `New-WindowsHost.ps1`
+is PowerShell and looks for `VBoxManage.exe` by its Windows name. It does run, with `pwsh`
+installed and a wrapper that answers to that name:
+
+```sh
+sudo tee /usr/local/bin/VBoxManage.exe >/dev/null <<'EOF'
+#!/bin/sh
+exec /usr/bin/VBoxManage "$@"
+EOF
+sudo chmod +x /usr/local/bin/VBoxManage.exe
+pwsh ./New-WindowsHost.ps1 -List
+```
+
+**A symlink does not work** and fails in a way that looks like success: VirtualBox's Linux
+launcher dispatches on the name it was called by, so `VBoxManage.exe` gets `Unknown
+application - VBoxManage.exe` from every call, which the script reported as a version and as
+a VM that does not exist. That is what the `--version` check above now catches.
+
+One layer stays untested this way: Windows PowerShell 5.1 passes arguments to a native
+program differently from `pwsh` on Linux, and 5.1 is what a student's PC has.
 
 ## Installing by hand
 
@@ -155,6 +215,16 @@ drops those unless the adapter is allowed to receive them.
 ```
 VBoxManage modifyvm "GNS3 VM" --nic3 intnet --intnet3 cqulab --nicpromisc3 allow-all
 ```
+
+**Check it with `showvminfo`, not `--machinereadable`.** On VirtualBox 7.0.2 the machine-readable
+output carries no `nicpromisc3` key at all, so grepping for one reports nothing on a correctly
+configured VM. The human-readable form always says:
+
+```
+VBoxManage showvminfo "GNS3 VM" | grep -A1 '^NIC 3'
+```
+
+Want `Attachment: Internal Network 'cqulab'` and `Promisc Policy: allow-all` on that line.
 
 **3. Is `eth2` up on the GNS3 VM?** It has no address by design, but it must be `UP`:
 
@@ -229,18 +299,32 @@ direct downloads. A key from CQU's Azure account is optional: unactivated Window
 indefinitely, with a desktop watermark and no personalisation, neither of which matters for
 lab work.
 
-**Expect to end up on Windows Home.** Installing Windows 11 25H2 with *I don't have a
-product key* offered no edition list and produced Home — `Get-WindowsEdition -Online`
-reports `Core` — even from an ISO believed to be Education. Assume Home unless you check.
+**A retail ISO holds a dozen editions, and which one you get is decided by an argument.**
+Ask the ISO what is in it:
 
-Home matters in exactly one way: it has no Remote Desktop **server**, so nothing can RDP
-into the machine. `ssh` is unaffected and works on every edition, which is why activities
-should be built on it. `configure-windows-host.ps1` detects Home and reports Remote Desktop
-as unavailable rather than opening port 3389 in front of a service that is not there.
+```sh
+VBoxManage unattended detect --iso=<path to the .iso>
+```
 
-To get Education, enter an Azure Education key after installing — Settings → System →
-Activation → Change product key. That changes the edition in place and brings the RDP server
-with it.
+On the 25H2 consumer ISO of September 2026 that lists eleven images — Home at index 1,
+Education at 4, Pro at 6 — and confirms `Unattended installation supported = yes`.
+
+**Installing by hand gets you Home, and offers no choice about it.** With *I don't have a
+product key*, 25H2's Setup showed no edition list at all and installed image 1;
+`Get-WindowsEdition -Online` reports `Core`. That is what August 2026's run produced, and it
+was read at the time as a licensing limit. It is not — it is the default image.
+
+**`New-WindowsHost.ps1 -ImageIndex 4` installs Education, with no key.** Verified 20
+September 2026: `Get-WindowsEdition -Online` → `Education`, unactivated, on a consumer ISO.
+The indexes differ per ISO, so run `unattended detect` rather than trusting the number.
+
+The edition matters in exactly one way: **Home has no Remote Desktop server**, so nothing can
+RDP into a Home machine. Education and Pro have one, and `configure-windows-host.ps1` enables
+it. `configure-windows-host.ps1` detects Home and reports Remote Desktop as unavailable
+rather than opening port 3389 in front of a service that is not there.
+
+Entering an Azure Education key after installing — Settings → System → Activation → Change
+product key — still works, and is the way to change the edition of a machine already built.
 
 Either way, **`ssh` is the access path activities should be built on**: it works on every
 edition, it is what a GNS3 Linux node uses to reach this machine, and it is what the staff
@@ -266,3 +350,17 @@ ssh gns3@10.10.1.20 "powershell -Command Get-NetIPAddress"
 The default shell is deliberately left as `cmd.exe`. It is what Windows ships, it is what
 students expect from a Windows command line, and `ipconfig` / `ping` / `tracert` /
 `route print` / `netstat` / `nslookup` are the tools an activity is going to use anyway.
+
+**Every student will see a post-quantum warning, and it is not a fault:**
+
+```
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+```
+
+The node images' OpenSSH client offers a post-quantum key exchange; the Windows OpenSSH
+server does not yet, so the client says so and connects anyway. Nothing is broken and nothing
+needs changing. Say this in any activity that ssh's into Windows — otherwise it reads as a
+security failure the student has caused, and in a security unit it is worth two sentences of
+explanation rather than none.
