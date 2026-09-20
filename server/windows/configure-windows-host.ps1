@@ -99,6 +99,26 @@ if (-not (New-Object Security.Principal.WindowsPrincipal $identity).IsInRole(
     exit 1
 }
 
+# --------------------------------------------------------------------------- #
+# Keep a record, because the most important runs are the ones nobody watches.
+#
+# When an installer calls this script at first logon, everything it prints goes to a window
+# that closes itself. On 20 September 2026 that led to "the configure script did not run" -
+# it had run, had set the address, and was still several minutes into installing OpenSSH,
+# which nothing on screen could say. A log answers that in one command, and it is the file
+# to ask a student for when their machine does not come up right.
+#
+# Appended, so re-runs accumulate rather than erase. A transcript is a convenience and never
+# a reason to stop: some hosts do not support it, and that must not cost the student a
+# working machine.
+# --------------------------------------------------------------------------- #
+$TranscriptPath = Join-Path $env:WINDIR 'Temp\configure-windows-host.log'
+$transcriptOn = $false
+try {
+    Start-Transcript -Path $TranscriptPath -Append -ErrorAction Stop | Out-Null
+    $transcriptOn = $true
+} catch { }
+
 Write-Host ""
 Write-Host "Configuring this machine as the GNS3 Windows Host" -ForegroundColor Cyan
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed." -ForegroundColor Yellow }
@@ -412,7 +432,29 @@ try {
             Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
             Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            Add-WindowsCapability -Online -Name $cap.Name | Out-Null
+
+            # Try three times. This step failed outright on one machine (20 September
+            # 2026): a single DismAddCapabilityInternal in dism.log, no completion, the
+            # capability still NotPresent, and no sshd - on a build where the three before
+            # it had worked. Windows Update is busy with its own first-boot work at exactly
+            # the moment an installer calls this script, and a machine left without ssh is
+            # a machine no GNS3 node can reach. So retry rather than give up once.
+            $attempt = 0
+            while ($true) {
+                $attempt++
+                try {
+                    Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
+                    break
+                } catch {
+                    $code = '0x{0:X8}' -f $_.Exception.HResult
+                    if ($attempt -ge 3) {
+                        throw "$($_.Exception.Message) [$code, failed $attempt times]"
+                    }
+                    Write-Host ("                                      attempt $attempt failed ($code) - retrying in 30 s") -ForegroundColor Yellow
+                    Start-Sleep -Seconds 30
+                }
+            }
+
             $sw.Stop()
             $elapsed = " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
         }
@@ -522,10 +564,26 @@ if ($DryRun) {
 }
 
 Write-Host "$script:Changed change(s), $script:Unchanged already correct, $script:Failed failed."
+
+# One line per run, in a file with an obvious name, so "did this machine configure itself?"
+# is answerable without reading a transcript - and answerable over ssh, or by a student
+# reading it out. Appended, so a re-run shows the history rather than hiding it.
+$StatusPath = Join-Path $env:WINDIR 'Temp\configure-windows-host.status'
+try {
+    $verdict = if ($script:Failed) { 'FAILED ' } else { 'OK     ' }
+    ("{0}  {1}  changed={2} already-correct={3} failed={4}" -f `
+        $verdict, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $script:Changed, $script:Unchanged, $script:Failed) |
+        Out-File -FilePath $StatusPath -Encoding ascii -Append -ErrorAction Stop
+} catch { }
+
 if ($script:Failed) {
     Write-Host ""
     Write-Host "Some steps failed. The most common cause is no internet on the NAT adapter," -ForegroundColor Yellow
     Write-Host "which the OpenSSH install needs. Fix that and run this script again."       -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  what happened : $TranscriptPath"
+    Write-Host "  one-line check: $StatusPath"
+    if ($transcriptOn) { try { Stop-Transcript | Out-Null } catch { } }
     exit 1
 }
 
@@ -555,6 +613,7 @@ if ($apipaOnly) {
     Write-Host "  VirtualBox internal network name matches the GNS3 VM's exactly."        -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Everything else above was applied."
+    if ($transcriptOn) { Write-Host "  log         : $TranscriptPath"; try { Stop-Transcript | Out-Null } catch { } }
     exit 0
 }
 
@@ -562,7 +621,10 @@ Write-Host "This machine is ready to use as the GNS3 Windows Host." -ForegroundC
 Write-Host "  lab adapter : $($adapter.Name)"
 Write-Host "  lab address : $(if ($labIp) { $labIp } else { 'none yet - waiting on the topology DHCP server' })"
 Write-Host "  reachable by: ping, ssh $env:USERNAME@<address>$(if (-not $skipRdp) { ', and Remote Desktop' })"
+if ($transcriptOn) { Write-Host "  log         : $TranscriptPath" }
+Write-Host "  status      : $StatusPath"
 if ($script:Restart) {
     Write-Host ""
     Write-Host "Restart Windows for the new computer name to take effect." -ForegroundColor Yellow
 }
+if ($transcriptOn) { try { Stop-Transcript | Out-Null } catch { } }

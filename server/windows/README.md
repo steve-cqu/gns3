@@ -18,7 +18,7 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 
 | File | Runs on | What |
 |---|---|---|
-| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
+| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Logs to `C:\Windows\Temp\configure-windows-host.log`. Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
 | `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-Edition` picks the Windows edition by name (`-ImageIndex` by number) and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
@@ -45,6 +45,11 @@ Both are idempotent, take `-DryRun`, and are safe to re-run after a part-finishe
 | `-Iperf` | iperf3 | Pairs with the Linux nodes for throughput exercises |
 | `-Telnet` | The telnet client | **After a restart** |
 | `-Sysmon` | Sysmon with `sysmon-lab.xml` | Installs a driver, so it is deliberately **not** in `-All` |
+
+The OpenSSH capability in `configure-windows-host.ps1` is fetched from Windows Update the same
+way, and on a machine minutes old it **failed outright once** (20 September 2026) while working on
+three other builds — Windows Update is busy with its own first-boot work at exactly that moment.
+That step now retries three times, thirty seconds apart, and reports the HResult if all three fail.
 | `-All` | Everything except `-Sysmon` | |
 
 Three things learned the hard way, all handled by the script but worth knowing if you edit it:
@@ -123,10 +128,10 @@ cycle that used `-NoStart` to read the prepared machine before booting it:
   auxiliary disc regardless of what booted, which is why everything downstream already
   worked.
 - **The generated answer file's `<ProductKey>` element was empty**, and 25H2 Setup treats
-  that as unanswered and stops. `-ProductKey` now passes `--key` through, which puts the key
-  into that element. **Microsoft's generic volume-licence key for the edition is accepted
-  from a retail consumer ISO** — verified with the Education GVLK, which answers Setup's
-  question without activating anything.
+  that as unanswered and stops. The script now passes `--key` through, with **Microsoft's
+  published generic volume-licence key for whichever edition `-Edition` names** — accepted
+  from a retail consumer ISO, and it selects an edition without activating anything.
+  `-ProductKey` overrides it, for a key you do want to activate with.
 
 **The second cycle then installed unattended, start to finish.** Nothing was typed inside
 Windows at any point, and the machine came up as: `Get-WindowsEdition -Online` → `Education`
@@ -224,9 +229,31 @@ Leave `-IPAddress` off if the topology runs a DHCP server. To set an address by 
 The script picks the lab adapter automatically as the one with no default gateway, and
 prints every adapter's name if it cannot decide.
 
+## Did it work? Three ways to tell
+
+`configure-windows-host.ps1` usually runs where nobody is watching — an installer calls it at
+first logon, in a window that closes when it finishes — so it leaves evidence behind.
+
+```powershell
+type C:\Windows\Temp\configure-windows-host.status     # one line per run: OK or FAILED, with counts
+type C:\Windows\Temp\configure-windows-host.log        # the full transcript of every run
+.\configure-windows-host.ps1 -DryRun                    # "0 change(s) would be made" = all in place
+```
+
+The **status** file is the quick answer and reads over ssh or down a phone: `OK` or `FAILED`, a
+timestamp, and how many steps changed, were already correct, or failed. The **log** says what
+happened and is the file to ask a student for. The **dry run** checks the machine as it is now
+rather than what some earlier run did, so it catches a setting that has since been undone — a
+reboot re-filing the network as Public, for instance.
+
+If the machine simply does not answer, work down the list below.
+
 ## If nothing on the lab network can ping Windows
 
 Work down this list. The first two are what a first run gets wrong.
+
+**0. Read the status file and the log**, per the section above. When an installer ran the script
+at first logon there was no console to watch, and those files are the only account of what it did.
 
 **1. Does the Windows VM have a lab adapter at all?** A VM built by clicking through
 VirtualBox has one NAT adapter, which is what gives it internet. That adapter is not on the
@@ -386,6 +413,16 @@ into the index Setup wants; if the name is not on the ISO it prints what is and 
 answer files do the same thing directly, with `<Key>/IMAGE/NAME</Key>`. Nothing in either
 path depends on an index number, because indexes belong to the ISO rather than to Windows.
 `-ImageIndex` still overrides, for an ISO that names its images oddly.
+
+**The key follows the edition.** Naming an edition and then being asked for a product key
+would be two defaults disagreeing, so the script looks the edition up in Microsoft's
+[published GVLK list](https://learn.microsoft.com/en-us/windows-server/get-started/kms-client-activation-keys)
+and passes it. A GVLK is not a licence: it names an edition to Setup and does not activate.
+So the whole command is:
+
+```powershell
+.\New-WindowsHost.ps1 -IsoPath C:\Users\me\Downloads\Win11_25H2_x64.iso
+```
 
 Matching is exact, deliberately: `Windows 11 Education` and `Windows 11 Education N` differ,
 and the N editions ship without Media Player.
