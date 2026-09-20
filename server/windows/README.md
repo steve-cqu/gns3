@@ -567,7 +567,21 @@ The default shell is deliberately left as `cmd.exe`. It is what Windows ships, i
 students expect from a Windows command line, and `ipconfig` / `ping` / `tracert` /
 `route print` / `netstat` / `nslookup` are the tools an activity is going to use anyway.
 
-**Every student will see a post-quantum warning, and it is not a fault:**
+**The default build negotiates a post-quantum key exchange, and prints no warning.** Measured
+on a machine built 20 September 2026:
+
+```
+debug1: Remote protocol version 2.0, remote software version OpenSSH_for_Windows_10.0 Win32-OpenSSH-GitHub
+debug1: kex: algorithm: mlkem768x25519-sha256
+```
+
+That is `ssh -v gns3@10.10.1.20`, and it is the one command to re-run whenever the OpenSSH pin
+moves. ML-KEM-768 with X25519 is what OpenSSH 10 offers by default, and the node images' client
+takes it.
+
+**A machine built from the Windows capability instead** — `-PreferWindowsUpdate`, or anything
+built before 20 September 2026 — runs an OpenSSH 9.x server that has no post-quantum key
+exchange, and every connection to it prints:
 
 ```
 ** WARNING: connection is not using a post-quantum key exchange algorithm.
@@ -575,16 +589,8 @@ students expect from a Windows command line, and `ipconfig` / `ping` / `tracert`
 ** The server may need to be upgraded. See https://openssh.com/pq.html
 ```
 
-The node images' OpenSSH client offers a post-quantum key exchange; the Windows OpenSSH
-server does not yet, so the client says so and connects anyway. Nothing is broken and nothing
-needs changing. Say this in any activity that ssh's into Windows — otherwise it reads as a
-security failure the student has caused, and in a security unit it is worth two sentences of
-explanation rather than none.
-
-**This probably no longer happens, and it has not been checked yet.** The warning was recorded
-against the Windows capability on 25H2, an OpenSSH 9.x build. **The MSI is now the default
-source and it is OpenSSH 10**, where upstream enables `mlkem768x25519-sha256` by default — so a
-standard Windows Host may negotiate a post-quantum key exchange and print nothing at all.
-Confirm with `ssh -v gns3@10.10.1.20` and read the `kex:` line before writing this into any
-activity: telling every student to expect a warning they do not see is worse than explaining
-both cases. In a security unit either outcome is worth two sentences.
+Nothing is broken there either: the client says so and connects anyway. But **an activity must
+not tell students to expect that warning**, because on a current build they will not see one.
+If an activity wants to talk about it, the honest framing is now the opposite — *this connection
+is protected against store-now-decrypt-later, and here is how you can tell* — which in a
+security unit is the better lesson anyway.
