@@ -330,6 +330,28 @@ The `10.10.1.2/24`-on-`eth2` test in step 4 is the fastest way to split these ap
 own MAC, so it proves the two VMs share a wire **without** involving promiscuous mode or the Cloud
 node. Remove the address afterwards — `eth2` must carry none.
 
+## After rebuilding the Windows Host: "REMOTE HOST IDENTIFICATION HAS CHANGED"
+
+A rebuilt Windows machine has **new ssh host keys** but keeps the **same lab address**, so every
+GNS3 node that has ever ssh'd to it now refuses to connect, with a warning that reads like an
+attack in progress:
+
+```
+@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@
+Host key verification failed.
+```
+
+Nothing is wrong. On the node, forget the old key and connect again:
+
+```sh
+ssh-keygen -R 10.10.1.20
+ssh gns3@10.10.1.20 ipconfig
+```
+
+This is the same hazard that made `Windows-Host-Demo.gns3project` ship with its `known_hosts`
+stripped — a project that remembers one machine's keys is unusable against anybody else's. Expect
+it whenever the Windows Host is rebuilt, which during development is often.
+
 ## Windows licensing, and which edition you get
 
 Students download the Windows 11 ISO themselves from Microsoft — x64 and ARM64 are both free

@@ -171,10 +171,26 @@ Report-Ok "lab adapter" "$($adapter.Name)  ($($adapter.InterfaceDescription))"
 # Not $profile - that is an automatic PowerShell variable holding the profile script path.
 $connProfile = Get-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
 if ($connProfile -and $connProfile.NetworkCategory -ne 'Private') {
+    # Catch it. Run early enough - at first logon, on a network Windows has not finished
+    # classifying - this fails with NotImplemented (MI RESULT 7), and without -ErrorAction
+    # the failure printed in red while the line below still announced a change that had not
+    # happened. Seen 20 September 2026 on a machine configured from the answer file's
+    # first-logon command, which runs earlier in the boot than VirtualBox's post-install
+    # command does.
+    $categorySet = $true
     if (-not $DryRun) {
-        Set-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -NetworkCategory Private
+        try {
+            Set-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -NetworkCategory Private -ErrorAction Stop
+        } catch {
+            $categorySet = $false
+        }
     }
-    Report-Changed "network profile" "$($connProfile.NetworkCategory) -> Private"
+    if ($categorySet) {
+        Report-Changed "network profile" "$($connProfile.NetworkCategory) -> Private"
+    } else {
+        Write-Host ("  note     {0,-26} {1}" -f "network profile", "could not be set - left $($connProfile.NetworkCategory)") -ForegroundColor Yellow
+        Write-Host ("                                      harmless: every rule this script adds is -Profile Any") -ForegroundColor DarkGray
+    }
 } elseif ($connProfile) {
     Report-Ok "network profile" "already Private"
 } else {
