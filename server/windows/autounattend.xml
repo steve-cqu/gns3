@@ -14,7 +14,10 @@
 
     WHAT IT SETS UP
       - wipes disk 0 and lays out a standard UEFI disk (EFI, MSR, Windows)
-      - installs Windows 11 Pro. Pro rather than Home because Home has no Remote Desktop
+      - installs Windows 11 Education, which is what the lab standardises on: it has the
+        Remote Desktop server Home lacks, plus the security features Pro lacks (AppLocker,
+        Application Control, Credential Guard, the full BitLocker policy set). Changed from
+        Pro on 20 September 2026 to match what New-WindowsHost.ps1 installs on the PC
       - skips the product key prompt. Unactivated Windows 11 runs indefinitely for lab work
       - creates the local account gns3/gns3 and logs it in automatically
       - names the machine WinHost
@@ -140,7 +143,7 @@
                         -->
                         <MetaData wcm:action="add">
                             <Key>/IMAGE/NAME</Key>
-                            <Value>Windows 11 Pro</Value>
+                            <Value>Windows 11 Education</Value>
                         </MetaData>
                     </InstallFrom>
                     <InstallTo>

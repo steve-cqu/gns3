@@ -14,7 +14,10 @@
 
     WHAT IT SETS UP
       - wipes disk 0 and lays out a standard UEFI disk (EFI, MSR, Windows)
-      - installs Windows 11 Pro. Pro rather than Home because Home has no Remote Desktop
+      - installs Windows 11 Education, which is what the lab standardises on: it has the
+        Remote Desktop server Home lacks, plus the security features Pro lacks (AppLocker,
+        Application Control, Credential Guard, the full BitLocker policy set). Changed from
+        Pro on 20 September 2026 to match what New-WindowsHost.ps1 installs on the PC
       - skips the product key prompt. Unactivated Windows 11 runs indefinitely for lab work
       - creates the local account gns3/gns3 and logs it in automatically
       - names the machine WinHost
@@ -137,10 +140,21 @@
                             Setup stops here asking which edition to install, that is what
                             went wrong: run dism /Get-WimInfo against the mounted ISO's
                             sources/install.wim and copy a name out of its output.
+
+                            UNVERIFIED ON ARM64. Nobody has yet read the image list of an
+                            ARM64 Windows 11 ISO, so it is assumed rather than known that
+                            one is called exactly "Windows 11 Education". First job on a
+                            Mac, before anything else here is trusted: list the images with
+                            "VBoxManage unattended detect" against the ARM64 ISO, or with
+                            dism /Get-WimInfo against its sources/install.wim.
+
+                            If there is no Education image, the lab standardises on Pro
+                            instead, and both answer files and the Edition default in
+                            New-WindowsHost.ps1 change together.
                         -->
                         <MetaData wcm:action="add">
                             <Key>/IMAGE/NAME</Key>
-                            <Value>Windows 11 Pro</Value>
+                            <Value>Windows 11 Education</Value>
                         </MetaData>
                     </InstallFrom>
                     <InstallTo>

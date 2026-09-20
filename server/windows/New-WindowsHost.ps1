@@ -73,16 +73,25 @@
 .PARAMETER Locale
     Installation locale. Defaults to en_AU.
 
-.PARAMETER ImageIndex
-    Which Windows edition to install from the ISO. A retail "consumer editions" ISO holds
-    a dozen, and index 1 - the default, here and in Windows Setup - is Home. Home has no
-    Remote Desktop server, so if you want RDP, pick an Education or Pro index instead.
+.PARAMETER Edition
+    Which Windows edition to install, by name. Defaults to Windows 11 Education, which is
+    what the lab standardises on: it has the Remote Desktop server that Home lacks, and the
+    Enterprise-grade security features (AppLocker, Application Control, Credential Guard,
+    the full BitLocker policy set) that Pro does not have. It installs with no product key
+    like any other edition.
 
-    The indexes differ per ISO. Ask yours which it has, before installing:
+    A retail "consumer editions" ISO holds about a dozen images, and Windows Setup takes
+    the first - Home - unless told otherwise. This script asks the ISO what it contains
+    (`VBoxManage unattended detect`) and converts the name into the index Setup wants, so
+    nothing here depends on a number that differs between ISOs. If the name is not on your
+    ISO, the script lists what is and stops.
+
+.PARAMETER ImageIndex
+    The image index to install, when you would rather name a number than an edition.
+    Overrides -Edition and skips the lookup. Index 1 is Home on a retail ISO. List them
+    with:
 
         VBoxManage unattended detect --iso=<path to the .iso>
-
-    On the 25H2 consumer ISO of September 2026, Education is 4 and Pro is 6.
 
 .PARAMETER ProductKey
     Product key passed to Windows Setup. Leave it off and Setup asks for one - VirtualBox
@@ -133,7 +142,8 @@ param(
     [string] $ComputerName = 'WinHost',
     [string] $LabIPAddress = '10.10.1.20',
     [string] $Locale       = 'en_AU',
-    [int]    $ImageIndex   = 1,
+    [string] $Edition      = 'Windows 11 Education',
+    [int]    $ImageIndex   = 0,
     [string] $ProductKey   = '',
     [switch] $SkipConfigure,
     [switch] $NoStart,
@@ -227,6 +237,48 @@ function Invoke-VBox {
     return ($out -join "`n")
 }
 
+# Turn an edition name into the image index Windows Setup wants.
+#
+# VBoxManage only accepts --image-index, but indexes are a property of the ISO, not of
+# Windows: 4 is Education on the September 2026 consumer ISO and could be anything on the
+# next one. So ask the ISO. `VBoxManage unattended detect` prints one line per image:
+#
+#     Image #4     = Windows 11 Education (10.0.26200.6584 / x64 / en-US)
+#
+# Matched exactly, because "Windows 11 Education" is a prefix of "Windows 11 Education N",
+# which is a different edition with no Media Player and no reason to be installed by
+# accident.
+function Resolve-EditionIndex {
+    param([string] $IsoFile, [string] $EditionName)
+
+    $out = & $vbox unattended detect "--iso=$IsoFile" 2>&1
+    $images = @()
+    foreach ($line in $out) {
+        $m = [regex]::Match([string]$line, '^\s*Image #(\d+)\s*=\s*(.+?)\s*\(')
+        if ($m.Success) {
+            $images += [pscustomobject]@{
+                Index = [int]$m.Groups[1].Value
+                Name  = $m.Groups[2].Value.Trim()
+            }
+        }
+    }
+
+    # A single-image ISO lists nothing to choose between. Index 1 is then the only answer.
+    if ($images.Count -eq 0) { return 1 }
+
+    foreach ($img in $images) {
+        if ($img.Name -eq $EditionName) { return $img.Index }
+    }
+
+    Write-Host "This ISO does not contain '$EditionName'." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "What it does contain:"
+    foreach ($img in $images) { Write-Host ("    {0,2}  {1}" -f $img.Index, $img.Name) }
+    Write-Host ""
+    Write-Host "Pass one of those names to -Edition, or its number to -ImageIndex."
+    exit 1
+}
+
 function Test-VMExists {
     param([string] $VMName)
     $list = & $vbox list vms 2>&1
@@ -310,6 +362,13 @@ if (Test-VMExists $Name) {
     Invoke-VBox @('unregistervm', $Name, '--delete')
     Report-Step "existing VM" "deleted"
 }
+# Resolve the edition before anything is created, so an ISO without it costs nothing.
+$editionLabel = "image index $ImageIndex  (chosen by number, -ImageIndex)"
+if ($ImageIndex -le 0) {
+    $ImageIndex   = Resolve-EditionIndex $IsoPath $Edition
+    $editionLabel = "$Edition  (image index $ImageIndex on this ISO)"
+}
+
 Write-Host ""
 Write-Host "Creating the GNS3 Windows Host VM" -ForegroundColor Cyan
 if ($DryRun) { Write-Host "DRY RUN - no VM will be created." -ForegroundColor Yellow }
@@ -319,7 +378,7 @@ Write-Host "  iso         : $IsoPath"
 Write-Host "  lab network : Internal Network '$LabNetwork'  (must match the GNS3 VM's Adapter 3)"
 Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, EFI + TPM 2.0"
 Write-Host "  account     : $User / $Password, computer name $ComputerName"
-Write-Host "  edition     : image index $ImageIndex  (1 is Home on a retail ISO - see -? for how to list them)"
+Write-Host "  edition     : $editionLabel"
 if ($ProductKey) {
     Write-Host "  product key : supplied - Setup will not ask"
 } else {

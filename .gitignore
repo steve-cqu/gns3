@@ -3,3 +3,7 @@ __pycache__/
 
 # Claude Code session config (may contain machine-local paths and settings)
 .claude/
+
+# Built on demand by server/windows/make-unattend-iso.sh. It embeds a copy of
+# configure-windows-host.ps1, so a tracked one goes stale silently.
+server/windows/cqu-unattend.iso

@@ -21,7 +21,7 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 | `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
-| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-ImageIndex` picks the Windows edition and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
+| `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-Edition` picks the Windows edition by name (`-ImageIndex` by number) and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
 | `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. |
 | `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. |
 | `make-unattend-iso.sh` | staff, on a Mac or Linux | Builds `cqu-unattend.iso` from one of those answer files plus `configure-windows-host.ps1`. Students never run this — they get the ISO, or install by hand. |
@@ -374,14 +374,25 @@ product key*, 25H2's Setup showed no edition list at all and installed image 1;
 `Get-WindowsEdition -Online` reports `Core`. That is what August 2026's run produced, and it
 was read at the time as a licensing limit. It is not — it is the default image.
 
-**`New-WindowsHost.ps1 -ImageIndex 4` installs Education, with no key.** Verified 20
-September 2026: `Get-WindowsEdition -Online` → `Education`, unactivated, on a consumer ISO.
-The indexes differ per ISO, so run `unattended detect` rather than trusting the number.
+**The lab standardises on Windows 11 Education, and installs it with no key.** Verified 20
+September 2026: `Get-WindowsEdition -Online` → `Education`, unactivated, from a retail consumer
+ISO. Education rather than Pro because it carries the Enterprise-grade security features —
+AppLocker, Application Control, Credential Guard, the full BitLocker policy set — that Pro
+does not, and an edition cannot be changed later without a key. Both have Remote Desktop.
 
-The edition matters in exactly one way: **Home has no Remote Desktop server**, so nothing can
-RDP into a Home machine. Education and Pro have one, and `configure-windows-host.ps1` enables
-it. `configure-windows-host.ps1` detects Home and reports Remote Desktop as unavailable
-rather than opening port 3389 in front of a service that is not there.
+**Say the name, never the number.** `New-WindowsHost.ps1` takes `-Edition 'Windows 11
+Education'` (its default), runs `unattended detect` against your ISO, and converts the name
+into the index Setup wants; if the name is not on the ISO it prints what is and stops. The
+answer files do the same thing directly, with `<Key>/IMAGE/NAME</Key>`. Nothing in either
+path depends on an index number, because indexes belong to the ISO rather than to Windows.
+`-ImageIndex` still overrides, for an ISO that names its images oddly.
+
+Matching is exact, deliberately: `Windows 11 Education` and `Windows 11 Education N` differ,
+and the N editions ship without Media Player.
+
+Home is what a **manual** install gives you, and its one consequence is that it has no Remote
+Desktop **server**. `configure-windows-host.ps1` detects Home and reports Remote Desktop as
+unavailable rather than opening port 3389 in front of a service that is not there.
 
 Entering an Azure Education key after installing — Settings → System → Activation → Change
 product key — still works, and is the way to change the edition of a machine already built.
