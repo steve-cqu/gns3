@@ -533,6 +533,38 @@ try {
     exit 1
 }
 
+# Read back the MAC VirtualBox assigned to adapter 2, and hand THAT to the configure script
+# instead of an adapter name.
+#
+# This cost most of a day on 20 September 2026. The post-install command used to pass
+# -LabAdapter 'Ethernet 2', on the reasonable-looking assumption that VirtualBox's NIC 2 is
+# the adapter Windows calls "Ethernet 2". On a real machine it was not: Windows called the
+# lab adapter "Ethernet" and the NAT adapter "Ethernet 2", complete with an
+# "Intel(R) PRO/1000 MT Desktop Adapter #2" description that made the wrong one look right.
+# configure-windows-host.ps1 then gave the NAT adapter a static lab address, which removed
+# the machine's default route; Windows Update failed minutes later with 0x80240438; and the
+# machine had neither internet nor a presence on the lab network, while every step of every
+# script reported success.
+#
+# A Windows adapter name records the order Windows happened to enumerate the hardware in.
+# The MAC is the only identifier this side and the guest side both agree on.
+$script:LabMac = ''
+if (-not $DryRun) {
+    try {
+        $nicInfo = Invoke-VBox @('showvminfo', $Name, '--machinereadable') -Quiet
+        $macLine = ($nicInfo -split "`n" | Select-String '^macaddress2=')
+        if ($macLine) { $script:LabMac = $macLine.ToString() -replace '.*="?([^"]*)"?$', '$1' }
+    } catch { }
+}
+if ($script:LabMac) {
+    Report-Step "adapter 2 MAC" "$($script:LabMac) - passed to the configure script"
+} elseif (-not $DryRun) {
+    # Not fatal. Without a MAC the configure script falls back to its own rule - the
+    # adapter with no default gateway - which is correct on this build and was always the
+    # better guess than a name.
+    Report-Ok "adapter 2 MAC" "could not be read - the configure script will detect the adapter itself"
+}
+
 # --------------------------------------------------------------------------- #
 # 4. The unattended install
 #
@@ -564,9 +596,10 @@ if (-not $SkipConfigure) {
     # tells students to run by hand, so a machine built here and a machine built by hand
     # end up identical. This is the least-tested part of this script: if it does not run,
     # nothing is broken - run configure-windows-host.ps1 yourself, per Step 5 of the guide.
-    $ipArg  = if ($LabIPAddress) { " -IPAddress $LabIPAddress" } else { "" }
+    $ipArg  = if ($LabIPAddress)    { " -IPAddress $LabIPAddress" }        else { "" }
+    $nicArg = if ($script:LabMac)    { " -LabAdapterMac $script:LabMac" }   else { "" }
     $inner  = "Invoke-WebRequest -Uri $ConfigureUrl -OutFile C:\Windows\Temp\configure-windows-host.ps1; " +
-              "& C:\Windows\Temp\configure-windows-host.ps1 -LabAdapter 'Ethernet 2'$ipArg -ComputerName $ComputerName"
+              "& C:\Windows\Temp\configure-windows-host.ps1$nicArg$ipArg -ComputerName $ComputerName"
     $unattendArgs += "--post-install-command=powershell.exe -ExecutionPolicy Bypass -Command `"$inner`""
 }
 

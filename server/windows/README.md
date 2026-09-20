@@ -18,7 +18,7 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 
 | File | Runs on | What |
 |---|---|---|
-| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Logs to `C:\Windows\Temp\configure-windows-host.log`. Allows inbound ping, installs and starts the OpenSSH server, enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
+| `configure-windows-host.ps1` | inside the Windows VM, as Administrator | **Makes the machine reachable.** Logs to `C:\Windows\Temp\configure-windows-host.log`. Allows inbound ping, installs and starts the OpenSSH server (Windows Update, or the pinned Win32-OpenSSH MSI as a fallback), enables Remote Desktop where the edition supports it, marks the lab adapter Private, optionally sets a static address, a lab route and a hostname, and stops the machine sleeping. Quick, and every student needs it. |
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
 | `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-Edition` picks the Windows edition by name (`-ImageIndex` by number) and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
@@ -45,11 +45,6 @@ Both are idempotent, take `-DryRun`, and are safe to re-run after a part-finishe
 | `-Iperf` | iperf3 | Pairs with the Linux nodes for throughput exercises |
 | `-Telnet` | The telnet client | **After a restart** |
 | `-Sysmon` | Sysmon with `sysmon-lab.xml` | Installs a driver, so it is deliberately **not** in `-All` |
-
-The OpenSSH capability in `configure-windows-host.ps1` is fetched from Windows Update the same
-way, and on a machine minutes old it **failed outright once** (20 September 2026) while working on
-three other builds — Windows Update is busy with its own first-boot work at exactly that moment.
-That step now retries three times, thirty seconds apart, and reports the HResult if all three fail.
 | `-All` | Everything except `-Sysmon` | |
 
 Three things learned the hard way, all handled by the script but worth knowing if you edit it:
@@ -223,11 +218,114 @@ Two things bite here, both found on the first real run:
 Leave `-IPAddress` off if the topology runs a DHCP server. To set an address by hand:
 
 ```powershell
-.\configure-windows-host.ps1 -LabAdapter "Ethernet 2" -IPAddress 192.168.10.50 -ComputerName WinHost
+.\configure-windows-host.ps1 -LabAdapterMac 08-00-27-3B-70-EA -IPAddress 192.168.10.50 -ComputerName WinHost
 ```
 
 The script picks the lab adapter automatically as the one with no default gateway, and
-prints every adapter's name if it cannot decide.
+prints every adapter's name and MAC if it cannot decide. That default is right on the
+standard two-adapter build, so most runs need neither switch.
+
+### Name the adapter by MAC, not by name
+
+**A Windows adapter name is not the hypervisor's adapter number**, and on 20 September 2026
+that cost most of a day. A VM built by `New-WindowsHost.ps1` — NIC 1 NAT, NIC 2 on the lab
+network — presented them to Windows as:
+
+| Windows name | MAC | Actually attached to |
+|---|---|---|
+| `Ethernet` | `08-00-27-3B-70-EA` | the **lab** network |
+| `Ethernet 2` (`…Desktop Adapter #2`) | `08-00-27-B0-BF-0F` | **NAT** |
+
+The installer passed `-LabAdapter 'Ethernet 2'`, this script gave that adapter a static lab
+address — which removes its DHCP lease and the default route — and the machine lost its
+internet. The OpenSSH install then failed against Windows Update several minutes later with
+`0x80240438`, pointing nowhere near the cause, and every individual step reported success.
+Neither the `2` in the name nor the `#2` in the device description means NIC 2; both record
+the order Windows happened to enumerate the hardware in.
+
+So `New-WindowsHost.ps1` now reads adapter 2's MAC back from `VBoxManage` and passes
+`-LabAdapterMac`. The MAC is the only identifier the hypervisor and the guest both agree on.
+`-LabAdapter` still works for a person reading names off the screen in front of them.
+
+**And the script now refuses the mistake outright.** If the adapter it is about to configure
+owns the machine's default route, and another adapter is up, it says so — and with
+`-IPAddress` it stops rather than cutting the machine off, naming the adapter you probably
+meant:
+
+```
+  WARNING  'Ethernet 2' owns this machine's DEFAULT ROUTE.
+           That makes it the adapter with the internet on it, and a lab
+           network has no gateway - so this is probably the wrong adapter.
+
+           The lab adapter is almost certainly 'Ethernet'
+           (08-00-27-3B-70-EA), which is up and has no default route.
+
+           REFUSING to continue. ...
+           Re-run with:  -LabAdapterMac 08-00-27-3B-70-EA
+```
+
+## OpenSSH: two sources, and why there are two
+
+`ssh` is the access path every activity is built on, so the machine is not usable without it.
+`configure-windows-host.ps1` will get the OpenSSH server from either of two places:
+
+1. **The Windows capability** (Feature on Demand), fetched from Windows Update. Tried first:
+   it is the right build for this OS, there is no version to keep current, and it is what
+   Microsoft documents.
+2. **The signed Win32-OpenSSH MSI from GitHub**, pinned in the script by release tag and
+   SHA-256. Used when Windows Update cannot serve the capability.
+
+The fallback is not belt-and-braces. On 20 September 2026 an otherwise clean unattended build
+came up with no `sshd`: three capability attempts, thirty seconds apart, all failed with
+`0x80240438` — `WU_E_PT_ENDPOINT_UNKNOWN`, meaning the update client could not work out which
+service endpoint to talk to. **The machine was not offline.** Windows had fetched
+`configure-windows-host.ps1` itself over HTTPS from `raw.githubusercontent.com` seconds
+earlier. The fault was Windows Update specifically, on a machine whose answer file skips OOBE
+— and a plain HTTPS GET from GitHub was demonstrably working at that moment.
+
+Some Windows Update failures are worth retrying and some are not. The script knows the second
+kind (`0x80240438`, `0x8024402C`, `0x8024500C`, `0x800F0954`, `0x800F0950`, `0x80070422`), and
+on those it stops retrying immediately and fetches the MSI instead.
+
+**The MSI is verified before it runs.** Downloading an installer at first logon and running it
+as SYSTEM is only defensible if you check what you got, so the script compares a SHA-256
+against the pin and refuses to install on a mismatch, deleting the file. The Authenticode
+signature is checked as a second opinion and is allowed to disagree — a machine that cannot
+reach a CRL reports something other than `Valid` for a perfectly good file, and that must not
+cost a student a working lab host.
+
+```powershell
+# force the MSI, for a network where Windows Update is known not to work
+.\configure-windows-host.ps1 -PreferMsi
+
+# take it from a local mirror instead of GitHub
+.\configure-windows-host.ps1 -OpenSshMsiUrl https://mirror.example.edu/OpenSSH-Win64-v10.0.0.0.msi `
+                             -OpenSshMsiSha256 DDEC9C53...B96B7D9
+```
+
+Without `-OpenSshMsiSha256`, a custom URL must carry a valid Microsoft Authenticode signature
+or nothing is installed. There is no pin to fall back on in that case, so the signature becomes
+the gate rather than a second opinion.
+
+**The two sources install to different places**, which is the first thing that confuses anyone
+debugging the machine later:
+
+| | Capability | MSI |
+|---|---|---|
+| Binaries | `C:\Windows\System32\OpenSSH\` | `C:\Program Files\OpenSSH\` |
+| Config, host keys, `administrators_authorized_keys` | `C:\ProgramData\ssh\` | `C:\ProgramData\ssh\` |
+| Service name | `sshd` | `sshd` |
+
+Because the config directory is the same either way, the key setup in
+`tools/tests/windows-host-check.sh` and everything in *Reaching the machine over ssh* below is
+unaffected. The script says which source it used, and re-running it on a machine that already
+has `sshd` from either source leaves it alone.
+
+**To move the pin to a newer release**, take the tag, the asset names and the digests from
+`https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases/latest` and edit
+`$OpenSshRelease` and `$OpenSshAssets` in `configure-windows-host.ps1`. Every release that
+project has ever cut is named "Beta" or "Preview", and none is flagged as a prerelease on
+GitHub — `latest` is simply the newest one, and the naming is not a warning about stability.
 
 ## Did it work? Three ways to tell
 
@@ -270,8 +368,11 @@ The internal network name (`cqulab` above) must match the GNS3 VM's third adapte
 no warning. Then set the lab address on that second adapter, not the first:
 
 ```powershell
-.\configure-windows-host.ps1 -LabAdapter "Ethernet 2" -IPAddress 10.10.1.20
+.\configure-windows-host.ps1 -LabAdapterMac <that adapter's MAC> -IPAddress 10.10.1.20
 ```
+
+Use the MAC, not the name — `VBoxManage showvminfo "<windows-vm>" | grep -i 'NIC 2'` prints
+the one to use. *Name the adapter by MAC, not by name* above says why that matters.
 
 **2. Is the GNS3 VM's lab adapter in promiscuous mode?** It must be. A Cloud node forwards
 frames carrying the *GNS3 node's* MAC address, not the VM adapter's own, and VirtualBox
@@ -472,3 +573,10 @@ server does not yet, so the client says so and connects anyway. Nothing is broke
 needs changing. Say this in any activity that ssh's into Windows — otherwise it reads as a
 security failure the student has caused, and in a security unit it is worth two sentences of
 explanation rather than none.
+
+**This may differ between the two OpenSSH sources, and it has not been checked yet.** The
+capability on 25H2 is an OpenSSH 9.x build; the pinned MSI is OpenSSH 10, where upstream enables
+`mlkem768x25519-sha256` by default — so a host built from the MSI may well negotiate a
+post-quantum key exchange and print no warning at all. Confirm it on the next build with
+`ssh -v gns3@10.10.1.20` and read the `kex:` line, because an activity that tells every student
+to expect a warning they do not see is worse than one that explains both cases.

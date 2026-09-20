@@ -12,7 +12,8 @@
     What it does:
       - allows inbound ping (ICMPv4 and ICMPv6 echo). Windows blocks this by default, and
         it is the first thing a student tries
-      - installs and starts the OpenSSH server, so a GNS3 node can `ssh` in
+      - installs and starts the OpenSSH server, so a GNS3 node can `ssh` in - from Windows
+        Update, or from the pinned Win32-OpenSSH MSI when Windows Update cannot serve it
       - enables Remote Desktop, so you can reach the machine from your own desktop
       - marks the lab adapter as a Private network, not Public
       - optionally gives the lab adapter a static address, and renames the machine
@@ -29,6 +30,16 @@
     Name of the network adapter connected to the lab network, e.g. "Ethernet 2". If you
     leave this out, the script picks the adapter that has no default gateway - which on a
     two-adapter VM (one NAT for the internet, one for the lab) is the lab one.
+
+    Prefer -LabAdapterMac. A Windows adapter name is an accident of the order Windows
+    happened to enumerate the hardware, and it is NOT the hypervisor's adapter number:
+    on 20 September 2026 a VM whose VirtualBox NIC 2 was the lab adapter presented it to
+    Windows as "Ethernet", while "Ethernet 2" was the NAT one.
+
+.PARAMETER LabAdapterMac
+    MAC address of the lab adapter, in any punctuation: 08-00-27-3B-70-EA, 08:00:27:3b:70:ea
+    and 0800273B70EA all work. This is the only identifier the hypervisor and Windows both
+    agree on, so it is what an installer should pass. Overrides -LabAdapter.
 
 .PARAMETER IPAddress
     Static address for the lab adapter, e.g. 192.168.10.50. Leave it out to keep whatever
@@ -50,6 +61,21 @@
 .PARAMETER ComputerName
     Rename the machine, e.g. WinHost. Takes effect after a restart.
 
+.PARAMETER PreferMsi
+    Install OpenSSH from the pinned Win32-OpenSSH MSI without asking Windows Update first.
+    For a network where Windows Update is known not to work - a filtered campus LAN, or a
+    freshly imaged machine whose update client has no endpoint. Without it the script tries
+    Windows Update first and falls back to the MSI by itself.
+
+.PARAMETER OpenSshMsiUrl
+    Fetch the OpenSSH MSI from here instead of GitHub - a local mirror, or a copy on the
+    lab network. A local path works too.
+
+.PARAMETER OpenSshMsiSha256
+    Expected SHA-256 of -OpenSshMsiUrl. Without it the installer's Authenticode signature
+    must be a valid Microsoft one instead, or nothing is installed. The built-in GitHub
+    URLs carry their own pinned hashes and need neither of these.
+
 .PARAMETER DryRun
     Report what would change and change nothing.
 
@@ -66,11 +92,15 @@
 [CmdletBinding()]
 param(
     [string] $LabAdapter,
+    [string] $LabAdapterMac,
     [string] $IPAddress,
     [int]    $PrefixLength = 24,
     [string] $LabGateway,
     [string] $LabNetwork = '10.10.0.0/16',
     [string] $ComputerName,
+    [switch] $PreferMsi,
+    [string] $OpenSshMsiUrl,
+    [string] $OpenSshMsiSha256,
     [switch] $DryRun
 )
 
@@ -119,6 +149,36 @@ try {
     $transcriptOn = $true
 } catch { }
 
+# One line per run, in a file with an obvious name, so "did this machine configure itself?"
+# is answerable without reading a transcript - and answerable over ssh, or by a student
+# reading it out. Appended, so a re-run shows the history rather than hiding it.
+$StatusPath = Join-Path $env:WINDIR 'Temp\configure-windows-host.status'
+
+function Write-RunStatus {
+    param([string] $Verdict)
+    try {
+        ("{0}  {1}  changed={2} already-correct={3} failed={4}" -f `
+            $Verdict.PadRight(7), (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),
+            $script:Changed, $script:Unchanged, $script:Failed) |
+            Out-File -FilePath $StatusPath -Encoding ascii -Append -ErrorAction Stop
+    } catch { }
+}
+
+# Every early exit goes through here. The status file exists so that a run nobody watched
+# can be read afterwards, and the runs most worth reading are the ones that gave up early -
+# so an `exit 1` that skips writing it defeats the whole point.
+function Stop-Now {
+    param([string] $Verdict = 'FAILED')
+    Write-RunStatus $Verdict
+    if ($transcriptOn) {
+        Write-Host ""
+        Write-Host "  log         : $TranscriptPath"
+        Write-Host "  status      : $StatusPath"
+        try { Stop-Transcript | Out-Null } catch { }
+    }
+    exit 1
+}
+
 Write-Host ""
 Write-Host "Configuring this machine as the GNS3 Windows Host" -ForegroundColor Cyan
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed." -ForegroundColor Yellow }
@@ -127,20 +187,54 @@ Write-Host ""
 # --------------------------------------------------------------------------- #
 # 1. Find the lab adapter
 #
-# On the standard build the VM has two adapters: NAT for the internet, and the lab
-# network. Only the NAT one has a default gateway, so the other is the lab adapter.
+# Three ways, in order of how much they can be trusted:
+#
+#   -LabAdapterMac   a MAC address. The only identifier the hypervisor and Windows both
+#                    agree on, so this is what an installer should pass.
+#   -LabAdapter      a Windows adapter name. Fine when a person is reading the names off
+#                    the screen in front of them; a guess when a script does it.
+#   neither          the adapter with no default gateway. On the standard build the VM has
+#                    two adapters - NAT for the internet, and the lab network - and only
+#                    the NAT one has a default gateway, so the other is the lab adapter.
+#
+# Why the MAC matters, measured on 20 September 2026: a VM was built whose lab adapter
+# Windows called "Ethernet", while "Ethernet 2" - the name the installer passed - was the
+# NAT adapter. A Windows adapter name records the order Windows happened to enumerate the
+# hardware in. It is not the hypervisor's adapter number, and the "#2" suffix in the device
+# description is not either.
 # --------------------------------------------------------------------------- #
 Write-Host "Network adapter"
 
 $adapter = $null
-if ($LabAdapter) {
+if ($LabAdapterMac) {
+    # Accept any punctuation - hypervisors print these every which way. VBoxManage's
+    # machine-readable output has no separators at all, showvminfo uses colons, and Windows
+    # uses hyphens, so comparing the hex digits alone is the only thing that always works.
+    $wantMac = ($LabAdapterMac -replace '[^0-9A-Fa-f]', '').ToUpper()
+    if ($wantMac.Length -ne 12) {
+        Report-Failed "lab adapter" "'$LabAdapterMac' is not a MAC address (needs 12 hex digits)"
+        Stop-Now
+    }
+    $adapter = Get-NetAdapter |
+               Where-Object { ($_.MacAddress -replace '[^0-9A-Fa-f]', '').ToUpper() -eq $wantMac } |
+               Select-Object -First 1
+    if (-not $adapter) {
+        Report-Failed "lab adapter" "no adapter on this machine has MAC $LabAdapterMac"
+        Write-Host ""
+        Write-Host "Adapters on this machine:"
+        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, MacAddress -AutoSize |
+            Out-String | Write-Host
+        Stop-Now
+    }
+} elseif ($LabAdapter) {
     $adapter = Get-NetAdapter -Name $LabAdapter -ErrorAction SilentlyContinue
     if (-not $adapter) {
         Report-Failed "lab adapter" "no adapter named '$LabAdapter'"
         Write-Host ""
         Write-Host "Adapters on this machine:"
-        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status -AutoSize | Out-String | Write-Host
-        exit 1
+        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, MacAddress -AutoSize |
+            Out-String | Write-Host
+        Stop-Now
     }
 } else {
     $up = @(Get-NetAdapter | Where-Object Status -eq 'Up')
@@ -171,12 +265,75 @@ if ($LabAdapter) {
     } else {
         Report-Failed "lab adapter" "cannot tell which adapter is the lab one"
         Write-Host ""
-        Write-Host "Re-run with -LabAdapter and one of these names:"
-        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status -AutoSize | Out-String | Write-Host
-        exit 1
+        Write-Host "Re-run with -LabAdapterMac and one of these:"
+        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, MacAddress -AutoSize |
+            Out-String | Write-Host
+        Stop-Now
     }
 }
-Report-Ok "lab adapter" "$($adapter.Name)  ($($adapter.InterfaceDescription))"
+
+# The MAC is in this line because it is the identifier that ties this adapter to a NIC in
+# the hypervisor, and a log that records only the name cannot be checked afterwards.
+Report-Ok "lab adapter" "$($adapter.Name)  ($($adapter.InterfaceDescription))  $($adapter.MacAddress)"
+
+# --------------------------------------------------------------------------- #
+# The guard this script did not have on 20 September 2026.
+#
+# A lab network has no gateway - that is what makes it a lab network. So an adapter holding
+# the default route is never the lab adapter when there is another one to choose, and
+# giving it a static address is actively destructive: the block below removes the DHCP
+# lease, disables DHCP and sets an address with no gateway, which takes the machine's
+# internet away.
+#
+# That is exactly what happened. An installer passed the adapter NAME of what it believed
+# was the lab adapter; on that machine the name belonged to the NAT adapter; this script
+# dutifully cut the machine off from the internet, and the OpenSSH install below then failed
+# against Windows Update several minutes later with an error that pointed nowhere near the
+# cause. Every individual step reported success. The whole fault is visible in one line -
+# "the adapter I was told to configure owns the default route" - and nothing was looking.
+# --------------------------------------------------------------------------- #
+$defaultRouteIfIndexes = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+                           Select-Object -ExpandProperty ifIndex -Unique)
+$otherUp = @(Get-NetAdapter |
+             Where-Object { $_.Status -eq 'Up' -and $_.ifIndex -ne $adapter.ifIndex })
+
+if ($defaultRouteIfIndexes -contains $adapter.ifIndex -and $otherUp.Count -gt 0) {
+    $better = $otherUp | Where-Object { $defaultRouteIfIndexes -notcontains $_.ifIndex } |
+              Select-Object -First 1
+
+    Write-Host ""
+    Write-Host "  WARNING  '$($adapter.Name)' owns this machine's DEFAULT ROUTE."            -ForegroundColor Yellow
+    Write-Host "           That makes it the adapter with the internet on it, and a lab"     -ForegroundColor Yellow
+    Write-Host "           network has no gateway - so this is probably the wrong adapter."  -ForegroundColor Yellow
+    if ($better) {
+        Write-Host ""
+        Write-Host "           The lab adapter is almost certainly '$($better.Name)'"        -ForegroundColor Yellow
+        Write-Host "           ($($better.MacAddress)), which is up and has no default route." -ForegroundColor Yellow
+    }
+
+    if ($IPAddress) {
+        Write-Host ""
+        Write-Host "           REFUSING to continue. Setting a static address here would"    -ForegroundColor Red
+        Write-Host "           remove the DHCP lease and the default route, and this machine" -ForegroundColor Red
+        Write-Host "           would lose the internet - which the OpenSSH install needs."   -ForegroundColor Red
+        Write-Host ""
+        if ($better) {
+            Write-Host "           Re-run with:  -LabAdapterMac $($better.MacAddress)"
+        } else {
+            Write-Host "           Re-run naming the lab adapter with -LabAdapterMac."
+        }
+        Write-Host ""
+        Write-Host "Adapters on this machine:"
+        Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, MacAddress -AutoSize |
+            Out-String | Write-Host
+        Report-Failed "lab adapter" "'$($adapter.Name)' owns the default route - refusing to give it a static lab address"
+        Stop-Now
+    }
+
+    Write-Host ""
+    Write-Host "           Continuing: no -IPAddress was given, so addressing is untouched." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 # Private, not Public. Windows files any network it cannot identify as Public, and an isolated
 # lab network - no gateway, no DNS - is never identifiable.
@@ -407,62 +564,220 @@ if ($rdpRules.Count -gt 0) {
 # 4. OpenSSH server, so a GNS3 node can log in
 #
 # This is what makes the machine usable as a lab node rather than only as a desktop: a
-# Linux node in the topology can `ssh` in, and staff test scripts can drive it. Installing
-# the capability needs internet access on the NAT adapter (Windows fetches it from Windows
-# Update); if that fails the rest of the script still applies.
+# Linux node in the topology can `ssh` in, and staff test scripts can drive it.
+#
+# There are two ways to get it, and this script will use either:
+#
+#   1. The Windows capability (Feature on Demand), fetched from Windows Update. The right
+#      build for this OS, nothing to keep current, and what Microsoft documents.
+#   2. The signed Win32-OpenSSH MSI from GitHub, pinned by version and SHA-256 below.
+#
+# Why a fallback exists at all: on 20 September 2026 an otherwise clean unattended build
+# came up with no ssh. Three capability attempts thirty seconds apart all failed with
+# 0x80240438 - WU_E_PT_ENDPOINT_UNKNOWN, the update client could not work out which service
+# endpoint to talk to. The machine was NOT offline: the post-install command had fetched
+# this very script over HTTPS from raw.githubusercontent.com seconds earlier. So the fault
+# was Windows Update specifically, on a machine whose OOBE the answer file skips - and the
+# path that demonstrably worked was a plain HTTPS GET from GitHub.
+#
+# The order is deliberate. The capability goes first, because it worked on three of the
+# four builds that day and needs no pinned version. A code in $WuDeadEnds skips the
+# remaining retries: those mean Windows Update cannot serve this at all, so another thirty
+# seconds only delays the fallback that will work. Use -PreferMsi to skip Windows Update
+# altogether on a network where it is known not to work.
 # --------------------------------------------------------------------------- #
+
+# Pinned on purpose: an unattended build must install the same OpenSSH every time, and a
+# hash that is actually checked is the only thing that makes "download an installer at
+# first logon" defensible. GitHub publishes these digests in its release metadata; both
+# were confirmed by downloading the files, 20 September 2026.
+#
+# To move to a newer release, take the tag, the asset names and the digests from
+#   https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases/latest
+# Every release this project has ever cut is named "Beta" or "Preview" and none is flagged
+# as a prerelease on GitHub, so "latest" is simply the newest one - the naming is not a
+# warning about stability.
+$OpenSshRelease = '10.0.0.0p2-Preview'
+$OpenSshAssets  = @{
+    'AMD64' = @{ Name   = 'OpenSSH-Win64-v10.0.0.0.msi'
+                 Sha256 = 'DDEC9C53864280759CF9F74791CEFD387100E3946AA849A1C138A4ED1B96B7D9' }
+    'ARM64' = @{ Name   = 'OpenSSH-ARM64-v10.0.0.0.msi'
+                 Sha256 = '7A17D0E22D004FB47CA4BFD8FEF926FA305DE4EBF70A6F3C7A29C39AABEF0023' }
+}
+
+# Windows Update failures that no amount of retrying will fix. Seeing one of these is the
+# signal to stop asking Windows Update and fetch the MSI instead.
+$WuDeadEnds = @{
+    '0x80240438' = 'the update client could not determine a service endpoint'
+    '0x8024402C' = 'the update client could not resolve or reach the service (DNS or proxy)'
+    '0x8024500C' = 'the update service refused the request'
+    '0x800F0954' = 'DISM could not reach Windows Update'
+    '0x800F0950' = 'the Feature on Demand source was unavailable'
+    '0x80070422' = 'the Windows Update service is disabled'
+}
+
+# Download, verify and install the pinned Win32-OpenSSH MSI. Throws on any failure, so the
+# caller can report Windows Update's error and this one together.
+#
+# $Sha256 may be empty, which only happens when someone passes their own -OpenSshMsiUrl.
+# In that case the Authenticode signature becomes the gate and a bad one is fatal: there is
+# no pin to fall back on, and silently running an unverified installer as SYSTEM is not
+# something to ship, least of all in a security unit's teaching appliance.
+function Install-OpenSshFromMsi {
+    param(
+        [Parameter(Mandatory)] [string] $Url,
+        [string] $Sha256
+    )
+
+    $msi    = Join-Path $env:WINDIR 'Temp\openssh-server.msi'
+    $msiLog = Join-Path $env:WINDIR 'Temp\openssh-msi.log'
+
+    Write-Host "  working  openssh MSI                fetching $Url" -ForegroundColor DarkGray
+
+    # Invoke-WebRequest's progress bar costs more wall-clock than the 6 MB download itself,
+    # and in an unattended window nobody is there to watch it.
+    $oldProgress = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+        Invoke-WebRequest -Uri $Url -OutFile $msi -UseBasicParsing -ErrorAction Stop
+    } finally {
+        $ProgressPreference = $oldProgress
+    }
+
+    $actual = (Get-FileHash -Path $msi -Algorithm SHA256).Hash
+    if ($Sha256 -and $actual -ne $Sha256) {
+        Remove-Item $msi -Force -ErrorAction SilentlyContinue
+        throw "SHA-256 mismatch - expected $Sha256, got $actual. Nothing was installed and the file was deleted."
+    }
+
+    # With a matching pin this is a second opinion rather than the gate, and it is allowed
+    # to fail: a machine that cannot fetch a CRL reports something other than Valid for a
+    # file that is perfectly good, and that must not cost the student a working lab host.
+    $sig = Get-AuthenticodeSignature -FilePath $msi
+    $signedByMicrosoft = $sig.Status -eq 'Valid' -and $sig.SignerCertificate.Subject -match 'Microsoft Corporation'
+    if ($signedByMicrosoft) {
+        Report-Applied "openssh MSI signature" "valid, Microsoft Corporation"
+    } elseif ($Sha256) {
+        Write-Host ("  note     {0,-26} {1}" -f "openssh MSI signature", "$($sig.Status) - continuing, the SHA-256 matched") -ForegroundColor Yellow
+    } else {
+        Remove-Item $msi -Force -ErrorAction SilentlyContinue
+        throw "no SHA-256 was given for this URL and the signature is $($sig.Status), not a valid Microsoft one. Nothing was installed."
+    }
+
+    # No ADDLOCAL: the default installs both client and server, and naming a feature this
+    # MSI does not have fails the entire install with a bare 1603.
+    $proc = Start-Process -FilePath 'msiexec.exe' -Wait -PassThru -ArgumentList @(
+        '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$msiLog`"")
+    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+        throw "msiexec exited $($proc.ExitCode) - the verbose log is $msiLog"
+    }
+    Remove-Item $msi -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host ""
 Write-Host "OpenSSH server"
 
 $sshInstalled = $false
-try {
-    $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' | Select-Object -First 1
-    if ($cap.State -eq 'Installed') {
-        Report-Ok "openssh package" "already installed"
-        $sshInstalled = $true
+$sshSource    = ''
+$capFailure   = ''
+
+# Is it already here? Either source counts. A machine that got the MSI has no capability
+# installed, and must not be handed one on top of it.
+$existingSvc = Get-Service sshd -ErrorAction SilentlyContinue
+$cap = $null
+try { $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' | Select-Object -First 1 } catch { }
+
+if ($existingSvc) {
+    Report-Ok "openssh package" "already installed (sshd service present)"
+    $sshInstalled = $true
+} elseif ($cap -and $cap.State -eq 'Installed') {
+    Report-Ok "openssh package" "already installed (Windows capability)"
+    $sshInstalled = $true
+} elseif ($DryRun) {
+    Report-Changed "openssh package" "would install - Windows capability, or the pinned MSI if that fails"
+    $sshInstalled = $true
+} else {
+    if ($PreferMsi) {
+        $capFailure = 'skipped by -PreferMsi'
+        Write-Host ("  note     {0,-26} {1}" -f "openssh package", "skipping Windows Update, -PreferMsi was given") -ForegroundColor Yellow
+    } elseif (-not $cap) {
+        $capFailure = 'this image offers no OpenSSH.Server capability'
+        Write-Host ("  note     {0,-26} {1}" -f "openssh package", "no OpenSSH.Server capability here - using the MSI") -ForegroundColor Yellow
     } else {
-        $elapsed = ''
-        if (-not $DryRun) {
-            # This is slower than its size suggests, and the wait reads as a hang. The
-            # payload is a few MB; the time goes on component-based servicing against the
-            # live image - single-threaded, disk-bound - and on a machine minutes old it
-            # queues behind Windows Update's first scan. Say so before it starts, and
-            # report how long it took, so the next person has a number rather than a fear.
-            # Asked for on the first real unattended run, 20 September 2026.
-            Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
-            Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
-            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        # This is slower than its size suggests, and the wait reads as a hang. The payload
+        # is a few MB; the time goes on component-based servicing against the live image -
+        # single-threaded, disk-bound - and on a machine minutes old it queues behind
+        # Windows Update's first scan. Say so before it starts, and report how long it
+        # took, so the next person has a number rather than a fear.
+        # Asked for on the first real unattended run, 20 September 2026.
+        Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
+        Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-            # Try three times. This step failed outright on one machine (20 September
-            # 2026): a single DismAddCapabilityInternal in dism.log, no completion, the
-            # capability still NotPresent, and no sshd - on a build where the three before
-            # it had worked. Windows Update is busy with its own first-boot work at exactly
-            # the moment an installer calls this script, and a machine left without ssh is
-            # a machine no GNS3 node can reach. So retry rather than give up once.
-            $attempt = 0
-            while ($true) {
-                $attempt++
-                try {
-                    Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
+        $attempt = 0
+        while ($true) {
+            $attempt++
+            try {
+                Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
+                $sw.Stop()
+                $elapsed = " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
+                Report-Changed "openssh package" "installed from Windows Update$elapsed"
+                $sshInstalled = $true
+                $sshSource    = 'capability'
+                break
+            } catch {
+                $code = '0x{0:X8}' -f $_.Exception.HResult
+                if ($WuDeadEnds.ContainsKey($code)) {
+                    $capFailure = "$code, $($WuDeadEnds[$code])"
+                    Write-Host ("                                      $code - $($WuDeadEnds[$code]).") -ForegroundColor Yellow
+                    Write-Host  "                                      Retrying cannot fix that - falling back to the MSI." -ForegroundColor Yellow
                     break
-                } catch {
-                    $code = '0x{0:X8}' -f $_.Exception.HResult
-                    if ($attempt -ge 3) {
-                        throw "$($_.Exception.Message) [$code, failed $attempt times]"
-                    }
-                    Write-Host ("                                      attempt $attempt failed ($code) - retrying in 30 s") -ForegroundColor Yellow
-                    Start-Sleep -Seconds 30
                 }
+                $capFailure = "$code after $attempt attempts"
+                if ($attempt -ge 3) {
+                    Write-Host ("                                      $code - failed $attempt times, falling back to the MSI.") -ForegroundColor Yellow
+                    break
+                }
+                Write-Host ("                                      attempt $attempt failed ($code) - retrying in 30 s") -ForegroundColor Yellow
+                Start-Sleep -Seconds 30
             }
-
-            $sw.Stop()
-            $elapsed = " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
         }
-        Report-Changed "openssh package" "installed$elapsed"
-        $sshInstalled = $true
+        if ($sw.IsRunning) { $sw.Stop() }
     }
-} catch {
-    Report-Failed "openssh package" "$($_.Exception.Message) - is the NAT adapter online?"
+
+    if (-not $sshInstalled) {
+        $url = $OpenSshMsiUrl
+        $sha = $OpenSshMsiSha256
+        if (-not $url) {
+            $asset = $OpenSshAssets[$env:PROCESSOR_ARCHITECTURE]
+            if ($asset) {
+                $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/$OpenSshRelease/$($asset.Name)"
+                $sha = $asset.Sha256
+            } else {
+                Report-Failed "openssh package" "Windows Update failed ($capFailure) and no MSI is pinned for $env:PROCESSOR_ARCHITECTURE"
+            }
+        }
+        if ($url) {
+            try {
+                Install-OpenSshFromMsi -Url $url -Sha256 $sha
+                Report-Changed "openssh package" "installed from the Win32-OpenSSH MSI ($OpenSshRelease)"
+                Write-Host    "                                      Windows Update had failed: $capFailure" -ForegroundColor DarkGray
+                $sshInstalled = $true
+                $sshSource    = 'msi'
+            } catch {
+                Report-Failed "openssh package" "Windows Update failed ($capFailure), and so did the MSI: $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
+# Worth one line, because it is the first thing that confuses anyone debugging this machine
+# later: the two sources put the binaries in different places.
+if ($sshSource -eq 'msi') {
+    Write-Host ("  note     {0,-26} {1}" -f "openssh location", "C:\Program Files\OpenSSH, not System32\OpenSSH") -ForegroundColor Yellow
+    Write-Host  "                                      Config and host keys stay in C:\ProgramData\ssh either way," -ForegroundColor DarkGray
+    Write-Host  "                                      so administrators_authorized_keys is unchanged." -ForegroundColor DarkGray
 }
 
 # Gate on this step's own result, not on $script:Failed - an unrelated earlier failure
@@ -565,21 +880,12 @@ if ($DryRun) {
 
 Write-Host "$script:Changed change(s), $script:Unchanged already correct, $script:Failed failed."
 
-# One line per run, in a file with an obvious name, so "did this machine configure itself?"
-# is answerable without reading a transcript - and answerable over ssh, or by a student
-# reading it out. Appended, so a re-run shows the history rather than hiding it.
-$StatusPath = Join-Path $env:WINDIR 'Temp\configure-windows-host.status'
-try {
-    $verdict = if ($script:Failed) { 'FAILED ' } else { 'OK     ' }
-    ("{0}  {1}  changed={2} already-correct={3} failed={4}" -f `
-        $verdict, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $script:Changed, $script:Unchanged, $script:Failed) |
-        Out-File -FilePath $StatusPath -Encoding ascii -Append -ErrorAction Stop
-} catch { }
+Write-RunStatus $(if ($script:Failed) { 'FAILED' } else { 'OK' })
 
 if ($script:Failed) {
     Write-Host ""
     Write-Host "Some steps failed. The most common cause is no internet on the NAT adapter," -ForegroundColor Yellow
-    Write-Host "which the OpenSSH install needs. Fix that and run this script again."       -ForegroundColor Yellow
+    Write-Host "which both OpenSSH sources need. Fix that and run this script again."       -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  what happened : $TranscriptPath"
     Write-Host "  one-line check: $StatusPath"
