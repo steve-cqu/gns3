@@ -12,8 +12,8 @@
     What it does:
       - allows inbound ping (ICMPv4 and ICMPv6 echo). Windows blocks this by default, and
         it is the first thing a student tries
-      - installs and starts the OpenSSH server, so a GNS3 node can `ssh` in - from Windows
-        Update, or from the pinned Win32-OpenSSH MSI when Windows Update cannot serve it
+      - installs and starts the OpenSSH server, so a GNS3 node can `ssh` in - from the
+        pinned Win32-OpenSSH MSI, falling back to Windows Update
       - enables Remote Desktop, so you can reach the machine from your own desktop
       - marks the lab adapter as a Private network, not Public
       - optionally gives the lab adapter a static address, and renames the machine
@@ -61,11 +61,10 @@
 .PARAMETER ComputerName
     Rename the machine, e.g. WinHost. Takes effect after a restart.
 
-.PARAMETER PreferMsi
-    Install OpenSSH from the pinned Win32-OpenSSH MSI without asking Windows Update first.
-    For a network where Windows Update is known not to work - a filtered campus LAN, or a
-    freshly imaged machine whose update client has no endpoint. Without it the script tries
-    Windows Update first and falls back to the MSI by itself.
+.PARAMETER PreferWindowsUpdate
+    Install the OpenSSH server from Windows Update first, falling back to the pinned MSI.
+    The default is the other way round, because the capability install takes minutes and the
+    MSI takes seconds. Use this on a network that can reach Windows Update but not GitHub.
 
 .PARAMETER OpenSshMsiUrl
     Fetch the OpenSSH MSI from here instead of GitHub - a local mirror, or a copy on the
@@ -98,7 +97,7 @@ param(
     [string] $LabGateway,
     [string] $LabNetwork = '10.10.0.0/16',
     [string] $ComputerName,
-    [switch] $PreferMsi,
+    [switch] $PreferWindowsUpdate,
     [string] $OpenSshMsiUrl,
     [string] $OpenSshMsiSha256,
     [switch] $DryRun
@@ -568,23 +567,34 @@ if ($rdpRules.Count -gt 0) {
 #
 # There are two ways to get it, and this script will use either:
 #
-#   1. The Windows capability (Feature on Demand), fetched from Windows Update. The right
-#      build for this OS, nothing to keep current, and what Microsoft documents.
-#   2. The signed Win32-OpenSSH MSI from GitHub, pinned by version and SHA-256 below.
+#   1. The signed Win32-OpenSSH MSI from GitHub, pinned by version and SHA-256 below.
+#      Tried FIRST. A 6 MB download and an msiexec run: seconds.
+#   2. The Windows capability (Feature on Demand), fetched from Windows Update. The right
+#      build for this OS, nothing to keep current, and what Microsoft documents - but
+#      several minutes every time, and on 20 September 2026 it failed outright.
 #
-# Why a fallback exists at all: on 20 September 2026 an otherwise clean unattended build
-# came up with no ssh. Three capability attempts thirty seconds apart all failed with
-# 0x80240438 - WU_E_PT_ENDPOINT_UNKNOWN, the update client could not work out which service
-# endpoint to talk to. The machine was NOT offline: the post-install command had fetched
-# this very script over HTTPS from raw.githubusercontent.com seconds earlier. So the fault
-# was Windows Update specifically, on a machine whose OOBE the answer file skips - and the
-# path that demonstrably worked was a plain HTTPS GET from GitHub.
+# Why the MSI leads, decided 20 September 2026 after measuring both:
 #
-# The order is deliberate. The capability goes first, because it worked on three of the
-# four builds that day and needs no pinned version. A code in $WuDeadEnds skips the
-# remaining retries: those mean Windows Update cannot serve this at all, so another thirty
-# seconds only delays the fallback that will work. Use -PreferMsi to skip Windows Update
-# altogether on a network where it is known not to work.
+#   SPEED. The capability's payload is a few MB, but the time goes on component-based
+#   servicing against the live image - single-threaded, disk-bound - and on a machine
+#   minutes old it queues behind Windows Update's first scan. It cost several minutes of
+#   every unattended build, for every student, on every rebuild. Nothing tunes that away:
+#   a local -Source removes the download, which was never the expensive part.
+#
+#   RELIABILITY. A build that day came up with no ssh at all. Three capability attempts
+#   thirty seconds apart failed with 0x80240438 (WU_E_PT_ENDPOINT_UNKNOWN). That machine
+#   turned out to have had its default route removed by this very script - see section 1 -
+#   so Windows Update was not reachable and nor would the MSI have been. But it showed how
+#   silently this step can fail, and a pinned MSI fails the same way every time or not at
+#   all.
+#
+#   DETERMINISM. The same OpenSSH on every machine, pinned and hash-verified, instead of
+#   whatever the servicing stack produces on the day.
+#
+# What that costs: a version pin somebody has to bump, and GitHub has to be reachable at
+# first logon. The capability catches both - it is the fallback now, and a code in
+# $WuDeadEnds stops it retrying into a wall. -PreferWindowsUpdate swaps the order back, for
+# a network that can reach Windows Update but not GitHub.
 # --------------------------------------------------------------------------- #
 
 # Pinned on purpose: an unattended build must install the same OpenSSH every time, and a
@@ -675,12 +685,51 @@ function Install-OpenSshFromMsi {
     Remove-Item $msi -Force -ErrorAction SilentlyContinue
 }
 
+# Install the OpenSSH server capability from Windows Update. Throws with a reason on
+# failure, so the caller can report both sources' reasons together.
+function Install-OpenSshCapability {
+    param([Parameter(Mandatory)] $Capability)
+
+    # This is far slower than its size suggests, and the wait reads as a hang. The payload
+    # is a few MB; the time goes on component-based servicing against the live image -
+    # single-threaded, disk-bound - and on a machine minutes old it queues behind Windows
+    # Update's first scan. Say so before it starts, and report how long it took, so the next
+    # person has a number rather than a fear. It is also the whole reason the MSI is tried
+    # first: this step alone was costing several minutes of every unattended build.
+    Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
+    Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        try {
+            Add-WindowsCapability -Online -Name $Capability.Name -ErrorAction Stop | Out-Null
+            $sw.Stop()
+            return " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
+        } catch {
+            $code = '0x{0:X8}' -f $_.Exception.HResult
+            if ($WuDeadEnds.ContainsKey($code)) {
+                $sw.Stop()
+                throw "$code - $($WuDeadEnds[$code]); retrying cannot fix that"
+            }
+            if ($attempt -ge 3) {
+                $sw.Stop()
+                throw "$code after $attempt attempts"
+            }
+            Write-Host ("                                      attempt $attempt failed ($code) - retrying in 30 s") -ForegroundColor Yellow
+            Start-Sleep -Seconds 30
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "OpenSSH server"
 
-$sshInstalled = $false
-$sshSource    = ''
-$capFailure   = ''
+$sshInstalled  = $false
+$sshSource     = ''
+$whyMsi        = ''
+$whyCapability = ''
 
 # Is it already here? Either source counts. A machine that got the MSI has no capability
 # installed, and must not be handed one on top of it.
@@ -695,80 +744,67 @@ if ($existingSvc) {
     Report-Ok "openssh package" "already installed (Windows capability)"
     $sshInstalled = $true
 } elseif ($DryRun) {
-    Report-Changed "openssh package" "would install - Windows capability, or the pinned MSI if that fails"
+    Report-Changed "openssh package" "would install - the pinned MSI, or the Windows capability if that fails"
     $sshInstalled = $true
 } else {
-    if ($PreferMsi) {
-        $capFailure = 'skipped by -PreferMsi'
-        Write-Host ("  note     {0,-26} {1}" -f "openssh package", "skipping Windows Update, -PreferMsi was given") -ForegroundColor Yellow
-    } elseif (-not $cap) {
-        $capFailure = 'this image offers no OpenSSH.Server capability'
-        Write-Host ("  note     {0,-26} {1}" -f "openssh package", "no OpenSSH.Server capability here - using the MSI") -ForegroundColor Yellow
-    } else {
-        # This is slower than its size suggests, and the wait reads as a hang. The payload
-        # is a few MB; the time goes on component-based servicing against the live image -
-        # single-threaded, disk-bound - and on a machine minutes old it queues behind
-        # Windows Update's first scan. Say so before it starts, and report how long it
-        # took, so the next person has a number rather than a fear.
-        # Asked for on the first real unattended run, 20 September 2026.
-        Write-Host "  working  openssh package            installing from Windows Update - usually a few minutes." -ForegroundColor DarkGray
-        Write-Host "                                      Most of that is Windows servicing the image, not downloading." -ForegroundColor DarkGray
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $order = if ($PreferWindowsUpdate) { @('capability', 'msi') } else { @('msi', 'capability') }
 
-        $attempt = 0
-        while ($true) {
-            $attempt++
-            try {
-                Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
-                $sw.Stop()
-                $elapsed = " in {0:0} min {1:00} s" -f [math]::Floor($sw.Elapsed.TotalMinutes), $sw.Elapsed.Seconds
-                Report-Changed "openssh package" "installed from Windows Update$elapsed"
-                $sshInstalled = $true
-                $sshSource    = 'capability'
-                break
-            } catch {
-                $code = '0x{0:X8}' -f $_.Exception.HResult
-                if ($WuDeadEnds.ContainsKey($code)) {
-                    $capFailure = "$code, $($WuDeadEnds[$code])"
-                    Write-Host ("                                      $code - $($WuDeadEnds[$code]).") -ForegroundColor Yellow
-                    Write-Host  "                                      Retrying cannot fix that - falling back to the MSI." -ForegroundColor Yellow
-                    break
+    foreach ($source in $order) {
+        if ($sshInstalled) { break }
+
+        if ($source -eq 'msi') {
+            $url = $OpenSshMsiUrl
+            $sha = $OpenSshMsiSha256
+            if (-not $url) {
+                $asset = $OpenSshAssets[$env:PROCESSOR_ARCHITECTURE]
+                if ($asset) {
+                    $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/$OpenSshRelease/$($asset.Name)"
+                    $sha = $asset.Sha256
+                } else {
+                    $whyMsi = "no MSI is pinned for $env:PROCESSOR_ARCHITECTURE"
                 }
-                $capFailure = "$code after $attempt attempts"
-                if ($attempt -ge 3) {
-                    Write-Host ("                                      $code - failed $attempt times, falling back to the MSI.") -ForegroundColor Yellow
-                    break
+            }
+            if ($url) {
+                try {
+                    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                    Install-OpenSshFromMsi -Url $url -Sha256 $sha
+                    $sw.Stop()
+                    Report-Changed "openssh package" ("installed from the Win32-OpenSSH MSI ($OpenSshRelease) in {0:0} s" -f $sw.Elapsed.TotalSeconds)
+                    $sshInstalled = $true
+                    $sshSource    = 'msi'
+                } catch {
+                    $whyMsi = $_.Exception.Message
+                    Write-Host ("  note     {0,-26} {1}" -f "openssh MSI", "failed: $whyMsi") -ForegroundColor Yellow
                 }
-                Write-Host ("                                      attempt $attempt failed ($code) - retrying in 30 s") -ForegroundColor Yellow
-                Start-Sleep -Seconds 30
+            } else {
+                Write-Host ("  note     {0,-26} {1}" -f "openssh MSI", $whyMsi) -ForegroundColor Yellow
             }
         }
-        if ($sw.IsRunning) { $sw.Stop() }
+
+        if ($source -eq 'capability') {
+            if (-not $cap) {
+                $whyCapability = 'this image offers no OpenSSH.Server capability'
+                Write-Host ("  note     {0,-26} {1}" -f "openssh package", $whyCapability) -ForegroundColor Yellow
+            } else {
+                try {
+                    $elapsed = Install-OpenSshCapability -Capability $cap
+                    Report-Changed "openssh package" "installed from Windows Update$elapsed"
+                    $sshInstalled = $true
+                    $sshSource    = 'capability'
+                } catch {
+                    $whyCapability = $_.Exception.Message
+                    Write-Host ("                                      $whyCapability") -ForegroundColor Yellow
+                }
+            }
+        }
     }
 
     if (-not $sshInstalled) {
-        $url = $OpenSshMsiUrl
-        $sha = $OpenSshMsiSha256
-        if (-not $url) {
-            $asset = $OpenSshAssets[$env:PROCESSOR_ARCHITECTURE]
-            if ($asset) {
-                $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/$OpenSshRelease/$($asset.Name)"
-                $sha = $asset.Sha256
-            } else {
-                Report-Failed "openssh package" "Windows Update failed ($capFailure) and no MSI is pinned for $env:PROCESSOR_ARCHITECTURE"
-            }
-        }
-        if ($url) {
-            try {
-                Install-OpenSshFromMsi -Url $url -Sha256 $sha
-                Report-Changed "openssh package" "installed from the Win32-OpenSSH MSI ($OpenSshRelease)"
-                Write-Host    "                                      Windows Update had failed: $capFailure" -ForegroundColor DarkGray
-                $sshInstalled = $true
-                $sshSource    = 'msi'
-            } catch {
-                Report-Failed "openssh package" "Windows Update failed ($capFailure), and so did the MSI: $($_.Exception.Message)"
-            }
-        }
+        Report-Failed "openssh package" "both sources failed - MSI: $whyMsi / Windows Update: $whyCapability"
+    } elseif ($whyMsi -and $sshSource -eq 'capability') {
+        Write-Host "                                      the MSI had failed: $whyMsi" -ForegroundColor DarkGray
+    } elseif ($whyCapability -and $sshSource -eq 'msi') {
+        Write-Host "                                      Windows Update had failed: $whyCapability" -ForegroundColor DarkGray
     }
 }
 
@@ -779,6 +815,7 @@ if ($sshSource -eq 'msi') {
     Write-Host  "                                      Config and host keys stay in C:\ProgramData\ssh either way," -ForegroundColor DarkGray
     Write-Host  "                                      so administrators_authorized_keys is unchanged." -ForegroundColor DarkGray
 }
+
 
 # Gate on this step's own result, not on $script:Failed - an unrelated earlier failure
 # (say a firewall rule) must not silently skip starting the service.

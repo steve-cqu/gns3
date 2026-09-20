@@ -269,23 +269,30 @@ meant:
 `ssh` is the access path every activity is built on, so the machine is not usable without it.
 `configure-windows-host.ps1` will get the OpenSSH server from either of two places:
 
-1. **The Windows capability** (Feature on Demand), fetched from Windows Update. Tried first:
-   it is the right build for this OS, there is no version to keep current, and it is what
-   Microsoft documents.
-2. **The signed Win32-OpenSSH MSI from GitHub**, pinned in the script by release tag and
-   SHA-256. Used when Windows Update cannot serve the capability.
+1. **The signed Win32-OpenSSH MSI from GitHub**, pinned in the script by release tag and
+   SHA-256. **Tried first.** A 6 MB download and an `msiexec` run — seconds.
+2. **The Windows capability** (Feature on Demand), fetched from Windows Update. The right
+   build for this OS and what Microsoft documents, but **minutes every time**. The fallback.
 
-The fallback is not belt-and-braces. On 20 September 2026 an otherwise clean unattended build
-came up with no `sshd`: three capability attempts, thirty seconds apart, all failed with
-`0x80240438` — `WU_E_PT_ENDPOINT_UNKNOWN`, meaning the update client could not work out which
-service endpoint to talk to. **The machine was not offline.** Windows had fetched
-`configure-windows-host.ps1` itself over HTTPS from `raw.githubusercontent.com` seconds
-earlier. The fault was Windows Update specifically, on a machine whose answer file skips OOBE
-— and a plain HTTPS GET from GitHub was demonstrably working at that moment.
+**The MSI leads because of speed, and that was measured, not assumed.** The capability's
+payload is only a few MB; the time goes on component-based servicing against the live image —
+single-threaded, disk-bound — and on a machine minutes old it queues behind Windows Update's
+first scan. It was costing several minutes of every unattended build, for every student, on
+every rebuild. Nothing tunes it away: pointing `-Source` at a local Features-on-Demand ISO
+removes the download, which was never the expensive part.
 
-Some Windows Update failures are worth retrying and some are not. The script knows the second
-kind (`0x80240438`, `0x8024402C`, `0x8024500C`, `0x800F0954`, `0x800F0950`, `0x80070422`), and
-on those it stops retrying immediately and fetches the MSI instead.
+Reliability pushed the same way. On 20 September 2026 a build came up with no `sshd` at all:
+three capability attempts, thirty seconds apart, every one `0x80240438` —
+`WU_E_PT_ENDPOINT_UNKNOWN`, the update client could not work out which service endpoint to talk
+to. That machine turned out to have had its default route removed by this same script (see
+*Name the adapter by MAC, not by name*), so Windows Update was unreachable and the MSI would
+have failed too — but it showed how silently this step can fail. A pinned MSI fails the same
+way every time, or not at all.
+
+What it costs: a version pin somebody has to bump, and GitHub has to be reachable at first
+logon. The capability covers both. Some Windows Update failures are worth retrying and some are
+not, so when the capability runs the script knows the second kind (`0x80240438`, `0x8024402C`,
+`0x8024500C`, `0x800F0954`, `0x800F0950`, `0x80070422`) and stops retrying into a wall.
 
 **The MSI is verified before it runs.** Downloading an installer at first logon and running it
 as SYSTEM is only defensible if you check what you got, so the script compares a SHA-256
@@ -295,10 +302,10 @@ reach a CRL reports something other than `Valid` for a perfectly good file, and 
 cost a student a working lab host.
 
 ```powershell
-# force the MSI, for a network where Windows Update is known not to work
-.\configure-windows-host.ps1 -PreferMsi
+# swap the order back, for a network that reaches Windows Update but not GitHub
+.\configure-windows-host.ps1 -PreferWindowsUpdate
 
-# take it from a local mirror instead of GitHub
+# take the MSI from a local mirror instead of GitHub
 .\configure-windows-host.ps1 -OpenSshMsiUrl https://mirror.example.edu/OpenSSH-Win64-v10.0.0.0.msi `
                              -OpenSshMsiSha256 DDEC9C53...B96B7D9
 ```
@@ -574,9 +581,10 @@ needs changing. Say this in any activity that ssh's into Windows — otherwise i
 security failure the student has caused, and in a security unit it is worth two sentences of
 explanation rather than none.
 
-**This may differ between the two OpenSSH sources, and it has not been checked yet.** The
-capability on 25H2 is an OpenSSH 9.x build; the pinned MSI is OpenSSH 10, where upstream enables
-`mlkem768x25519-sha256` by default — so a host built from the MSI may well negotiate a
-post-quantum key exchange and print no warning at all. Confirm it on the next build with
-`ssh -v gns3@10.10.1.20` and read the `kex:` line, because an activity that tells every student
-to expect a warning they do not see is worse than one that explains both cases.
+**This probably no longer happens, and it has not been checked yet.** The warning was recorded
+against the Windows capability on 25H2, an OpenSSH 9.x build. **The MSI is now the default
+source and it is OpenSSH 10**, where upstream enables `mlkem768x25519-sha256` by default — so a
+standard Windows Host may negotiate a post-quantum key exchange and print nothing at all.
+Confirm with `ssh -v gns3@10.10.1.20` and read the `kex:` line before writing this into any
+activity: telling every student to expect a warning they do not see is worse than explaining
+both cases. In a security unit either outcome is worth two sentences.
