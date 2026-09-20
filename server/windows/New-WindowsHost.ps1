@@ -94,14 +94,16 @@
         VBoxManage unattended detect --iso=<path to the .iso>
 
 .PARAMETER ProductKey
-    Product key passed to Windows Setup. Leave it off and Setup asks for one - VirtualBox
-    generates an answer file with an empty product-key element, which Windows 11 25H2
-    treats as unanswered, and the install stops on that screen.
+    Product key passed to Windows Setup. You should not need this: the script already
+    supplies Microsoft's published generic volume-licence key (GVLK) for whichever edition
+    -Edition names, which is what stops Setup halting on the product key screen.
 
-    This does not have to be anybody's real key. Microsoft publishes a generic
-    volume-licence key (a GVLK) for each edition: it selects the edition, it does not
-    activate, and it is meant to be written down in exactly this sort of file. Use the one
-    matching -ImageIndex.
+    A GVLK is not anybody's licence. Microsoft publishes one per edition so that an
+    unattended install can name an edition without a real key; it selects the edition and
+    does not activate. Pass -ProductKey only to use a different key, such as a CQU Azure
+    Education key you do want to activate with.
+
+    Source: https://learn.microsoft.com/en-us/windows-server/get-started/kms-client-activation-keys
 
 .PARAMETER SkipConfigure
     Do not run configure-windows-host.ps1 after the install. The machine then installs but
@@ -248,6 +250,22 @@ function Invoke-VBox {
 # Matched exactly, because "Windows 11 Education" is a prefix of "Windows 11 Education N",
 # which is a different edition with no Media Player and no reason to be installed by
 # accident.
+# Microsoft's published generic volume-licence keys, one per edition. They answer Setup's
+# product key question and select an edition; they do not activate anything. Copied from
+# learn.microsoft.com/windows-server/get-started/kms-client-activation-keys (read 20 Sep
+# 2026). An edition missing from this table simply gets no key, and Setup will ask.
+$GvlkByEdition = @{
+    'Windows 11 Home'                     = ''
+    'Windows 11 Pro'                      = 'W269N-WFGWX-YVC9B-4J6C9-T83GX'
+    'Windows 11 Pro N'                    = 'MH37W-N47XK-V7XM9-C7227-GCQG9'
+    'Windows 11 Pro for Workstations'     = 'NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J'
+    'Windows 11 Pro Education'            = '6TP4R-GNPTD-KYYHQ-7B7DP-J447Y'
+    'Windows 11 Education'                = 'NW6C2-QMPVW-D7KKK-3GKT6-VCFB2'
+    'Windows 11 Education N'              = '2WH4N-8QGBV-H22JP-CT43Q-MDWWJ'
+    'Windows 11 Enterprise'               = 'NPPR9-FWDCX-D2C8J-H872K-2YT43'
+    'Windows 11 Enterprise N'             = 'DPH2V-TTNVB-4X9Q3-TJR4H-KHJW4'
+}
+
 function Resolve-EditionIndex {
     param([string] $IsoFile, [string] $EditionName)
 
@@ -369,6 +387,15 @@ if ($ImageIndex -le 0) {
     $editionLabel = "$Edition  (image index $ImageIndex on this ISO)"
 }
 
+# No key given: use the published GVLK for the edition, so the default run does not stop on
+# Setup's product key screen. Naming an edition and then being asked for a key is a pair of
+# defaults that disagree.
+$keySource = 'supplied'
+if (-not $ProductKey -and $GvlkByEdition.ContainsKey($Edition)) {
+    $ProductKey = $GvlkByEdition[$Edition]
+    $keySource  = "Microsoft's published GVLK for $Edition"
+}
+
 Write-Host ""
 Write-Host "Creating the GNS3 Windows Host VM" -ForegroundColor Cyan
 if ($DryRun) { Write-Host "DRY RUN - no VM will be created." -ForegroundColor Yellow }
@@ -380,7 +407,7 @@ Write-Host "  hardware    : ${MemoryMB} MB RAM, $CPUs CPUs, ${DiskGB} GB disk, E
 Write-Host "  account     : $User / $Password, computer name $ComputerName"
 Write-Host "  edition     : $editionLabel"
 if ($ProductKey) {
-    Write-Host "  product key : supplied - Setup will not ask"
+    Write-Host "  product key : $keySource - does not activate, and Setup will not ask"
 } else {
     Write-Host "  product key : none - Setup WILL stop and ask for one (see -? on -ProductKey)" -ForegroundColor Yellow
 }
