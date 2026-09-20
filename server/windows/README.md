@@ -133,10 +133,26 @@ Windows at any point, and the machine came up as: `Get-WindowsEdition -Online` �
 (from `-ImageIndex 4`), `whoami` → `winhost\gns3` and `$env:COMPUTERNAME` → `WINHOST` (from
 the answer file), and `Ethernet 2` holding `10.10.1.20` (from the post-install command).
 
-**One thing is still unproven: the script has not done all of this in a single command.**
-The keypress fix was tested with the VM started by hand, and the script's own
-`--start-vm=gui` path then loops in the same way — the same sequence, but an inference until
-a run proves it. Run it once, unattended, before handing it to anybody.
+**`make-unattend-iso.sh` was run for the first time the same day**, on Linux with `xorriso`,
+for both architectures. Each disc carries exactly `autounattend.xml` and
+`configure-windows-host.ps1` at 406 KB under the label `CQU_UNATTEND`, the extracted script
+is byte-identical to the one in the repo, and the architecture guard — which greps the
+answer file rather than trusting its name, because Setup ignores a mismatched one in
+silence — passed against the real ARM64 file. The ISO's **contents** are therefore verified;
+what an ARM64 Windows Setup does with them is not.
+
+**A third run then did the whole thing in one command**, with different values to exercise
+`-Name`, `-ComputerName` and `-LabIPAddress`: a Windows 11 Education machine named `WINHOST2`
+on `10.10.1.21`, from one line, with nothing typed at any point. Re-running
+`configure-windows-host.ps1` on the finished machine reported **0 changed**, which is the
+first test of the idempotence this file has always claimed.
+
+One refinement came out of that run. The keypress was space, and space also **activates the
+focused control** on Setup's first screen — it hit the Support link and Setup put up "Unable
+to open link", which WinPE cannot open. That install recovered, but a modal dialog in front
+of an unattended install is what an unattended install cannot clear. The script now sends
+**Tab**, which satisfies "press any key" and activates nothing. *The Tab variant has not
+itself been through a full install yet.*
 
 **Still unverified — the Mac half**, unchanged from the draft:
 

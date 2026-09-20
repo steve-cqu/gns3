@@ -506,18 +506,27 @@ try {
 # Windows ISO itself that boots, prompt and all. Windows Setup reads the answer file off
 # that second disc regardless, which is why everything after this point works.
 #
-# So tap a key. 39 b9 is space down, space up. The first taps land while the VM is still
-# coming up and fail harmlessly; the loop is over long before Setup draws anything, so no
-# keystroke strays into the installer. Proven on VirtualBox 7.0.20, 20 September 2026.
+# So tap a key. 0f 8f is Tab down, Tab up - deliberately NOT space or Enter.
+#
+# The taps do overlap Setup's first screen: WinPE can be drawing "Please wait" within ten
+# seconds on an SSD. Space there activated the focused Support link, and Setup put up
+# "Unable to open link. Please visit https://aka.ms/SetupFaq" - which WinPE cannot open,
+# because it has no browser. That run recovered, but a modal dialog in front of an
+# unattended install is exactly what an unattended install cannot clear. Tab only moves
+# focus, so it satisfies "press any key" and activates nothing.
+#
+# The early taps land while the VM is still coming up and fail harmlessly.
+# Boot prompt fix proven on VirtualBox 7.0.20, 20 September 2026; the Tab refinement came
+# from watching space trip that dialog on the run after.
 # --------------------------------------------------------------------------- #
 if (-not $NoStart -and -not $DryRun) {
     Write-Host ""
     Write-Host "Boot prompt"
-    for ($i = 0; $i -lt 12; $i++) {
+    for ($i = 0; $i -lt 10; $i++) {
         Start-Sleep -Seconds 1
-        Invoke-VBox @('controlvm', $Name, 'keyboardputscancode', '39', 'b9') -AllowFailure -Quiet | Out-Null
+        Invoke-VBox @('controlvm', $Name, 'keyboardputscancode', '0f', '8f') -AllowFailure -Quiet | Out-Null
     }
-    Report-Step "boot prompt" "space sent for 12 s - nothing else would press it"
+    Report-Step "boot prompt" "Tab sent for 10 s - nothing else would press it"
 }
 
 # --------------------------------------------------------------------------- #
