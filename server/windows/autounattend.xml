@@ -261,11 +261,23 @@
                     or Windows has not mounted it yet, nothing happens and the machine is
                     simply unconfigured: run the script by hand, per Step 5 of the guide,
                     which is the documented path anyway.
+
+                    NOTE: this deliberately does NOT name the lab adapter. On 20 September
+                    2026 it passed -LabAdapter 'Ethernet 2', on the reasonable-looking
+                    assumption that the hypervisor's second adapter is the one Windows calls
+                    "Ethernet 2". It is not, and reproducibly so: VirtualBox's NIC 2 came
+                    through as "Ethernet". The script then gave the NAT adapter a static lab
+                    address, which removed the default route, and the machine ended up with
+                    no internet and nothing on the lab network - while every step reported
+                    success. A MAC would be exact, but Fusion generates the MAC at first
+                    power-on, so a static answer file cannot carry one. Naming nothing is
+                    better than naming the wrong thing: configure-windows-host.ps1 then picks
+                    the adapter with no default gateway, which is what a lab adapter is.
                 -->
                 <SynchronousCommand wcm:action="add">
                     <Order>1</Order>
                     <Description>Configure this machine as the GNS3 Windows Host</Description>
-                    <CommandLine>powershell.exe -ExecutionPolicy Bypass -Command "$s = Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root 'configure-windows-host.ps1' } | Where-Object { Test-Path $_ } | Select-Object -First 1; if ($s) { &amp; $s -LabAdapter 'Ethernet 2' -IPAddress 10.10.1.20 -ComputerName WinHost }"</CommandLine>
+                    <CommandLine>powershell.exe -ExecutionPolicy Bypass -Command "$s = Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root 'configure-windows-host.ps1' } | Where-Object { Test-Path $_ } | Select-Object -First 1; if ($s) { &amp; $s -IPAddress 10.10.1.20 -ComputerName WinHost }"</CommandLine>
                 </SynchronousCommand>
             </FirstLogonCommands>
 
