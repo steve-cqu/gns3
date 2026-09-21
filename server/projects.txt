@@ -11,4 +11,9 @@ GNS3-Intro-Solution
 LAN-Routing-Template
 OSPF-Basics-Template
 Small-Internet-Demo
-Windows-Host-Demo
+# Windows-Host-Demo came off this list for the T3 2026 release. It is the only project here that
+# cannot work standalone — it needs a Windows VM on the student's own hypervisor — no T3 unit
+# teaches it, and it is the only project with a per-architecture variant. Both files are handed
+# out through Moodle instead: Windows-Host-Demo.gns3project (Cloud node on eth2, PC appliance) and
+# Windows-Host-Demo-arm64.gns3project (eth1, Mac appliance). Reasoning in
+# gns3-dev/notes/single-vm-consolidation.md.

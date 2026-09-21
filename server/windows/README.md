@@ -525,8 +525,10 @@ all, which is worse.**
   grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx  # connectionType "custom" is cqulab
   ```
 
-  Because the demo project must name an interface, a **separate `Windows-Host-Demo-Mac.gns3project`**
-  ships alongside the PC one.
+  Because the demo project must name an interface, there are **two files**:
+  `Windows-Host-Demo.gns3project` (`eth2`, PC) and `Windows-Host-Demo-arm64.gns3project` (`eth1`,
+  Mac). Neither is on the appliance from the T3 2026 release — both are handed out through Moodle,
+  and the student imports the one for their machine.
 
 - **Windows 11 ARM64 has no network until VMware Tools is installed.** Windows on ARM has no in-box
   driver for **either** adapter Fusion can offer, so a fresh install cannot download this script and

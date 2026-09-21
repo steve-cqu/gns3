@@ -211,10 +211,12 @@ lab network.
 > Step B. If your project shows **`eth2 not found`** when it starts, this is why. Right-click the
 > node, choose *Configure*, and select **`eth1`** on the *Ethernet interfaces* tab.
 >
-> **Your Mac appliance already carries the right version**, so there is nothing to download or
-> choose: the demo project ships in two builds, the Mac one bound to `eth1` and the PC one to
-> `eth2`, and both appear as *Windows-Host-Demo*. You only need the change above if you imported
-> the project file yourself from somewhere else.
+> **The demo project is a download, and there are two of them — take the one for your machine.**
+> `Windows-Host-Demo-arm64.gns3project` is the Apple Silicon version, with the *Windows Host* node
+> already on `eth1`. `Windows-Host-Demo.gns3project` is the PC version and uses `eth2`, so on a Mac
+> it starts with **`eth2 not found`**. Both open as a project called *Windows-Host-Demo*, so check
+> the file name you import, not the project name. If you took the wrong one, you do not need to
+> start again — right-click the node and change the interface as above.
 
 ## Step 9: Check It Works
 
@@ -502,8 +504,10 @@ Then carry on from Step 6.
 Everything in *If It Does Not Work* above still applies. Check these first – they are in the order
 they actually catch people.
 
-1. **`eth2 not found` when the project starts.** The *Windows Host* node is bound to `eth2`, which
-   exists on a PC and not on a Mac. Change it to **`eth1`** – see Step 8.
+1. **`eth2 not found` when the project starts.** You imported the PC version of the demo project.
+   The *Windows Host* node is bound to `eth2`, which exists on a PC and not on a Mac. Either import
+   `Windows-Host-Demo-arm64.gns3project` instead, or change the interface to **`eth1`** – see
+   Step 8.
 2. **`Get-NetAdapter` inside Windows lists nothing at all.** VMWare Tools is not installed. This is
    not a firewall problem and not a GNS3 problem – Windows genuinely has no network card it can use.
    See *Mac Additions to Step 4*.

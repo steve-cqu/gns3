@@ -41,7 +41,7 @@ cd server/ansible
 ./build.sh "GNS3 VM" amd64 -e verify=none
 ```
 
-The result is the same appliance a CQU build produces, minus five demonstration projects — the
+The result is the same appliance a CQU build produces, minus the demonstration projects — the
 same node types, templates and symbols, from the same manifest. Confirm what it will carry with
 `gns3build.py plan --profile amd64` before building, and what it does carry with `provenance`
 afterwards.
@@ -358,7 +358,7 @@ Until August 2026 this compared the VM against the *other* audience's list, so i
 caught a staff solution on a student OVA. With one appliance there is no other list, so the
 rule is now exact-match — which is stricter, not looser: anything unplanned fails.
 
-Note what it does **not** prove. It inspects the five projects the appliance ships, so it
+Note what it does **not** prove. It inspects the four projects the appliance ships, so it
 says nothing about whether the image set still runs the activities students download for
 themselves. Only `-e verify=all` shows that.
 

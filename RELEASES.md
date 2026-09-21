@@ -11,8 +11,10 @@ Old appliances are never rebuilt or patched.
 
 **From August 2026 a release is two OVAs, not four.** Releases up to and including `v027`
 came in student and staff variants, the staff one carrying the 17 solution projects; the
-appliance now ships five demonstration projects and goes to both audiences unchanged, with
-templates and solutions handed out through Moodle. Rows below `v027` should be read with that
+appliance now ships demonstration projects only and goes to both audiences unchanged, with
+templates and solutions handed out through Moodle. There were five; **from `v030` there are four** —
+`Windows-Host-Demo` moved to Moodle with the handouts, because it cannot work without a Windows VM
+the student builds themselves. Rows below `v027` should be read with that
 in mind — their `-student` / `-staff` filenames are not a naming convention that still exists.
 
 ## Released
