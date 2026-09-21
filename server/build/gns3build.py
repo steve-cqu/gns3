@@ -2106,7 +2106,8 @@ def cmd_projects(args):
         # Recorded whether or not we import: git cannot hold the oversized project files,
         # so this is the only durable statement of which bytes a build was made from.
         if args.record:
-            records.append({"name": name, "project_id": pid, "source": str(path),
+            records.append({"name": name, "project_id": pid,
+                            "source": portable_path(path),
                             "bytes": path.stat().st_size, "sha256": sha256_of(path)})
         if pid in existing:
             print(f"  skip   {name:34} (already imported: {pid})")
@@ -2353,7 +2354,7 @@ def write_import_record(path, profile, records, roots=None):
     p.parent.mkdir(parents=True, exist_ok=True)
     doc = {"profile": profile, "sources": records}
     if roots:
-        doc["roots"] = [{"path": str(r), "git": git_info(r)} for r in roots]
+        doc["roots"] = [{"path": portable_path(r), "git": git_info(r)} for r in roots]
     p.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
 
 
@@ -2388,6 +2389,36 @@ def git_info(path):
         "origin": _cmd_out(["git", "-C", d, "remote", "get-url", "origin"]),
         "dirty": None if status is None else bool(status),
     }
+
+
+def portable_path(p):
+    """Render a build-host path so the provenance can be committed to a public repo.
+
+    Provenance records where each file was read from, and on a build host that is an absolute
+    path under somebody's home directory — on the Mac, one whose username is an email address.
+    That is an unnecessary disclosure in a public repo and it tells a reader nothing: the home
+    directory of the machine that happened to run the build is not a fact about the build.
+    Anchor it to this repo instead, the one directory every build has in common, so the same
+    tree recorded from a Mac and from a Linux box produces the same string.
+
+    Paths outside the home directory are left alone — `/home/gns3/projects` on the appliance is
+    a real, portable location and rewriting it would lose meaning rather than protect anything.
+    """
+    try:
+        q = Path(os.path.expanduser(str(p))).resolve()
+    except (OSError, ValueError):
+        return str(p)
+    root = REPO_ROOT.resolve()
+    # The projects live in a sibling checkout (gns3-dev), hence the second anchor.
+    for base, prefix in ((root, ""), (root.parent, "../")):
+        try:
+            return prefix + q.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    try:
+        return "~/" + q.relative_to(Path.home()).as_posix()
+    except (ValueError, RuntimeError):
+        return q.as_posix()
 
 
 def stamp_release(prov):
