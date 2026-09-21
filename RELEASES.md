@@ -39,7 +39,7 @@ They are the best available evidence, not a recorded fact:
 
 Every release from v030 on is stamped at build time and needs no reconstruction.
 
-### Keys in this repository's history
+### Keys in this repository, and in the project files
 
 Four private SSH keys are retrievable from this repository's git history:
 `server/docker/{alpinenode,ubuntunode}/gns3_student_{ed25519,rsa}_key.prv`, added in September 2025
@@ -55,6 +55,24 @@ They are documented here rather than purged. Rewriting history would change ever
 including the ones the rows above cite as the definition of what each cohort received — and the
 provenance record is worth more than removing keys that authorise nothing. Decided 19 September
 2026 (public-repo review, D10).
+
+**The same pair is also inside project files, and that is current content rather than history.** A
+`.gns3project` archive carries each Docker node's persisted directories — the node images declare
+`/home/student`, `/root/.ssh` and `/etc/ssh` as `VOLUME` — so a project exported before 5 August
+2026 froze whatever keys those directories happened to hold. Nineteen of the projects in
+`gns3-dev` carry that shared pair, and beside it an `authorized_keys` that accepts it. One of the
+nineteen, `GNS3-Intro-Solution`, is on the appliance, so **every release including `v030` ships it
+there**; the rest reach whoever downloads those projects. Each project also carries its nodes'
+generated SSH *host* keys, which is why two students' nodes present the same host identity.
+
+**The assessment above is unchanged** — these authorise lab containers whose password is the
+published `gns3`, inside a student's own virtual network, and nothing else. **The remedy is
+different, because a project file has no history to rewrite: it is simply re-exported.** That work
+is scheduled *after* the T3 2026 release rather than before it. Stripping the keys changes what
+several activities' documented walkthroughs show — `ansible-basics` documents `ssh-copy-id`
+reporting that the keys are already present — so each affected activity has to be re-verified, and
+that is not work to start three weeks before an OVA. Tracked in
+`gns3-dev/notes/project-key-hygiene.md` in the private repo.
 
 ### Post-release fixes
 
