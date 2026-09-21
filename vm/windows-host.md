@@ -211,8 +211,10 @@ lab network.
 > Step B. If your project shows **`eth2 not found`** when it starts, this is why. Right-click the
 > node, choose *Configure*, and select **`eth1`** on the *Ethernet interfaces* tab.
 >
-> The ready-made demo project has a Mac version for this reason – use
-> `Windows-Host-Demo-Mac.gns3project` rather than `Windows-Host-Demo.gns3project`.
+> **Your Mac appliance already carries the right version**, so there is nothing to download or
+> choose: the demo project ships in two builds, the Mac one bound to `eth1` and the PC one to
+> `eth2`, and both appear as *Windows-Host-Demo*. You only need the change above if you imported
+> the project file yourself from somewhere else.
 
 ## Step 9: Check It Works
 
@@ -512,6 +514,13 @@ they actually catch people.
 5. **If macOS never asked for your Mac password** when you first started a project containing a
    *Windows Host* node, promiscuous mode was never requested. That usually means the node is bound to
    the wrong interface, so go back to Step 8 and Mac Step C.
+6. **If macOS asked and you dismissed it, or left it unanswered**, nothing will work and starting the
+   project again will not ask a second time. Fusion turns network monitoring off after a refusal and
+   **only asks again when the adapter is disconnected and reconnected**: shut the GNS3 VM down, open
+   its *Settings* → *Network*, untick and re-tick *Connect Network Adapter* on the `cqulab` adapter,
+   then start the project again and answer the prompt. Leaving the prompt sitting unanswered is worse
+   than refusing it – Fusion holds a message box against the virtual machine, and the whole GNS3 VM
+   stops responding until you dismiss it in Fusion's window.
 
 **Windows Setup stopped on "must support TPM 2.0".** You started the machine before adding a TPM.
 There is no way forward from that screen: shut the machine down, add the TPM as in Mac Step D, and
