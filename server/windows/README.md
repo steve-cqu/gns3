@@ -82,7 +82,8 @@ counterpart to TCPView.
 appliance. It built the machine, Windows installed, and the machine joined a topology and
 answered ssh from a GNS3 node. Two cycles were run: the first needed a person at two screens
 and found six defects; the second closed both screens. `new-windows-host.sh` and the ARM64
-answer file have still never been run.
+answer file had still never been run **when this section was written**; they were, the next day,
+and found six more — see **The Mac path** below.
 
 **What the run proved:**
 
@@ -171,9 +172,12 @@ were open here are now settled, and one of them was wrong:
 Use `--dry-run` (`-DryRun`) first on both. Each prints every command it would run, and the
 Fusion one prints the whole `.vmx`, so the first test can be read before it is executed.
 
-Both installers finish by running `configure-windows-host.ps1` in the guest, so that script
-is the one piece a student can always fall back to running by hand — and it *is* proven, on
-a real Windows 11 VM on both architectures, and now under automation as well.
+**`New-WindowsHost.ps1` finishes by running `configure-windows-host.ps1` in the guest;
+`new-windows-host.sh` cannot.** Windows 11 25H2 never reads the ARM64 answer file from the
+unattend CD, so nothing runs at first logon on a Mac and the student runs the script by hand
+from that disc — step 5 of **The Mac path**. That fallback is the one piece a student can always
+resort to, and it *is* proven, on a real Windows 11 VM on both architectures, and under
+automation on the PC.
 
 ### A Linux host is not a case this script knows about
 
@@ -228,7 +232,9 @@ in `new-windows-host.sh` and verified on a VM built fresh by the fixed script.
 ### The procedure, in order
 
 1. `./new-windows-host.sh --list` to find which `vmnetN` is `cqulab`, then
-   `./new-windows-host.sh --iso <arm64.iso> --vmnet vmnetN`.
+   `./new-windows-host.sh --iso <arm64.iso> --vmnet vmnetN --no-start`. **Pass `--no-start`**:
+   the script starts the VM by default, and step 2 needs it powered off — a VM that boots without
+   a TPM stops in Setup and has to be shut down again.
 2. **Add a TPM, powered off.** *Settings* → turn on **Encryption** (partial is enough) → *Add
    Device* → *Trusted Platform Module*. This cannot be scripted: a vTPM needs Fusion-generated EK
    certificates (`vtpm.ekCSR` / `vtpm.ekCRT`) and an encrypted VM. `managedvm.autoAddVTPM` in the

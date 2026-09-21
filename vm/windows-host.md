@@ -422,12 +422,17 @@ that screen except to go back and do this.
 machine for you – adapters, disk, both discs – in one command:
 
 ```
-./new-windows-host.sh --iso ~/Downloads/<your-arm64-iso>.iso --vmnet vmnetN
+./new-windows-host.sh --iso ~/Downloads/<your-arm64-iso>.iso --vmnet vmnetN --no-start
 ```
 
 Run `./new-windows-host.sh --list` first to find which `vmnetN` you renamed `cqulab`. The script
 still cannot add the TPM – no script can, because Fusion generates the keys itself – so do that part
 by hand as above before first boot.
+
+**Use `--no-start`, as above.** Without it the script starts the machine as soon as it has built it,
+and Windows Setup then stops on the TPM screen because you have not had the chance to add one yet.
+With `--no-start` the machine is built and left shut down, which is exactly where it needs to be:
+add the TPM, then start it yourself from Fusion's window.
 
 ### Mac Additions to Step 4
 
