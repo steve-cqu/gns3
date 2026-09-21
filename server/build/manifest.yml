@@ -202,7 +202,16 @@ auto_updates:
 # lease from the student's own lab the moment an activity runs a DHCP server. The filename
 # must sort after the appliance's 80_/90_ files — netplan merges in order, last one wins.
 #
-# Absent on a VM with only two adapters, which the phase reports and tolerates.
+# **Which interface this is depends on the platform, so each one overrides it.** A PC's GNS3 VM
+# has three adapters — NAT, host-only, lab — so the lab is eth2. The Apple Silicon VM has two —
+# NAT and lab — so the lab is eth1, and eth1 on a PC is the host-only adapter the student's
+# browser reaches GNS3 on, which must keep its DHCP lease. Getting this backwards on either
+# platform is worse than not running the phase at all, which is why it is not a single constant.
+# The value below is the fallback; `platforms.<p>.lab_nic_interface` is what actually applies.
+#
+# Until 21 September 2026 this said `eth2` for everyone, so the phase wrote a file naming an
+# interface no Mac appliance has and the real lab NIC kept `dhcp4: yes`. The bug was invisible
+# because the phase reported "eth2 is not present on this VM" and returned 0.
 lab_nic:
   interface: eth2
   netplan_file: /etc/netplan/95-cqu-lab-nic.yaml
@@ -227,8 +236,8 @@ profiles:
 # Nodes enabled per platform, in install order. Keys reference `nodes:` below.
 #
 # This list is deliberately NOT trimmed to the projects in projects.txt. The appliance ships
-# five demonstration projects but has to run every activity, because students import the rest
-# themselves — so the images stay complete.
+# a handful of demonstration projects but has to run every activity, because students import the
+# rest themselves — so the images stay complete.
 # NOTE: amd64 now uses the Docker FRR/NETem nodes (frrnode/netemnode) rather than the
 # Qemu ones — this bakes in the Qemu->Docker migration.
 #
@@ -255,6 +264,7 @@ profiles:
 platforms:
   amd64:
     docker_platform: linux/amd64      # docker build --platform
+    lab_nic_interface: eth2           # 3 adapters: NAT, host-only, lab
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, suricata,
              frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
@@ -288,6 +298,7 @@ platforms:
     builtin: [windowshost]
   arm64:
     docker_platform: linux/arm64/v8
+    lab_nic_interface: eth1           # 2 adapters: NAT, lab — there is no eth2 here
     docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
              net_toolbox, auth-kerberos, ipv6node, suricata,
              frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
@@ -596,6 +607,11 @@ nodes:
   # beside the GNS3 VM is reachable. There is no image: the template IS the node. It is
   # listed here so `templates` and `validate` pick it up; `docker` and `qemu` select by kind
   # and ignore it.
+  #
+  # The interface in cloud-windowshost.conf is NOT authoritative: `read_template()` rewrites a
+  # cloud template's port mapping to `platforms.<p>.lab_nic_interface` at registration, so the
+  # file's eth2 applies to amd64 and arm64 gets eth1. Change the platform key, not the file —
+  # and do not add a second -arm64.conf, which would mean two template_ids for one node.
   #
   # Note for anyone editing cloud-windowshost.conf: cloud templates reject a `usage` field
   # (qemu and docker templates accept one), so the node's explanation lives in the student

@@ -179,12 +179,32 @@ def template_names(m, platform, include_optional=False, extra=()):
     return out
 
 
-def read_template(m, name):
-    """Load templates/<name>.conf as a JSON template object."""
+def read_template(m, name, platform=None):
+    """Load templates/<name>.conf as a JSON template object.
+
+    With a `platform`, a **cloud** template's port mapping is rewritten to that platform's lab
+    NIC (`platforms.<p>.lab_nic_interface`). A cloud template binds one of the appliance's own
+    interfaces, and which interface the lab NIC is depends on the platform: a PC's GNS3 VM has
+    three adapters so it is `eth2`, the Apple Silicon VM has two so it is `eth1`. The stored
+    file says `eth2`, which was silently wrong on arm64 — a student dragging a *Windows Host*
+    node onto the canvas there got `eth2 not found` at start, with nothing to suggest why.
+
+    Patched here rather than kept as a second `-arm64.conf` so there is one template_id, one
+    name and one file, and so the template cannot drift from the `labnic` phase: both now read
+    the same manifest key. Callers that only want ids, images or symbols pass no platform and
+    get the file unchanged.
+    """
     f = m["_templates_dir"] / f"{name}.conf"
     if not f.exists():
         raise FileNotFoundError(f"template file not found: {f}")
-    return json.loads(f.read_text())
+    t = json.loads(f.read_text())
+    if platform and t.get("template_type") == "cloud":
+        iface = m.get("platforms", {}).get(platform, {}).get("lab_nic_interface")
+        if iface:
+            for pm in t.get("ports_mapping", []):
+                if pm.get("interface") != iface:
+                    pm["interface"] = pm["name"] = iface
+    return t
 
 
 def select_nodes(m, platform, kind, only, extra=()):
@@ -510,7 +530,7 @@ def cmd_templates(args):
     created = skipped = failed = 0
     for name in names:
         try:
-            body = read_template(m, name)
+            body = read_template(m, name, platform)
         except Exception as e:
             print(f"  ERROR  {name}: {e}")
             failed += 1
@@ -1451,7 +1471,18 @@ def cmd_labnic(args):
     """
     m = load_manifest(args.manifest)
     cfg = m.get("lab_nic") or {}
-    iface = args.interface or cfg.get("interface", "eth2")
+
+    # Which interface the lab NIC is depends on the platform, so the profile decides it:
+    # a PC's VM has three adapters and the lab is eth2, the Apple Silicon VM has two and it
+    # is eth1. Naming the wrong one is worse than doing nothing — eth1 on a PC is the
+    # host-only adapter the student reaches GNS3 through, and it must keep its lease — so
+    # this resolves explicitly rather than guessing from what is present.
+    platform = profile_platform(m, args.profile) if getattr(args, "profile", None) else None
+    per_platform = (m.get("platforms", {}).get(platform, {}).get("lab_nic_interface")
+                    if platform else None)
+    iface = args.interface or per_platform or cfg.get("interface", "eth2")
+    source = ("--interface" if args.interface else
+              f"platforms.{platform}" if per_platform else "lab_nic.interface (no profile given)")
     path = args.netplan_file or cfg.get("netplan_file", "/etc/netplan/95-cqu-lab-nic.yaml")
 
     text = (
@@ -1474,7 +1505,7 @@ def cmd_labnic(args):
         "      optional: true\n"
     )
 
-    print(f"lab NIC {iface}  ->  {path}")
+    print(f"lab NIC {iface}  ->  {path}   [{source}]")
 
     if args.dry_run:
         print(f"  [dry-run] write {path}")
@@ -1496,9 +1527,14 @@ def cmd_labnic(args):
     # Writing the file covers every future boot; `ip link set … up` covers this one.
     if not Path(f"/sys/class/net/{iface}").exists():
         print(f"  INFO   {iface} is not present on this VM")
-        print(f"         Nothing is wrong: the appliance ships the config, and the interface")
-        print(f"         appears once a third adapter is attached to the VM. See the Windows")
-        print(f"         Host section of server/README.md.")
+        if platform == "arm64":
+            print(f"         This IS worth a look on arm64: the Apple Silicon VM is meant to")
+            print(f"         have two adapters, so a missing {iface} means the lab adapter was")
+            print(f"         never attached — check the VM's Network Adapter 2 in Fusion.")
+        else:
+            print(f"         Nothing is wrong: the appliance ships the config, and the interface")
+            print(f"         appears once a third adapter is attached to the VM. See the Windows")
+            print(f"         Host section of server/README.md.")
         return 0
 
     rc = subprocess.run(["sudo", "ip", "link", "set", iface, "up"]).returncode
@@ -2716,6 +2752,9 @@ def main():
     nv.add_argument("--dry-run", action="store_true")
 
     ln = sub.add_parser("labnic", help="bring up the Windows Host lab NIC (run on the VM)")
+    ln.add_argument("--profile",
+                    help="picks the platform's lab NIC (amd64 eth2, arm64 eth1); without it "
+                         "the manifest's lab_nic.interface default is used")
     ln.add_argument("--interface", help="override the manifest's lab_nic.interface")
     ln.add_argument("--netplan-file", help="override the manifest's lab_nic.netplan_file")
     ln.add_argument("--dry-run", action="store_true")

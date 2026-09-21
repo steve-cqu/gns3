@@ -206,7 +206,12 @@ ip link set eth0 up
 The *Windows Host* node needs no configuration. It has a single port, which is already joined to the
 lab network.
 
-> **On a Mac, the node must use `eth1`, not `eth2`.** The *Windows Host* node is a Cloud node bound
+> **On a Mac the node uses `eth1`, not `eth2`.** A *Windows Host* node you drag from the GNS3
+> templates is already correct — on a Mac appliance the template binds `eth1`. What is not
+> automatic is a project someone **exported on a PC**: it carries `eth2` inside the file, which is
+> why the demo project comes in two versions.
+>
+> The *Windows Host* node is a Cloud node bound
 > to the GNS3 VM's lab adapter, and that adapter is `eth2` on a PC but `eth1` on a Mac – see Mac
 > Step B. If your project shows **`eth2 not found`** when it starts, this is why. Right-click the
 > node, choose *Configure*, and select **`eth1`** on the *Ethernet interfaces* tab.

@@ -556,7 +556,7 @@ the VM (`cd ~/git/gns3/server/build`):
 ./gns3build.py quiesce                     # mask Ubuntu's unattended-upgrade timers
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + the gns3-novnc service
-./gns3build.py labnic                      # the Windows Host lab NIC (eth2)
+./gns3build.py labnic --profile arm64      # the Windows Host lab NIC (eth2 amd64 / eth1 arm64)
 ./gns3build.py projects  --profile amd64   # import the projects in projects.txt
 ./gns3build.py export-check --profile amd64
 ./gns3build.py provenance   --profile amd64
@@ -922,9 +922,22 @@ The build contributes three things, all automatic:
 
 | Piece | Where |
 |---|---|
-| The **Windows Host** template — a Cloud node locked to `eth2` | `templates/cloud-windowshost.conf`, registered by `templates` |
+| The **Windows Host** template — a Cloud node bound to the platform's lab NIC, `eth2` on amd64 and **`eth1` on arm64** | `templates/cloud-windowshost.conf`, registered by `templates`, which rewrites the interface from `platforms.<p>.lab_nic_interface` |
 | The `computer-windows.svg` symbol | `../images/symbols/`, installed by `logos` |
-| DHCP turned **off** on `eth2` | the `labnic` phase, `lab_nic:` in the manifest |
+| DHCP turned **off** on the lab NIC — `eth2` on amd64, **`eth1` on arm64** | the `labnic` phase, `platforms.<p>.lab_nic_interface` in the manifest |
+
+**Which interface it is depends on the platform.** A PC's GNS3 VM has three adapters — NAT,
+host-only, lab — so the lab NIC is `eth2`. The Apple Silicon VM has **two**, NAT and lab, so it is
+**`eth1`**. The phase takes it from `platforms.<profile>.lab_nic_interface`, which is why `labnic`
+needs `--profile` when run on its own; `--interface` still overrides both. Do not "simplify" this
+to one constant or to "whichever interface is last": `eth1` on a PC is the host-only adapter the
+student's browser reaches GNS3 through, and turning DHCP off there would strand them.
+
+**This was wrong until 21 September 2026** — the interface was a single `eth2` for both platforms,
+so on every Mac appliance the phase wrote a file naming an interface that does not exist, reported
+`eth2 is not present on this VM`, exited 0, and left the real lab NIC on `dhcp4: yes`. Appliances
+built before that date have the defect; a rebuild fixes it, or run the phase by hand with
+`--profile arm64`.
 
 **Why `labnic` exists.** The stock appliance already declares `eth2`–`eth8` in
 `80_gns3vm_default_netcfg.yaml` and brings them up — but with `dhcp4: yes`. A Cloud node
@@ -936,15 +949,18 @@ merges over the appliance's own file — hence the `95-` prefix, since netplan m
 lexical order and the last definition wins. Check the merged result with:
 
 ```sh
-sudo netplan get ethernets.eth2      # expect dhcp4: false, dhcp6: false, optional: true
+sudo netplan get ethernets.eth2      # amd64 — expect dhcp4: false, dhcp6: false, optional: true
+sudo netplan get ethernets.eth1      # arm64 — the same three
 ```
 
 It deliberately does **not** run `netplan apply`: that can bounce every interface, and the
 phase runs over ssh on `eth0`, so applying would kill the connection driving the build. The
 file covers every future boot; `ip link set eth2 up` covers the current one.
 
-On a VM with only two adapters the phase writes the file, reports that `eth2` is absent and
-exits 0 — nothing is wrong, the interface appears when a third adapter is attached.
+On an **amd64** VM with only two adapters the phase writes the file, reports that `eth2` is absent
+and exits 0 — nothing is wrong, the interface appears when a third adapter is attached. On
+**arm64** a missing `eth1` is not benign and the phase says so: the Apple Silicon VM is meant to
+have two adapters, so it means the lab adapter was never attached.
 
 **Editing the template:** cloud templates reject a `usage` field, unlike qemu and docker
 ones, so the node cannot carry its own explanation in the GNS3 UI; that lives in the student
