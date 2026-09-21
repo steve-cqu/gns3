@@ -36,7 +36,8 @@ Three pieces have to line up.
 - **A private network inside VirtualBox.** This is a network that only your virtual machines can
   see. It is not connected to the internet, to CQUniversity, or to anything else on your computer.
 - **A third network adapter on the GNS3 VM**, connected to that private network. Inside the GNS3 VM
-  this adapter is called `eth2`.
+  this adapter is called `eth2`. *(On a Mac there is no third adapter and the lab network is `eth1`
+  — see the Apple Mac section.)*
 - **A *Windows Host* node in your GNS3 project**, which is joined to `eth2`. Anything you connect
   this node to in GNS3 can reach the Windows machine, and the other way around.
 
@@ -205,6 +206,14 @@ ip link set eth0 up
 The *Windows Host* node needs no configuration. It has a single port, which is already joined to the
 lab network.
 
+> **On a Mac, the node must use `eth1`, not `eth2`.** The *Windows Host* node is a Cloud node bound
+> to the GNS3 VM's lab adapter, and that adapter is `eth2` on a PC but `eth1` on a Mac – see Mac
+> Step B. If your project shows **`eth2 not found`** when it starts, this is why. Right-click the
+> node, choose *Configure*, and select **`eth1`** on the *Ethernet interfaces* tab.
+>
+> The ready-made demo project has a Mac version for this reason – use
+> `Windows-Host-Demo-Mac.gns3project` rather than `Windows-Host-Demo.gns3project`.
+
 ## Step 9: Check It Works
 
 From the Linux Host console:
@@ -266,10 +275,27 @@ for example `-LabGateway 10.10.1.1`.
 
 Everything in this guide works on an Apple Mac, including Apple Silicon, using VMWare Fusion instead
 of VirtualBox. The idea is identical – a private network joining the GNS3 VM and a Windows machine –
-but Fusion uses different words for the same things, and there are two extra jobs a PC does not have.
+but Fusion uses different words for the same things, and there are several extra jobs a PC does not
+have.
 
-**Read this section in place of Steps 2 and 3.** Steps 1 and 5 to 9 are the same, and Step 4 has two
-additions noted below.
+**Read this section in place of Steps 2, 3 and 5.** Steps 6, 7 and 9 are the same. Step 4 has three
+additions noted below, and Step 8 has one difference.
+
+**The Mac is more hands-on than the PC, and deliberately so.** On a PC one command builds the machine
+and Windows installs itself unattended. On a Mac, Windows 11's installer ignores the disc that would
+answer its questions, so you click through Setup yourself, and two jobs – adding a TPM and installing
+VMWare Tools – can only be done from Fusion's menus. Expect to sit with it. Everything below is
+written in the order it happens, and every one of these steps exists because skipping it fails in a
+way that points somewhere else entirely.
+
+| What differs on a Mac | Where |
+|---|---|
+| The GNS3 VM has **two** adapters, and the lab network is **`eth1`** not `eth2` | Mac Step B |
+| The Windows machine needs a **TPM added by hand** before first boot | Mac Step D |
+| You answer Windows Setup yourself, and choose **Windows 11 Pro** | Mac Additions to Step 4 |
+| **VMWare Tools** is required or Windows has no network at all | Mac Additions to Step 4 |
+| The lab script is run **from the disc**, not downloaded | Mac Step E |
+| The *Windows Host* node binds to **`eth1`** | Step 8 |
 
 ### What Fusion Calls Things
 
@@ -310,54 +336,55 @@ asks for your Mac password – that is expected, and the project starts as soon 
 
 Click *Apply*.
 
-### Mac Step B: Add a Third Adapter to the GNS3 VM
+### Mac Step B: Point the GNS3 VM's Second Adapter at `cqulab`
 
 Shut the GNS3 VM down properly first. Closing the GNS3 window in your browser is not enough.
 
-With the GNS3 VM selected, choose *Settings*, click *Add Device*, then *Network Adapter*, then *Add*.
-It appears as *Network Adapter 3*. The GNS3 VM now has three adapters. Set them like this:
+**On a Mac the GNS3 VM keeps the two adapters it already has – you do not add a third.** Select it,
+choose *Settings*, then *Network*, and set them like this:
 
-| Adapter | Set it to | What it is for |
-|---|---|---|
-| Network Adapter | *Private to my Mac* | How your browser reaches GNS3 |
-| Network Adapter 2 | **`cqulab`** | The lab network |
-| Network Adapter 3 | *Share with my Mac* | How the GNS3 VM reaches the internet |
-
-![The GNS3 VM's three network adapters](../images/windows-host-fusion-gns3vm-adapters-1.png)
+| Adapter | Set it to | What it is for | Inside the GNS3 VM |
+|---|---|---|---|
+| Network Adapter | *Share with my Mac* | The internet, and how your browser reaches GNS3 | `eth0` |
+| Network Adapter 2 | **`cqulab`** | The lab network | **`eth1`** |
 
 ![Network Adapter 2 set to the custom network cqulab](../images/windows-host-fusion-gns3vm-adapter2-1.png)
 
-Yes, the lab network goes in the **middle** and the internet adapter goes last. That looks wrong, and
-it is deliberate. Inside the GNS3 VM the adapters do not always appear in the order Fusion lists them,
-and this arrangement is the one that puts the lab network on `eth2` – the only adapter the *Windows
-Host* node ever uses. Mac Step C checks whether it worked out that way on your Mac.
+**This is the one place the Mac differs from the PC for the rest of the guide.** A PC's GNS3 VM has
+three adapters and its lab network is `eth2`; yours has two and the lab network is **`eth1`**. Every
+later step that mentions `eth2` means `eth1` on a Mac, and Step 8 says so again where it matters.
 
-### Mac Step C: Check the Lab Adapter Really Is `eth2`
+Two adapters rather than three is deliberate. Fusion does not always give an adapter the position you
+expect – one added later through *Add Device* can take a slot that makes it appear **before** the
+ones already there, silently swapping the lab and internet networks. With only two adapters, both
+present from the start, the order is predictable: the first is `eth0` and the second is `eth1`.
 
-This step has no PC equivalent and it is worth the five minutes. The *Windows Host* node only ever
-uses `eth2`, and Fusion does not always give the adapter you added last the position you expect.
+### Mac Step C: Check the Lab Adapter Really Is `eth1`
+
+This step has no PC equivalent and it takes two minutes. If the lab network has landed on the wrong
+interface, nothing will ever reach Windows and it will look exactly like a firewall problem.
 
 Start the GNS3 VM, log in at its console, and run:
 
 ```
-ip -br link show
+ip -br addr show
 ```
 
-Write down the MAC address – the six pairs of letters and numbers – shown against `eth2`.
+You should see exactly two real interfaces. **`eth0` has an address on it** – that is the *Share with
+my Mac* adapter. **`eth1` has no address at all** – that is `cqulab`, the lab network. An interface
+with no address is what you want here: your GNS3 project supplies the addresses, not your Mac.
 
-Now on your Mac open *Terminal* and run:
+If you want to be certain, compare the MAC addresses. Note the one shown against `eth1`, then on your
+Mac open *Terminal* and run:
 
 ```
 grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx
 ```
 
-Find the block whose `connectionType` is `custom`, which is the `cqulab` adapter, and compare its
-`generatedAddress` with the MAC address you wrote down.
-
-**If they match, you are finished with this step.** If they do not, the lab network has landed on the
-wrong interface and nothing will ever reach Windows. Shut the GNS3 VM down, open its *Settings*, and
-swap *Network Adapter 2* and *Network Adapter 3* over – so `cqulab` moves to Adapter 3 and *Share with
-my Mac* moves to Adapter 2. Start it again and check once more.
+Find the block whose `connectionType` is `custom` – that is the `cqulab` adapter – and check its
+`generatedAddress` matches. **If `eth1` is the one with no address and the MACs match, you are
+finished with this step.** If `eth0` and `eth1` are the other way round, shut the GNS3 VM down and
+swap which network each adapter attaches to in *Settings*, then check again.
 
 ### Mac Step D: Create the Windows Virtual Machine
 
@@ -379,38 +406,115 @@ Windows side depends on which adapter came first.
 
 There is no promiscuous mode setting to change on the Windows machine. Only the GNS3 VM needs it.
 
+**Now add a TPM, before you start the machine for the first time.** Windows 11 refuses to install
+without one, and Fusion does not add it for you. With the machine still **shut down**:
+
+1. *Virtual Machine*, then *Settings*.
+2. Turn on **Encryption**. Fusion needs the machine encrypted before it will attach a TPM. Choose a
+   password and **write it down** – you will be asked for it when the machine starts.
+3. Then *Add Device*, **Trusted Platform Module**, *Add*.
+
+If you skip this, Windows Setup runs for a few minutes and then stops with *This PC doesn't currently
+meet Windows 11 system requirements … The PC must support TPM 2.0*, and there is no way forward from
+that screen except to go back and do this.
+
+**If you would rather not click through all of the above**, there is a script that writes the whole
+machine for you – adapters, disk, both discs – in one command:
+
+```
+./new-windows-host.sh --iso ~/Downloads/<your-arm64-iso>.iso --vmnet vmnetN
+```
+
+Run `./new-windows-host.sh --list` first to find which `vmnetN` you renamed `cqulab`. The script
+still cannot add the TPM – no script can, because Fusion generates the keys itself – so do that part
+by hand as above before first boot.
+
 ### Mac Additions to Step 4
 
-Two things happen on a Mac that do not happen on a PC, both while Windows is installing.
+Three things happen on a Mac that do not happen on a PC, all of them while Windows is installing.
 
-**Install VMWare Tools before anything else.** On Apple Silicon, Windows has no driver for Fusion's
-network card, so a newly installed Windows has no network at all – it cannot download the script in
-Step 5, and nothing can reach it. As soon as Windows is installed, choose *Virtual Machine*, then
-*Install VMWare Tools*, run the installer inside Windows, and restart. Nothing else in this guide
-works until you have done this.
+**Choose Windows 11 Pro at the edition screen.** The ARM64 disc offers *Home*, *Home Single Language*
+and *Pro*, and only **Pro** will do – Home has no Remote Desktop server and Step 5's script cannot
+finish on it. The PC disc offers *Education* as well and the PC guide uses it; the ARM64 disc simply
+does not carry it, so Pro is the Mac standard. Nothing in this guide needs what Education adds.
 
-**Getting past "Let's connect you to a network".** For the same reason, the Windows installer refuses
-to continue at that screen. Press **Fn + Shift + F10** to open a command prompt, type
+**Getting past "Let's connect you to a network".** Windows has no working network yet (see the next
+point), so the installer refuses to continue at that screen. Press **Fn + Shift + F10** to open a
+command prompt, type
 
 ```
 start ms-cxh:localonly
 ```
 
-and press Enter. You can then create a local account and carry on. On some builds of Windows 11 that
-command does nothing – use `oobe\bypassnro` instead, which restarts the machine and then offers
-*I don't have internet*.
+and press Enter. You can then create a local account and carry on. Use **`gns3`** as the account name
+and **`gns3`** as the password, and name the machine **`WinHost`** – later steps and the staff check
+expect those. On some builds of Windows 11 that command does nothing – use `oobe\bypassnro` instead,
+which restarts the machine and then offers *I don't have internet*.
+
+**Install VMWare Tools before anything else.** On Apple Silicon, Windows has no driver for Fusion's
+network card, so a newly installed Windows has no network at all. It is worse than it sounds: there
+is no error and no warning, and `Get-NetAdapter` simply lists **nothing**, as though the machine had
+never had a network card fitted. As soon as you reach the desktop, choose *Virtual Machine*, then
+*Install VMWare Tools*, run the installer inside Windows, and restart. Tools installs from a disc on
+your Mac, so it does not need the network it is about to give you. Nothing else in this guide works
+until you have done this.
+
+Afterwards, check it worked before moving on:
+
+```powershell
+Get-NetAdapter
+```
+
+You want **two** adapters listed, both *Up*. If the list is still empty, Tools did not install
+properly – run it again before going any further.
+
+### Mac Step E: Run the Lab Script by Hand
+
+On a PC the disc that comes with the machine answers Setup's questions and runs the lab script for
+you at first logon. **On a Mac it does not** – Windows 11's installer ignores that disc, which is why
+you have just answered every question yourself. The disc is still useful, because the script is on
+it.
+
+So Step 5 is a little different on a Mac: instead of downloading the script, run it from the disc.
+Open **PowerShell as Administrator** – right-click the Start button, then *Terminal (Admin)* – and:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+E:\configure-windows-host.ps1 -IPAddress 10.10.1.20 -ComputerName WinHost
+```
+
+Replace `E:` if the disc arrived as a different letter; `Get-Volume` will show you. Do **not** name an
+adapter with `-LabAdapter` – the script works out for itself which one is the lab adapter, and gets
+it right. It finishes with a line like `OK  changed=8 already-correct=4 failed=0`, then asks to
+restart. Let it.
+
+Then carry on from Step 6.
 
 ### If It Does Not Work on a Mac
 
-Everything in *If It Does Not Work* above still applies. Check these three first.
+Everything in *If It Does Not Work* above still applies. Check these first – they are in the order
+they actually catch people.
 
-1. **Both machines must be on `cqulab`.** Check the GNS3 VM's third adapter and the Windows machine's
-   second adapter in Fusion. They must both name the same network.
-2. **Check `eth2`**, as in Mac Step C. This is the most common cause on a Mac, and it looks exactly
+1. **`eth2 not found` when the project starts.** The *Windows Host* node is bound to `eth2`, which
+   exists on a PC and not on a Mac. Change it to **`eth1`** – see Step 8.
+2. **`Get-NetAdapter` inside Windows lists nothing at all.** VMWare Tools is not installed. This is
+   not a firewall problem and not a GNS3 problem – Windows genuinely has no network card it can use.
+   See *Mac Additions to Step 4*.
+3. **Both machines must be on `cqulab`.** Check the GNS3 VM's **second** adapter and the Windows
+   machine's second adapter in Fusion. They must both name the same network.
+4. **Check `eth1` is the one with no address**, as in Mac Step C. When this is wrong it looks exactly
    like a firewall problem – everything appears configured correctly and nothing replies.
-3. **If macOS never asked for your Mac password** when you first started a project containing a
+5. **If macOS never asked for your Mac password** when you first started a project containing a
    *Windows Host* node, promiscuous mode was never requested. That usually means the node is bound to
-   the wrong interface, so go back to Mac Step C.
+   the wrong interface, so go back to Step 8 and Mac Step C.
+
+**Windows Setup stopped on "must support TPM 2.0".** You started the machine before adding a TPM.
+There is no way forward from that screen: shut the machine down, add the TPM as in Mac Step D, and
+start again. Nothing is lost – Windows had not begun installing.
+
+**Windows Setup asked which edition to install.** That is expected on a Mac, and the answer is
+**Windows 11 Pro**. Setup asks because the disc that answers these questions on a PC is ignored by
+the ARM64 installer.
 
 ## What This Does and Does Not Do
 

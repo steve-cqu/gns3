@@ -26,13 +26,22 @@
 #   - it does not download a Windows ISO, and it does not activate Windows
 #   - on Apple Silicon it cannot finish the job unaided: see APPLE SILICON below
 #
-# APPLE SILICON. Windows 11 ARM64 has no in-box driver for Fusion's default vmxnet3
-# adapter, so a freshly installed machine has no network at all. This script asks for
-# e1000e instead, which Windows should have a driver for - that is the intended fix and it
-# is the first thing to verify when you test this. If the machine still has no network,
-# install VMware Tools from Fusion's menu and it will appear. You may also have to bypass
-# Setup's "Let's connect you to a network" screen: Fn+Shift+F10, then
-#     start ms-cxh:localonly
+# APPLE SILICON needs three things this script cannot do for you. Measured 21 September
+# 2026 on Fusion 26; each one looks like a different fault than it is.
+#
+#   1. ADD A TPM before first boot, or Setup stops on "must support TPM 2.0". Fusion will
+#      not accept a hand-written one. Powered off: Settings > Encryption (turn it on),
+#      then Add Device > Trusted Platform Module. This encrypts the VM, which also means
+#      vmrun can no longer start or stop it - use Fusion's window from then on.
+#   2. INSTALL VMWARE TOOLS for the network. ARM64 Windows has no in-box driver for either
+#      adapter this script can offer; Tools carries vmxnet3 and installs from a local ISO
+#      with no network needed. Without it Get-NetAdapter returns nothing at all.
+#   3. ANSWER SETUP BY HAND. Windows 11 25H2 does not read autounattend.xml from a second
+#      CD, so the unattend ISO configures nothing during Setup - it is only how
+#      configure-windows-host.ps1 reaches the guest. Accepted for the Mac path (Steve,
+#      21 Sep 2026): few students, and remastering an 8 GB ISO is not worth it. Bypass the
+#      Microsoft-account screen with Fn+Shift+F10 then  start ms-cxh:localonly  and make a
+#      local gns3 / gns3 account, then run E:\configure-windows-host.ps1 yourself.
 #
 # Safe to re-run: if the VM folder already exists this stops rather than overwriting it.
 #
@@ -113,8 +122,8 @@ VDISK="$FUSION/Contents/Library/vmware-vdiskmanager"
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    arm64)  GUEST_OS="arm-windows11-64" ;;
-    x86_64) GUEST_OS="windows11-64" ;;
+    arm64)  GUEST_OS="arm-windows11-64"; NIC_DEV=vmxnet3 ;;
+    x86_64) GUEST_OS="windows11-64";     NIC_DEV=e1000e  ;;
     *)      die "unexpected architecture: $ARCH" ;;
 esac
 
@@ -217,15 +226,35 @@ echo
 #
 # Written by hand on purpose. Two things in here are load-bearing:
 #
-#  1. pciSlotNumber on both adapters. Fusion assigns these itself when an adapter is added
-#     through the UI, and a later-added adapter can get a high bridge-encoded slot that the
-#     guest enumerates FIRST. Pinning 160 and 192 here fixes NAT as the first interface and
-#     the lab as the second, on every machine this builds.
-#  2. virtualDev = e1000e rather than Fusion's default vmxnet3. Windows 11 ARM64 ships no
-#     vmxnet3 driver, so a default Fusion VM installs with no network at all. e1000e is
-#     expected to be in-box on both architectures. UNVERIFIED on ARM64 - it is the first
-#     thing to check when this script is tested, and --list prints the guest type so you
-#     can see what was asked for.
+#  1. pciSlotNumber on both adapters, AND the pcieRootPort bridges those slots hang off.
+#     Fusion assigns slot numbers itself when an adapter is added through the UI, and a
+#     later-added adapter can get a high bridge-encoded slot that the guest enumerates
+#     FIRST. Pinning 160 and 192 here fixes NAT as the first interface and the lab as the
+#     second, on every machine this builds.
+#
+#     160 and 192 are not free-standing numbers: they are slots BEHIND pciBridge4 and
+#     pciBridge5. On ARM64 every device is PCIe, so a NIC must attach to a root port, and
+#     a .vmx that pins those slots without declaring the bridges has nowhere to put the
+#     adapter. Fusion 26 on Apple Silicon rejects it outright:
+#
+#         No PCIe slot available for Ethernet0. Remove Ethernet0 and try again.
+#
+#     Measured 21 September 2026, and fixed by declaring pciBridge4-7 below. Fusion's own
+#     ARM64 VMs carry the same four bridges at slots 21-24; this matches them deliberately,
+#     so do not renumber one without the other.
+#  2. virtualDev, which is NOT the same on both architectures. Measured 21 September 2026
+#     on Fusion 26 / Apple Silicon, and the August assumption was backwards:
+#
+#       arm64  -> vmxnet3, AND VMware Tools must be installed in the guest.
+#                 Windows 11 ARM64 has NO in-box e1000e driver. A machine built with
+#                 e1000e installs perfectly and reaches the desktop with Get-NetAdapter
+#                 returning NOTHING AT ALL - no adapter, no error, no clue. Tools carries
+#                 the vmxnet3 driver and its ISO is local, so it installs with no network.
+#       x86_64 -> e1000e, which x64 Windows does have in-box. Untested on an Intel Mac.
+#
+#     The order that works on ARM64: install Windows, install VMware Tools from Fusion's
+#     menu, then power on with vmxnet3. This script asks for vmxnet3 up front, so Tools is
+#     the only manual step.
 # --------------------------------------------------------------------------- #
 vmx_body() {
     cat <<VMXEOF
@@ -236,6 +265,25 @@ displayName = "$NAME"
 guestOS = "$GUEST_OS"
 firmware = "efi"
 
+# PCIe root ports. Slots 160 and 192 below live behind pciBridge4 and pciBridge5, and on
+# ARM64 a NIC cannot attach without them - see the note above this heredoc.
+pciBridge4.present = "TRUE"
+pciBridge4.virtualDev = "pcieRootPort"
+pciBridge4.functions = "8"
+pciBridge4.pciSlotNumber = "21"
+pciBridge5.present = "TRUE"
+pciBridge5.virtualDev = "pcieRootPort"
+pciBridge5.functions = "8"
+pciBridge5.pciSlotNumber = "22"
+pciBridge6.present = "TRUE"
+pciBridge6.virtualDev = "pcieRootPort"
+pciBridge6.functions = "8"
+pciBridge6.pciSlotNumber = "23"
+pciBridge7.present = "TRUE"
+pciBridge7.virtualDev = "pcieRootPort"
+pciBridge7.functions = "8"
+pciBridge7.pciSlotNumber = "24"
+
 memsize = "$MEMORY"
 numvcpus = "$CPUS"
 cpuid.coresPerSocket = "1"
@@ -244,31 +292,43 @@ nvme0.present = "TRUE"
 nvme0:0.present = "TRUE"
 nvme0:0.fileName = "$NAME.vmdk"
 
+# The CDs start at sata0:1, NOT sata0:0. On Fusion 26 / Apple Silicon, AHCI port 0 hands
+# the firmware an empty drive however it is backed: EFI reports
+#     Status upon boot failure: No Media
+# for the Windows ISO and falls through to EFI Network, which looks exactly like a bad or
+# non-bootable ISO and is not. Measured 21 September 2026. Fusion's own ARM64 VMs put their
+# CD on sata0:1 and leave port 0 undeclared, which is what this matches.
 sata0.present = "TRUE"
-sata0:0.present = "TRUE"
-sata0:0.deviceType = "cdrom-image"
-sata0:0.fileName = "$ISO_ABS"
-sata0:0.startConnected = "TRUE"
 sata0:1.present = "TRUE"
 sata0:1.deviceType = "cdrom-image"
-sata0:1.fileName = "$UNATTEND_ABS"
+sata0:1.fileName = "$ISO_ABS"
 sata0:1.startConnected = "TRUE"
+sata0:2.present = "TRUE"
+sata0:2.deviceType = "cdrom-image"
+sata0:2.fileName = "$UNATTEND_ABS"
+sata0:2.startConnected = "TRUE"
 
 ethernet0.present = "TRUE"
 ethernet0.connectionType = "nat"
-ethernet0.virtualDev = "e1000e"
+ethernet0.virtualDev = "$NIC_DEV"
 ethernet0.addressType = "generated"
 ethernet0.pciSlotNumber = "160"
 
 ethernet1.present = "TRUE"
 ethernet1.connectionType = "custom"
 ethernet1.vnet = "$VMNET"
-ethernet1.virtualDev = "e1000e"
+ethernet1.virtualDev = "$NIC_DEV"
 ethernet1.addressType = "generated"
 ethernet1.pciSlotNumber = "192"
 
+# usb_xhci is NOT optional on Apple Silicon: the virtual keyboard and mouse are xHCI HID
+# devices, and a VM with only usb (UHCI) and ehci (USB 2.0) boots fine, shows a console, and
+# ignores every keypress and mouse move. It looks exactly like a hung guest and is not.
+# Measured 21 September 2026. Slot 256 sits behind pciBridge7, declared above.
 usb.present = "TRUE"
 ehci.present = "TRUE"
+usb_xhci.present = "TRUE"
+usb_xhci.pciSlotNumber = "256"
 svga.autodetect = "TRUE"
 sound.present = "FALSE"
 floppy0.present = "FALSE"
@@ -279,10 +339,14 @@ VMXEOF
     if [ "$TPM" = yes ]; then
         cat <<'VMXEOF'
 
-# Windows 11 requires a TPM. Fusion adds a software one when asked, so the requirement is
-# MET rather than bypassed - which is why autounattend.xml ships with its bypass registry
-# keys commented out. If Fusion refuses this VM for want of encryption, either accept
-# Fusion's offer to encrypt it, or re-run with --no-tpm and uncomment that block instead.
+# Windows 11 requires a TPM, and THIS LINE DOES NOT PROVIDE ONE. Measured 21 September
+# 2026 on Fusion 26 / Apple Silicon: Fusion ignores managedvm.autoAddVTPM in a .vmx it did
+# not write itself, the VM powers on with no TPM, and Setup stops at
+#     This PC doesn't currently meet Windows 11 ... The PC must support TPM 2.0
+# A real vTPM cannot be written by hand: it needs Fusion-generated EK certificates
+# (vtpm.ekCSR / vtpm.ekCRT) and an encrypted VM (vmx.encryptionType = "partial"), so the
+# TPM has to be added once through Fusion's UI - see ADD THE TPM in the closing output.
+# The line is kept because it costs nothing and newer Fusion builds may honour it.
 managedvm.autoAddVTPM = "software"
 VMXEOF
     fi
@@ -312,8 +376,8 @@ echo "  done     vmx                      $VMX"
 
 echo
 echo "Network"
-echo "  done     ethernet0                NAT (internet), e1000e, slot 160"
-echo "  done     ethernet1                $VMNET (the lab), e1000e, slot 192"
+echo "  done     ethernet0                NAT (internet), $NIC_DEV, slot 160"
+echo "  done     ethernet1                $VMNET (the lab), $NIC_DEV, slot 192"
 
 if [ "$START" = yes ]; then
     echo
@@ -325,7 +389,13 @@ fi
 echo
 echo "The Windows Host VM is building."
 echo
-echo "  Windows takes 30 to 60 minutes and restarts itself several times."
+echo "  ADD THE TPM FIRST, or Setup stops on "must support TPM 2.0". Fusion will not take
+  a hand-written one: with the VM powered off, open Virtual Machine > Settings,
+  turn on Encryption (partial is enough), then Add Device > Trusted Platform Module.
+  Verified 21 September 2026 on Fusion 26. Skip this only if you passed --no-tpm, which
+  needs the bypass registry keys in autounattend.xml uncommented instead.
+
+  Windows takes 30 to 60 minutes and restarts itself several times."
 echo
 echo "  Watch for two things on Apple Silicon:"
 echo "    - if Setup stops at 'Let's connect you to a network', press Fn+Shift+F10 and run"

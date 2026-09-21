@@ -14,10 +14,12 @@
 
     WHAT IT SETS UP
       - wipes disk 0 and lays out a standard UEFI disk (EFI, MSR, Windows)
-      - installs Windows 11 Education, which is what the lab standardises on: it has the
-        Remote Desktop server Home lacks, plus the security features Pro lacks (AppLocker,
-        Application Control, Credential Guard, the full BitLocker policy set). Changed from
-        Pro on 20 September 2026 to match what New-WindowsHost.ps1 installs on the PC
+      - installs Windows 11 Pro, which is the best this ISO offers. The lab standardises
+        on Education elsewhere (it adds AppLocker, Application Control, Credential Guard and
+        the full BitLocker policy set), but the ARM64 consumer ISO carries no Education
+        image - measured 21 September 2026, see the image list below - and Pro is the only
+        remaining edition with the Remote Desktop server Home lacks. No activity depends on
+        the Education-only features today; both editions have Remote Desktop
       - skips the product key prompt. Unactivated Windows 11 runs indefinitely for lab work
       - creates the local account gns3/gns3 and logs it in automatically
       - names the machine WinHost
@@ -141,20 +143,26 @@
                             went wrong: run dism /Get-WimInfo against the mounted ISO's
                             sources/install.wim and copy a name out of its output.
 
-                            UNVERIFIED ON ARM64. Nobody has yet read the image list of an
-                            ARM64 Windows 11 ISO, so it is assumed rather than known that
-                            one is called exactly "Windows 11 Education". First job on a
-                            Mac, before anything else here is trusted: list the images with
-                            "VBoxManage unattended detect" against the ARM64 ISO, or with
-                            dism /Get-WimInfo against its sources/install.wim.
+                            MEASURED ON ARM64, 21 September 2026. The image list of
+                            Win11_25H2_EnglishInternational_Arm64_v2.iso, read out of the
+                            XML resource in sources/install.wim, is exactly three images:
 
-                            If there is no Education image, the lab standardises on Pro
-                            instead, and both answer files and the Edition default in
-                            New-WindowsHost.ps1 change together.
+                                1  Windows 11 Home
+                                2  Windows 11 Home Single Language
+                                3  Windows 11 Pro
+
+                            There is no Education image on the ARM64 consumer ISO, so this
+                            file names Pro. Home and Home Single Language are not options:
+                            configure-windows-host.ps1 needs Pro, Education or Enterprise
+                            for the Remote Desktop server. The x64 answer file and the
+                            -Edition default in New-WindowsHost.ps1 still name Education,
+                            because the x64 retail ISO does carry it (verified 20 September
+                            2026, index 4 of eleven). The edition is a property of the ISO,
+                            not of the lab.
                         -->
                         <MetaData wcm:action="add">
                             <Key>/IMAGE/NAME</Key>
-                            <Value>Windows 11 Education</Value>
+                            <Value>Windows 11 Pro</Value>
                         </MetaData>
                     </InstallFrom>
                     <InstallTo>

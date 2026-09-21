@@ -10,9 +10,15 @@ GNS3 Cloud node. The reasoning — and why it is not a Qemu node inside the GNS3
 
 ```
 GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
-                └── isolated lab network ──┘
-                    (VirtualBox Internal Network / Fusion custom vmnet)
+   (eth1 on a   └── isolated lab network ──┘
+    Mac)            (VirtualBox Internal Network / Fusion custom vmnet)
 ```
+
+**The PC and Mac paths diverged on 21 September 2026 and are no longer the same procedure.** The PC
+path installs unattended from one command. The Mac path cannot: Windows 11 25H2 ignores an answer
+file on a second CD, so Setup is answered by hand, and two steps — adding a TPM and installing VMware
+Tools — exist only in Fusion's menus. This was accepted deliberately rather than worked around; the
+Mac is a small cohort. See **The Mac path** below before helping anyone with a Mac.
 
 ## What is here
 
@@ -22,8 +28,8 @@ GNS3 VM  eth2 ──┐                          ┌── NIC2  Windows 11 VM
 | `setup-windows-tools.ps1` | inside the Windows VM, as Administrator | **Makes the machine useful.** Sysinternals, IIS, Python, iperf3, the telnet client, and optionally Sysmon. Slow and unit-dependent, so it is separate — a failed 185 MB download here cannot take the firewall rules and ssh access down with it. |
 | `sysmon-lab.xml` | — | A deliberately small Sysmon configuration: process creation, network connections and DNS queries, and nothing else. Short enough for a student to read. |
 | `New-WindowsHost.ps1` | on the student's PC, in PowerShell | **Creates the VM, on VirtualBox.** Builds a Windows 11 machine with EFI and TPM 2.0, gives it the NAT and `cqulab` adapters, and hands it to `VBoxManage unattended install`. Optionally runs `configure-windows-host.ps1` inside the guest afterwards. `-Edition` picks the Windows edition by name (`-ImageIndex` by number) and `-ProductKey` answers Setup's key screen; `-List`, `-DryRun` and `-Force`. |
-| `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. |
-| `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. |
+| `new-windows-host.sh` | on the student's Mac, in Terminal | **Creates the VM, on VMware Fusion.** Writes the `.vmx` by hand so the adapter order — and therefore which interface is the lab one — is fixed here rather than decided by Fusion. Needs `--vmnet`, because the custom network's number is local to each Mac; `--list` prints the candidates. **It cannot finish the job on Apple Silicon**: a TPM must be added through Fusion's UI before first boot, and VMware Tools installed after. It also writes `vmxnet3` on arm64 and `e1000e` on x86_64 — see **The Mac path**. |
+| `autounattend.xml`, `autounattend-arm64.xml` | read by Windows Setup | The answers Setup would otherwise stop for: disk layout, edition, no product key, the `gns3` account, the machine name, and a first-logon command that runs `configure-windows-host.ps1` off the same disc. Two files because **Setup silently ignores an answer file whose architecture is not its own**. They also name **different editions** — Education on x64, **Pro on arm64**, because the ARM64 ISO carries no Education image. **The arm64 file is not read at all by Windows 11 25H2 Setup** when it arrives on a second CD; it is kept because it documents the intended configuration and because the ISO is still how `configure-windows-host.ps1` reaches the guest. |
 | `make-unattend-iso.sh` | staff, on a Mac or Linux | Builds `cqu-unattend.iso` from one of those answer files plus `configure-windows-host.ps1`. Students never run this — they get the ISO, or install by hand. |
 
 Both are idempotent, take `-DryRun`, and are safe to re-run after a part-finished attempt.
@@ -154,12 +160,13 @@ of an unattended install is what an unattended install cannot clear. The script 
 **Tab**, which satisfies "press any key" and activates nothing. *The Tab variant has not
 itself been through a full install yet.*
 
-**Still unverified — the Mac half**, unchanged from the draft:
+**The Mac half was verified on 21 September 2026** — see **The Mac path** above. Both items that
+were open here are now settled, and one of them was wrong:
 
-| Where | What is unverified |
+| Where | Outcome |
 |---|---|
-| `new-windows-host.sh`, `guestOS` | `arm-windows11-64` / `windows11-64`. If Fusion rejects the VM, this is the line to change; `--list` prints what would be asked for |
-| `new-windows-host.sh`, `e1000e` | Chosen over Fusion's default `vmxnet3`, which Windows 11 ARM64 has no in-box driver for. **This is a hypothesis about fixing the "no network until VMware Tools" problem, not a measurement** |
+| `new-windows-host.sh`, `guestOS` | `arm-windows11-64` is correct; Fusion accepts it |
+| `new-windows-host.sh`, `e1000e` | **The hypothesis was wrong.** ARM64 Windows has no in-box driver for `e1000e` either, so the machine came up with no adapters at all. The script now writes `vmxnet3` on arm64 and `e1000e` on x86_64, and VMware Tools remains required on a Mac |
 
 Use `--dry-run` (`-DryRun`) first on both. Each prints every command it would run, and the
 Fusion one prints the whole `.vmx`, so the first test can be read before it is executed.
@@ -191,6 +198,64 @@ a VM that does not exist. That is what the `--version` check above now catches.
 
 One layer stays untested this way: Windows PowerShell 5.1 passes arguments to a native
 program differently from `pwsh` on Linux, and 5.1 is what a student's PC has.
+
+## The Mac path — Apple Silicon, 21 September 2026
+
+Proven on **Fusion 26.0.0, Apple Silicon M1, macOS 26.6.1**, with
+`Win11_25H2_EnglishInternational_Arm64_v2.iso`. The result scores `4 passed, 0 failed, 1 not
+testable` on `windows-host-check.sh` — identical to the PC — and `configure-windows-host.ps1`
+reported `changed=8 already-correct=4 failed=0` on its first run.
+
+**It is not an unattended install and it will not become one.** Six defects were found bringing this
+up; five are fixed in the scripts, and the sixth was accepted. In the order they bite:
+
+| # | What goes wrong | Fixed by |
+|---|---|---|
+| 1 | The ARM64 ISO carries no **Education** image — Setup stops and asks which edition | `autounattend-arm64.xml` names **Pro** |
+| 2 | Fusion refuses the VM: *No PCIe slot available for Ethernet0* | the `.vmx` declares `pciBridge4-7` as `pcieRootPort` |
+| 3 | *No Media* on a good, bootable ISO, falling through to EFI Network | CDs start at `sata0:1`; **AHCI port 0 is unusable** |
+| 4 | The guest looks hung — keyboard and mouse dead | the `.vmx` declares `usb_xhci`; the keyboard is an xHCI device |
+| 5 | Setup stops on *must support TPM 2.0* | **manual** — Fusion's UI, see below |
+| 6 | Setup asks every question; the unattend CD does nothing | **accepted** — Mac students answer Setup |
+
+**Defects 2, 3 and 4 are one mistake in three costumes:** a hand-written `.vmx` is not a
+Fusion-written one, and ARM64 is not x86. Slots 160 and 192 are slots *behind* bridges 4 and 5, so
+pinning them without declaring the bridges leaves the adapter nowhere to go. AHCI port 0 hands the
+firmware an empty drive however it is backed. And the keyboard is an xHCI HID, so a VM with only
+`usb` (UHCI, x86 legacy) and `ehci` has an input device the guest cannot drive. All three are fixed
+in `new-windows-host.sh` and verified on a VM built fresh by the fixed script.
+
+### The procedure, in order
+
+1. `./new-windows-host.sh --list` to find which `vmnetN` is `cqulab`, then
+   `./new-windows-host.sh --iso <arm64.iso> --vmnet vmnetN`.
+2. **Add a TPM, powered off.** *Settings* → turn on **Encryption** (partial is enough) → *Add
+   Device* → *Trusted Platform Module*. This cannot be scripted: a vTPM needs Fusion-generated EK
+   certificates (`vtpm.ekCSR` / `vtpm.ekCRT`) and an encrypted VM. `managedvm.autoAddVTPM` in the
+   `.vmx` is ignored by Fusion 26 for a file it did not write; the line is kept in case a later
+   build honours it.
+3. **Answer Setup by hand.** Choose **Windows 11 Pro**. Bypass the network screen with
+   `Fn + Shift + F10`, then `start ms-cxh:localonly`. Create `gns3` / `gns3`, machine name `WinHost`.
+4. **Install VMware Tools**, then confirm `Get-NetAdapter` lists two adapters. Until this is done
+   the machine has no network and `Get-NetAdapter` returns nothing at all.
+5. **Run the script from the disc**, not by downloading it:
+   `E:\configure-windows-host.ps1 -IPAddress 10.10.1.20 -ComputerName WinHost`. Do not pass
+   `-LabAdapter`; the MAC-based selection picks correctly on Fusion.
+6. **Point the Cloud node at `eth1`**, not `eth2`.
+
+### Two consequences worth knowing
+
+**Adding the TPM locks `vmrun` out.** The encryption it requires means `vmrun start`, `stop` and
+`list` all answer `A password is required for this operation` unless given `-vp <password>`. The
+machine is normally driven from Fusion's window from then on. `new-windows-host.sh` still ends with
+a `vmrun start`, which therefore cannot work on a TPM-equipped VM — a known wart, not yet fixed.
+
+**Why the unattend CD is still built.** Windows 11 25H2's `SetupHost.exe` engine does not read
+`autounattend.xml` from a second CD. Everything else was ruled out: the disc is readable in the
+guest, `dir e:\` shows the file under its full long name, all six components declare `arm64`, and
+Setup logs no rejection — `X:\Windows\Panther\` holds neither `setupact.log` nor `setuperr.log`. The
+ISO is kept because it is how `configure-windows-host.ps1` reaches the guest, and because it
+documents the intended configuration.
 
 ## Installing by hand
 
@@ -431,39 +496,52 @@ Left ticked (the default), macOS prompts for the Mac password when the Cloud nod
 appearing is the sign promiscuous mode is being requested at all; never being asked usually means the
 Cloud node is bound to the wrong interface.
 
-**Two Mac-only traps, both of which look like a firewall problem:**
+**Three Mac-only traps. The first two look like a firewall problem; the third looks like nothing at
+all, which is worse.**
 
-- **The third adapter is not reliably `eth2`.** Fusion's PCI slot numbers do not sort in the order
-  adapters appear in the UI — on the spike machine the adapter added third came up as `eth1`. Check
-  by MAC: `ip -br link show` in the VM against the `generatedAddress` of the `.vmx` block whose
-  `connectionType` is `custom`. Fix by swapping which network Adapters 2 and 3 attach to in the GUI;
-  the slot number belongs to the *position*, not the network.
-
-  The arrangement that tested working, which is **not** the intuitive one — the lab network sits in
-  the middle and the internet adapter last:
+- **The lab adapter is `eth1` on a Mac, not `eth2`.** The GNS3 VM keeps the **two** adapters it
+  ships with — `eth0` *Share with my Mac*, `eth1` `cqulab` — and a Cloud node bound to `eth2` fails
+  with `eth2 not found`. Standardised 21 September 2026.
 
   | Fusion adapter | Attached to | Guest |
   |---|---|---|
-  | Network Adapter | *Private to my Mac* | `eth0` |
-  | Network Adapter 2 | `cqulab` | **`eth2`** |
-  | Network Adapter 3 | *Share with my Mac* | `eth1` |
+  | Network Adapter | *Share with my Mac* | `eth0` |
+  | Network Adapter 2 | `cqulab` | **`eth1`** |
 
-  Adapters present when the VM is created take low sequential slots; one added later through *Add
-  Device* takes a high bridge-encoded slot that enumerates earlier. Verified on one machine only, so
-  check rather than assume.
+  **Do not add a third adapter to make it match the PC.** Adapters present when the VM is created
+  take low sequential slots; one added later through *Add Device* takes a high bridge-encoded slot
+  that enumerates **earlier**, silently swapping the lab and internet networks. That is what the
+  9 August spike measured, and it is why two adapters is now the standard — with both present from
+  the start, the order is deterministic. Confirm by MAC if in doubt:
 
   ```sh
-  grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx
+  ip -br addr show                                             # in the GNS3 VM: eth1 has NO address
+  grep ethernet ~/Virtual\ Machines.localized/*.vmwarevm/*.vmx  # connectionType "custom" is cqulab
   ```
 
-- **Windows 11 ARM64 has no network until VMware Tools is installed.** Fusion presents a `vmxnet3`
-  adapter and Windows on ARM has no in-box driver for it, so a fresh install cannot even download
-  this script. It is also why Setup's *Let's connect you to a network* screen has to be bypassed —
-  `Fn + Shift + F10`, then `start ms-cxh:localonly` (`oobe\bypassnro` on builds before 24H2).
+  Because the demo project must name an interface, a **separate `Windows-Host-Demo-Mac.gns3project`**
+  ships alongside the PC one.
 
-The `10.10.1.2/24`-on-`eth2` test in step 4 is the fastest way to split these apart: it uses `eth2`'s
+- **Windows 11 ARM64 has no network until VMware Tools is installed.** Windows on ARM has no in-box
+  driver for **either** adapter Fusion can offer, so a fresh install cannot download this script and
+  nothing can reach it. It is also why Setup's *Let's connect you to a network* screen has to be
+  bypassed — `Fn + Shift + F10`, then `start ms-cxh:localonly` (`oobe\bypassnro` on builds before
+  24H2). Tools installs from a local disc and so needs no network itself.
+
+  **The symptom is silence, not an error.** `Get-NetAdapter` returns *nothing* — no adapter, no
+  warning, no yellow bang in Device Manager to notice. If a Mac student reports "no network", ask for
+  `Get-NetAdapter` output before anything else; an empty list means Tools, and nothing else.
+
+- **`e1000e` is not a fix for that and was briefly used as one.** Between August and 21 September
+  `new-windows-host.sh` asked for `e1000e` on the assumption that ARM64 Windows had an in-box driver
+  for it. It does not. Machines built in that window install perfectly and have no network at all.
+  The script now writes `vmxnet3` on arm64 and `e1000e` on x86_64. **A student whose VM predates
+  that fix does not need rebuilding** — install Tools, then change both adapters to `vmxnet3` in
+  Fusion with the machine powered off.
+
+The `10.10.1.2/24`-on-`eth1` test in step 4 is the fastest way to split these apart: it uses `eth1`'s
 own MAC, so it proves the two VMs share a wire **without** involving promiscuous mode or the Cloud
-node. Remove the address afterwards — `eth2` must carry none.
+node. Remove the address afterwards — `eth1` must carry none.
 
 ## After rebuilding the Windows Host: "REMOTE HOST IDENTIFICATION HAS CHANGED"
 
@@ -509,11 +587,38 @@ product key*, 25H2's Setup showed no edition list at all and installed image 1;
 `Get-WindowsEdition -Online` reports `Core`. That is what August 2026's run produced, and it
 was read at the time as a licensing limit. It is not — it is the default image.
 
-**The lab standardises on Windows 11 Education, and installs it with no key.** Verified 20
+**On x64 the lab standardises on Windows 11 Education, and installs it with no key.** Verified 20
 September 2026: `Get-WindowsEdition -Online` → `Education`, unactivated, from a retail consumer
 ISO. Education rather than Pro because it carries the Enterprise-grade security features —
 AppLocker, Application Control, Credential Guard, the full BitLocker policy set — that Pro
 does not, and an edition cannot be changed later without a key. Both have Remote Desktop.
+
+**On ARM64 the standard is Windows 11 Pro, because Education is not on the disc.** Measured 21
+September 2026 by reading the image list out of `sources/install.wim` on
+`Win11_25H2_EnglishInternational_Arm64_v2.iso` — **three images, and no Education**:
+
+| index | edition |
+|---|---|
+| 1 | Windows 11 Home |
+| 2 | Windows 11 Home Single Language |
+| 3 | **Windows 11 Pro** |
+
+Home and Home Single Language are not usable here: `configure-windows-host.ps1` needs Pro, Education
+or Enterprise for the Remote Desktop server. So `autounattend-arm64.xml` names Pro while
+`autounattend.xml` and `New-WindowsHost.ps1`'s `-Edition` default still name Education. **That split
+is deliberate — the edition is a property of the ISO, not of the lab**, and flattening it either way
+breaks one of the two paths. Nothing in the teaching material depends on the Education-only features
+today.
+
+There is no `VBoxManage` on a Mac to list the images with. Read them straight from the WIM instead —
+mount the ISO, and note the `hdiutil detach` at the end, because an ISO left attached to macOS is a
+plausible-looking cause of unrelated failures:
+
+```sh
+hdiutil attach -readonly -nobrowse <path to the arm64 .iso>
+# the image list lives in the XML resource at the end of sources/install.wim
+hdiutil detach /Volumes/<volume name>
+```
 
 **Say the name, never the number.** `New-WindowsHost.ps1` takes `-Edition 'Windows 11
 Education'` (its default), runs `unattended detect` against your ISO, and converts the name
