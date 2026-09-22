@@ -43,10 +43,11 @@ Student-facing, written to be handed out, and versioned with the appliance they 
 | [Getting started on a PC](./vm/getting-started-pc.md) | VirtualBox, importing the appliance, finding its address |
 | [Getting started on a Mac](./vm/getting-started-mac.md) | The same on VMware Fusion, including Apple Silicon |
 | [Using the GNS3 web interface](./vm/using-gns3.md) | Building a topology, consoles, and [importing a project](./vm/using-gns3.md#importing-a-project) |
-| [VirtualBox for GNS3](./vm/virtualbox.md) | Settings, networking and the usual problems |
+| [VirtualBox for GNS3](./vm/virtualbox.md) | Installing VirtualBox, and the host-only network the appliance needs |
 | [VMware for GNS3](./vm/vmware.md) | The same for VMware |
 | [Saving your work](./vm/gns3-saving-work.md) | Why configuration on a node disappears when a project is closed, and the one-off setup that stops it |
 | [Adding a Windows Host](./vm/windows-host.md) | Running a real Windows machine beside the appliance and joining it to a topology |
+| [Troubleshooting](./vm/troubleshooting.md) | Import failures, nodes that will not start, and other common problems |
 
 ## Where things live
 

@@ -72,3 +72,8 @@ You are now ready to use GNS3!
 ---
 
 Building the Mac appliance yourself is a separate process — see [Building the appliance](../server/README.md).
+
+## If something goes wrong
+
+Import failures, a VM that will not start, and nodes that fail or misbehave once running are
+covered in [Troubleshooting](./troubleshooting.md).

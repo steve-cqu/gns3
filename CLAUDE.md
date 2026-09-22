@@ -148,6 +148,33 @@ Finding the VM, the API port, credentials, the test harness and the read-before-
 all in **`gns3-dev/notes/vm-access.md`**. Read that before touching a running appliance — it is
 usually mid-verification for something.
 
+## Student troubleshooting entries
+
+`vm/troubleshooting.md` is the student-facing FAQ and the page students are sent to when something
+breaks. **When a session diagnoses a failure a student could hit, add the entry before closing** —
+a diagnosis that lives only in a transcript is lost, which is exactly how this page came to be
+created in September 2026.
+
+What goes where: anything a student can act on **without** SSH to the appliance belongs here;
+anything needing a shell on the VM, a systemd unit or a build change belongs in
+`gns3-dev/admin/diagnostics.md`. The two pages link to each other.
+
+Entry shape — the error text as the student actually sees it goes in the heading, because that is
+what they paste into a search box:
+
+```markdown
+### `KVM acceleration cannot be used (/dev/kvm doesn't exist)`
+**Applies to:** ...
+... the check, the fix, and why ...
+*Verified <date>, appliance v0NN.*
+```
+
+**Say plainly when part of an entry is unverified.** A FAQ's real failure mode is a confidently
+wrong entry, not a missing one, and fixes here age with the appliance release.
+
+A new guide under `vm/` must also be added to the hard-coded filename list in
+`gns3-dev/tools/md2docx.sh`, or it is silently left out of the DOCX/PDF handouts.
+
 ## Releases
 
 `server/README.md` §1–3 is the runbook: build, `export-check` and `provenance` before cutting, then

@@ -46,29 +46,7 @@ Example settings are:
 
 If there is no Host-only Network, then click *Create* and add one with the above settings. You may need administrator rights on your computer do make those changes.
 
-## Troubleshooting GNS3 and VirtualBox
+## Troubleshooting
 
-### Import of Appliance (.ova) Fails
-
-If you attempt to import the .ova file into VirtualBox but it produces an error, the most common causes are:
-- Insufficient disk space on your computer
-- Corrupt .ova file downloaded
-
-Once you have downloaded the .ova file to your computer, you need at least an additional 15 GB of free space on your computer. Importing the .ova actually unzips multiple large disk images, and depending on the number of projects included in GNS3 VM, they may require 15 to 20 GB of free disk space (or even more).
-
-If your disk is close to full (less than 20 GB of space remaining), then you may encounter errors when importing the appliance. You will need to free up some space on your disk. 
-
-Note that you can delete the .ova file *after* the import is successful. But you may need to download the .ova again later if you want to revert back to a clean GNS3 VM.
-
-A corrupt .ova may occur if the download was interrupted. Check with your teacher or colleagues to confirm the expected size of the .ova.
-
-### Error Starting VM: network adapters
-
-If you receive an error when trying to start the GNS3 VM that mentions network adapters, then a common cause is Host-only Networks not setup correct, including using a different name on your computer compared to the original GNS3 VM.
-
-One quick fix is to stop the VM, go to Settings and Network, and then click on both Adapter 1 tab and Adapter 2 tab and the click Ok.
-
-![VirtualBox Settings Network Adapters](../images/vbox-network-adapters-1.png)
-
-If the error is not fixed, then double-check the settings on Adapter 1 (should be Host-only) and Adapter 2 (should be NAT). Also check that Host-only Networks are setup (see above).
-
+Import failures and network adapter errors — along with the rest of the appliance's common
+problems — are collected in [Troubleshooting](./troubleshooting.md).

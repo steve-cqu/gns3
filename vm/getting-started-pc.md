@@ -75,3 +75,8 @@ the rest of a topology. It appears on the canvas as a node called **Windows Host
 
 This is optional and no activity needs it unless yours says so. Setting it up is a separate
 guide, which your unit will point you at if it is used.
+
+## If something goes wrong
+
+Import failures, a VM that will not start, and nodes that fail or misbehave once running are
+covered in [Troubleshooting](./troubleshooting.md).
