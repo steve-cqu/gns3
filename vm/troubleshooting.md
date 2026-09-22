@@ -125,35 +125,52 @@ reloads within about a second.
 
 ## Inside a node
 
-### A node's date is wrong by years, breaking Python, TLS or login
+### A node's date is wrong by years, breaking Python and TLS
 
 **Applies to:** Qemu nodes (OPNsense, OpenWRT) most severely; any node in principle
 
 A node reports a date far in the future or the past — a year such as 2319 rather than the current
-one. Anything that checks a certificate's validity window then fails, because every certificate
-looks either expired or not yet valid. Python scripts error, TLS connections are refused, and login
-can stop working entirely.
+one. On OPNsense the boot messages give it away before the date line does:
 
-**Check all three clocks, in order.** They are independent.
+```
+Fatal Python error: init_interp_main: can't initialize time
+OverflowError: timestamp too large to convert to C _PyTime_t
+>>> Error in start script '90-cron'
+```
 
-1. **Your computer.** Confirm its own clock and time zone are right.
+**That error names the problem exactly.** Python counts time in nanoseconds in a 64-bit number,
+which runs out on **11 April 2262**. Past that date every Python program on the node fails the
+moment it starts — not some of them, all of them. On OPNsense that takes out `configd`, so
+`configctl` and much of the web interface stop working, while the shell-based start scripts
+(`90-sysctl`, `95-beep`) carry on as though nothing is wrong. Certificates fail as well, because
+every one of them now looks long expired.
 
-2. **The GNS3 VM.** You do not need to log in — from the machine running the GNS3 web interface:
+**The console login still works.** `root` / `opnsense` at the node console is not affected by the
+wrong clock, so use it to run the checks below. If that login is refused, you have a second,
+unrelated problem — the password is `opnsense`, all lower case, and the `Password:` prompt shows
+nothing at all as you type.
 
-   ```sh
-   curl -sI http://<gns3-vm-ip>/v2/version | grep -i date
-   ```
+**Check all three clocks, in order.** They are independent, and a node almost always inherits a
+wrong clock rather than generating one of its own.
 
-   That returns the appliance's clock in GMT, so add 10 hours for AEST.
+1. **Your computer.** Confirm its own clock and time zone are right. Everything below inherits from
+   it.
 
-3. **The node.** Run `date` at its console.
+2. **The GNS3 VM.** Start a **Linux Host** node and run `date` at its console. Docker nodes share
+   the appliance's clock exactly, so that reading *is* the GNS3 VM's clock — no login needed.
 
-**Fix.** Correct the GNS3 VM first, then **stop and start the node**. A node takes its start time
-from the appliance when it boots and keeps its own clock afterwards, so correcting the VM does
-nothing for a node that is already running — it has to be restarted to pick the new time up.
+3. **The node.** Run `date` at the OPNsense console.
+
+If the Linux Host is wrong too, the fault is above the node — fix your computer and the GNS3 VM, and
+the node will come good on its next start.
+
+**Fix.** Correct your computer and the GNS3 VM first, then **stop and start the node**. A node takes
+its start time from the appliance when it boots and keeps its own clock afterwards, so correcting
+the VM does nothing for a node that is already running — it has to be restarted to pick the new time
+up.
 
 If the node is still wrong after a restart, set it at the console. OPNsense is FreeBSD, which takes
-`CCYYMMDDhhmm.ss`:
+`CCYYMMDDhhmm.ss`, in UTC. On `OPNsense1`:
 
 ```sh
 date 202609221830.00
@@ -163,15 +180,66 @@ date 202609221830.00
 wrong.** Copying a time out of the broken clock is an easy way to end up further out than you
 started.
 
-**Why.** A Qemu node keeps time by counting on emulated hardware, and that is much less accurate
-where the host cannot offer KVM — see the `/dev/kvm` entry above. Where the emulated timer is
-mis-calibrated the node's clock does not merely drift, it runs away, which is how a node ends up
-centuries out rather than minutes.
+**Nothing needs rebooting afterwards.** Python starts working the moment the date is right. To bring
+back the services that failed at boot, on `OPNsense1`:
 
-*Reported September 2026. The GNS3 VM check above is verified; the node-side fix has not yet been
-confirmed against a node actually showing this fault.*
+```sh
+service configd restart
+```
+
+**Why.** GNS3 starts a Qemu node with no clock settings at all, so the node reads the **appliance's**
+clock once at boot and then keeps its own time — nothing corrects it afterwards. Where the appliance
+can offer KVM, the node uses a paravirtualised clock tied to the appliance's; without KVM it falls
+back to an emulated timer, which on a tested appliance still kept time to within four seconds a day.
+So a node centuries out did not drift there on its own: it started from a clock that was already
+wrong. That is why your computer and the GNS3 VM are the first two things to check, not the node.
+
+*Verified 22 September 2026 on an OPNsense 24.1 node, with the fault reproduced deliberately: the
+Python failure, the dead `configd` and the recovery were all observed. The claim that a node's own
+emulated timer runs away was tested and did not hold.*
 
 ---
+
+## Four checks to report a problem
+
+If your tutor asks what your appliance is doing, these four answer most of it. They only read —
+they change nothing.
+
+**Get a shell on the GNS3 VM.** Open the VM's console window in VirtualBox or VMware and choose
+**Shell** from its menu. Type each command and photograph or copy out what it prints.
+
+```sh
+date -u
+```
+
+```sh
+ls /dev/kvm
+```
+
+```sh
+curl -s localhost/v2/version
+```
+
+```sh
+grep -h adapter_type /opt/gns3/projects/*/*.gns3 | sort -u
+```
+
+**What the answers mean.**
+
+| Command | Healthy answer | What else means |
+|---|---|---|
+| `date -u` | the real time, in UTC | a wrong clock here is inherited by every node started afterwards — see the clock entry above |
+| `ls /dev/kvm` | `/dev/kvm` | `No such file` means Qemu nodes run emulated: slow to boot, but not by itself a clock fault |
+| `curl …/v2/version` | a GNS3 version | no answer at all means this is not the CQU appliance — a stock GNS3 VM answers on port 3080, not port 80 |
+| `grep … adapter_type` | `virtio-net-pci` for OPNsense | `e1000` means the node was not built from the CQU template, so OPNsense calls its cards `em0`–`em3` instead of `vtnet0`–`vtnet3` and these instructions will not match your screen |
+
+The last command lists every Qemu node you have saved, so on a VM with several projects expect
+several lines. `e1000` is correct for the **FRR** and **NETem** routers — it is only wrong for
+OPNsense.
+
+Adapter type is stored in the **project**, not the template, so a project built on another machine
+keeps its own setting even on a correct appliance. To change it, stop the node, then right-click it
+→ Configure → Network → Type.
 
 ## Still stuck
 
