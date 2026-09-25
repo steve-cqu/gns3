@@ -21,7 +21,7 @@ in mind — their `-student` / `-staff` filenames are not a naming convention th
 
 | Version | Term | Released | `gns3` | `gns3-dev` | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `v044` | T3 2026 | not yet: arm64 cut 25 Sep 2026, amd64 not built | [`1bbda07`](https://github.com/steve-cqu/gns3/commit/1bbda07) (25 Sep 2026), with [`2116cef`](https://github.com/steve-cqu/gns3/commit/2116cef) applied after the build | `7673b3c` (24 Sep 2026) | arm64 only so far. Changed after its test sweep, see [v044](#v044) |
+| `v044` | T3 2026 | not yet: both cut 25 Sep 2026, not tagged | arm64: [`1bbda07`](https://github.com/steve-cqu/gns3/commit/1bbda07) (25 Sep 2026), with [`2116cef`](https://github.com/steve-cqu/gns3/commit/2116cef) applied after the build. amd64: [`7defc58`](https://github.com/steve-cqu/gns3/commit/7defc58) (25 Sep 2026) | arm64: `7673b3c` (24 Sep 2026). amd64: `b6bd528` (25 Sep 2026) | arm64 changed after its test sweep; amd64 built clean. See [v044](#v044) |
 | `v027` | T2 2026 | 23 Jun 2026 | [`509278c`](https://github.com/steve-cqu/gns3/commit/509278c) (19 Jun 2026) | `7e444b5` (23 Jun 2026) | One post-release fix issued — see below |
 | `v022` | T1 2026 | ~mid-Mar 2026 | [`5937d74`](https://github.com/steve-cqu/gns3/commit/5937d74) (4 Nov 2025) | `2e77343` (3 Nov 2025) | First release |
 
@@ -48,7 +48,7 @@ Every release from v030 on is stamped at build time and needs no reconstruction.
 | --- | --- | --- | --- |
 | `arm64` | `GNS3-CQU-v044-arm64.ova` | 3,338,519,552 | `e30c86e2bf05682dff97f6844393817529050bc3f3fc186858d14058db6b4c1f` |
 | `arm64` | `GNS3-CQU-v044-arm64-vmwarevm.zip` | 3,046,022,566 | `7db78086d6c5e966f5f0c0a4ef33f27a9902226aee88f6b117eac97c1ab6252f` |
-| `amd64` | not yet built | | |
+| `amd64` | `GNS3-CQU-v044-amd64.ova` | 3,308,556,288 | `ebca47f2894a2d733fcc99a84e718197f0ef470924247dc00cce90accc8b7f26` |
 
 Both arm64 files hold the same machine, cut from one snapshot. The zipped `.vmwarevm` is the
 candidate Mac format still being decided. Only one of the two will be handed out.
@@ -69,6 +69,12 @@ the built machine before it was cut:
 Provenance was regenerated after those changes, so `GNS3_CQU_BUILT` reads `2026-09-25T05:44:09Z`,
 the time the appliance was finished rather than when the build ran. `GNS3_CQU_COMMIT` is empty, as
 on every build so far. Treat the `gns3` column above as the record.
+
+**The amd64 appliance was built clean, with nothing changed afterwards.** Built 25 Sep 2026 on the
+PC from `7defc58` with `verify=all`: 81 pass, 0 fail, 7 skip. It is the first build to run the
+`timesync` phase, and its OpenWRT Router image already carries the `2116cef` fix. `export-check`
+passed at the end of the build, and the build-host keys were removed before the OVA was cut. The
+provenance is `server/releases/v044/provenance-amd64.json`.
 
 ### Keys in this repository, and in the project files
 
