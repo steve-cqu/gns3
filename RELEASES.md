@@ -170,7 +170,10 @@ repo.
    This stamps the appliance and files the manifest under `server/releases/v030/`.
    Use `verify=all`: it is the only check that the appliance still runs the activities
    students import for themselves, since the appliance ships only demonstration projects.
-3. Cut the OVA — section 3 of [`server/README.md`](server/README.md). Still manual.
+3. Before cutting, on the VM: check the clock (`ntpq -pn` shows one peer marked `*`), re-run
+   `export-check`, and **empty `~/.ssh/authorized_keys`**. The build host's key is on the VM for
+   the build, and anything left there ships in the OVA to every student.
+   Then cut the OVA — section 3 of [`server/README.md`](server/README.md). Still manual.
    Two OVAs per release, `amd64` and `arm64`. There is no separate staff appliance: staff
    and students get the same file, and the solutions go out through Moodle.
 4. Tag **both** repositories with the same label, since `server/build/manifest.yml` takes
@@ -180,10 +183,10 @@ repo.
    git -C gns3-dev tag -a v030 -m "GNS3 VM v030 — T3 2026"
    git -C gns3 push origin v030 && git -C gns3-dev push origin v030
    ```
-5. Add the row above, with the OVA filenames, sizes and sha256 sums. **Neither existing row
-   has them** — both were reconstructed after the fact — so v030 is the first release that can
-   honour this, and the size is what `vm/virtualbox.md` tells students to check with you when
-   they suspect a corrupt download.
+5. Add the row above, with the OVA filenames, sizes and sha256 sums. v044 is the first release
+   to record them; v022 and v027 were reconstructed after the fact and have none. The size is
+   what `vm/virtualbox.md` tells students to check with you when they suspect a corrupt
+   download.
 5a. **Archive the release to the shared drive.** The appliance is frozen for years, not months,
    and a from-source rebuild in 2028 depends on upstreams that will have moved or gone. Freeze
    the built images, tar the Qemu disks, bundle both repos, and copy

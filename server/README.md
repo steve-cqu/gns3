@@ -11,8 +11,8 @@ make one, [the repository README](../README.md) is the way in.
 
 | Profile | Projects | Exported as |
 |---|---|---|
-| `amd64` | the 5 in `projects.txt` | `GNS3-CQU-v<version>.ova` |
-| `arm64` | the same 5, preferring any `-arm64` rebuild | `GNS3-CQU-v<version>-arm64.ova` |
+| `amd64` | the 4 in `projects.txt` | `GNS3-CQU-v<version>-amd64.ova` |
+| `arm64` | the same 4, preferring any `-arm64` rebuild | `GNS3-CQU-v<version>-arm64.ova` |
 
 There used to be a second, staff-only appliance carrying the 17 solution projects — four
 OVAs a release and two export passes, for a few megabytes of project data. It was retired in
@@ -495,7 +495,7 @@ ssh gns3@<vm-ip> 'rm -f /home/gns3/projects/*'     # if export-check warned abou
 ```sh
 VBoxManage controlvm "GNS3 VM" acpipowerbutton     # or shut down from the VM's own menu
 VBoxManage snapshot  "GNS3 VM" take "v<version>"
-VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>.ova
+VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>-amd64.ova
 ```
 
 **VMware Fusion (Mac):**
@@ -529,7 +529,8 @@ rm -rf ~/VMs/GNS3-export.vmwarevm                 # or delete it from Fusion
 
 `--compress=9` roughly halves a ~10 GB appliance and costs several minutes.
 
-**Name Mac appliances distinctly** — `-arm64`, as above. They import happily on an Intel
+**Name both files by architecture**, `-amd64` and `-arm64`, as above. Until v044 the PC file had
+no suffix. They import happily on an Intel
 machine and then never boot, so a student who grabs the wrong file sees a broken download
 rather than an obvious mismatch. The student instructions in
 [`../vm/getting-started-mac.md`](../vm/getting-started-mac.md) tell them to look for the Mac
