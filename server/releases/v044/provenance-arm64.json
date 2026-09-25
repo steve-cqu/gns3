@@ -1,0 +1,462 @@
+{
+  "docker_images": [
+    {
+      "bytes": 20410245,
+      "created": "2026-09-25T00:51:21.07003239Z",
+      "id": "sha256:aa97b548eeb4c2242393c8745c926499e2df7043b52b5309452427abc3d91311",
+      "image": "gns3/openvswitch:latest",
+      "node": "openvswitch"
+    },
+    {
+      "bytes": 136777037,
+      "created": "2026-09-25T00:51:46.150089996Z",
+      "id": "sha256:8d6f4f52674190387145eb5f33bad45db007cca8753c76eb4db64ca208581590",
+      "image": "gns3/ipterm-base:latest",
+      "node": "ipterm-base"
+    },
+    {
+      "bytes": 136792570,
+      "created": "2026-09-25T00:51:47.024939578Z",
+      "id": "sha256:0668f04a175c9e50679f89b51e030c68e09fb079b88e9ed9db048fc2715f3900",
+      "image": "gns3/ipterm:latest",
+      "node": "ipterm"
+    },
+    {
+      "bytes": 727279551,
+      "created": "2026-09-25T00:52:20.107394241Z",
+      "id": "sha256:37c66f275102bd4fafb61bf632c8bcfce86d8b0b16a0e969fb3b14bb419a0f26",
+      "image": "gns3/webterm:latest",
+      "node": "webterm"
+    },
+    {
+      "bytes": 651673156,
+      "created": "2026-09-25T00:52:53.826147512Z",
+      "id": "sha256:c32a389e5d44e533a3dd302d1e0e4934d62db93f2f61aaaae5641ea450d6dfe5",
+      "image": "cqugns3/alpinenode:latest",
+      "node": "alpinenode"
+    },
+    {
+      "bytes": 619082166,
+      "created": "2026-09-25T00:53:55.680322027Z",
+      "id": "sha256:bc54e646472c68e8aef241849245c8622d2400e1cfb430963be24c8d22898086",
+      "image": "cqugns3/ubuntunode:latest",
+      "node": "ubuntunode"
+    },
+    {
+      "bytes": 376545056,
+      "created": "2026-09-25T00:54:34.217882391Z",
+      "id": "sha256:1814e524c7cc776df0f8da86b67e0aa2d424cebf20e32244d1caae27280254f1",
+      "image": "adosztal/net_toolbox:latest",
+      "node": "net_toolbox"
+    },
+    {
+      "bytes": 670298041,
+      "created": "2026-09-25T00:54:38.297542793Z",
+      "id": "sha256:e59ab4ed44e842aa14bf96cacb68fa7ff204eabc4f07ca4b0a85ce28e0045076",
+      "image": "cqugns3/auth-kerberos:latest",
+      "node": "auth-kerberos"
+    },
+    {
+      "bytes": 655089764,
+      "created": "2026-09-25T00:54:40.24934078Z",
+      "id": "sha256:554b3320fdd4edaca017e904ac309eed6718cc0df4234a11a40655a3f3064a35",
+      "image": "cqugns3/ipv6node:latest",
+      "node": "ipv6node"
+    },
+    {
+      "bytes": 148622491,
+      "created": "2026-09-25T00:54:56.304501016Z",
+      "id": "sha256:7c6020c9655fff74f6965d1b496c25f504caf969ea3a62125d92f0be486cc3e3",
+      "image": "cqugns3/suricata:latest",
+      "node": "suricata"
+    },
+    {
+      "bytes": 141108109,
+      "created": "2026-09-25T00:55:03.814456018Z",
+      "id": "sha256:45a4ea2578c39cd7845dc894b6de2c82fce5b338bf0c22b4b3242cee82b4ed88",
+      "image": "cqugns3/frrnode:latest",
+      "node": "frrnode"
+    },
+    {
+      "bytes": 16498959,
+      "created": "2026-09-25T00:55:06.875603031Z",
+      "id": "sha256:928d664088f794005c337a21c85b7c9034fed5bd1f35926d2486c225a5ef77dd",
+      "image": "cqugns3/netemnode:latest",
+      "node": "netemnode"
+    },
+    {
+      "bytes": 14802455,
+      "created": "2026-09-25T05:42:33.993011542Z",
+      "id": "sha256:b7c5b8d94267a52f0ee58636f091126037ba8d1a9fb43c2ea7d22275665c3d08",
+      "image": "cqugns3/openwrtnode:latest",
+      "node": "openwrtnode-arm64"
+    },
+    {
+      "bytes": 776456035,
+      "created": "2026-09-25T00:55:25.478595374Z",
+      "id": "sha256:c45a0a3a88e9dc92018c5b298c454aae681cd22af39eab81b038b67781501b3e",
+      "image": "cqugns3/servicenode:latest",
+      "node": "servicenode"
+    },
+    {
+      "bytes": 1581151372,
+      "created": "2026-09-25T00:55:44.133013572Z",
+      "id": "sha256:f85ce97c44555f739de8d654ba2c8dec2b544ec8b43766e5613d93d1c6dd9e21",
+      "image": "cqugns3/monitornode:latest",
+      "node": "monitornode"
+    },
+    {
+      "bytes": 792639192,
+      "created": "2026-09-25T00:56:24.496706911Z",
+      "id": "sha256:176bd22dffb0e4fa91fae93a83857d100442c551eb949abf4123298c024d60e9",
+      "image": "cqugns3/faucetnode:latest",
+      "node": "faucetnode"
+    },
+    {
+      "bytes": 664169864,
+      "created": "2026-09-25T00:56:28.14201957Z",
+      "id": "sha256:8547a54a51b148a8bf33ed7eae23fcfd1a9a95d9fd98559797fb846e95a6bdae",
+      "image": "cqugns3/wifinode:latest",
+      "node": "wifinode"
+    },
+    {
+      "bytes": 808835712,
+      "created": "2026-09-25T00:56:33.878490776Z",
+      "id": "sha256:4a5508e5b3b0f3c109a8554b414b3e5d65e9740d2260742dabe3afd52339c693",
+      "image": "cqugns3/giteanode:latest",
+      "node": "giteanode"
+    },
+    {
+      "bytes": 661085175,
+      "created": "2026-09-25T00:56:36.524022148Z",
+      "id": "sha256:40e71127be4d54148e3bfc668131f870a786df34b4f150a581dd4be83e1f0815",
+      "image": "cqugns3/strongswan:latest",
+      "node": "strongswan"
+    },
+    {
+      "bytes": 731767159,
+      "created": "2026-09-25T00:56:43.029591984Z",
+      "id": "sha256:73a05d4080591e488026c4b4c2a4201f0440d205e32661014817f228dc2a70a0",
+      "image": "cqugns3/sambadc:latest",
+      "node": "sambadc"
+    },
+    {
+      "bytes": 619129291,
+      "created": "2026-09-25T00:56:43.887417008Z",
+      "id": "sha256:5eeda366c5ffd6d29550d6eae2140e73f9d901ce8bb6148ef570de567939a785",
+      "image": "cqugns3/patchnode:latest",
+      "node": "patchnode"
+    }
+  ],
+  "generated_utc": "2026-09-25T05:44:09Z",
+  "git": {
+    "gns3": null,
+    "project_roots": [
+      {
+        "git": {
+          "branch": "main",
+          "commit": "7673b3c3e5f9783cf9dbd18dda9f1edce36ac7ab",
+          "describe": "v027-474-g7673b3c",
+          "dirty": true,
+          "origin": "git@github.com:steve-cqu/gns3-dev.git"
+        },
+        "path": "../gns3-dev/activities"
+      },
+      {
+        "git": null,
+        "path": "../infiles"
+      }
+    ]
+  },
+  "gns3": {
+    "controller_version": "2.2.54",
+    "manifest_expects": "2.2.54"
+  },
+  "platform": "arm64",
+  "profile": "arm64",
+  "projects": [
+    {
+      "bytes": 607908,
+      "name": "GNS3-Intro-Solution",
+      "project_id": "ad5a344c-9d3e-4000-887e-b1692f79ab51"
+    },
+    {
+      "bytes": 2260752,
+      "name": "LAN-Routing-Template",
+      "project_id": "1b512575-b508-489d-905f-36643838e54c"
+    },
+    {
+      "bytes": 46559,
+      "name": "OSPF-Basics-Template",
+      "project_id": "ca295d8e-4bba-4086-8548-e8778fe7e6c8"
+    },
+    {
+      "bytes": 32747762,
+      "name": "Small-Internet-Demo",
+      "project_id": "df68a26f-671e-4b14-97a7-47cf4f7d3160"
+    }
+  ],
+  "qemu_accel": {
+    "applied": true,
+    "config_file": "/home/gns3/.config/GNS3/2.2/gns3_server.conf",
+    "discovered_from": "manifest",
+    "expected": {
+      "require_kvm": "false"
+    },
+    "found": {
+      "require_kvm": "false"
+    },
+    "ignored_config_files": [],
+    "kvm_present": false,
+    "section": "Qemu"
+  },
+  "qemu_images": [],
+  "release": "v044",
+  "schema": "gns3build-provenance/5",
+  "sources": [
+    {
+      "bytes": 31266,
+      "name": "GNS3-Intro-Solution",
+      "project_id": "ad5a344c-9d3e-4000-887e-b1692f79ab51",
+      "sha256": "d13751d04e2fa1d9b8e67c043960a37776c23a1abe9d473ec836a06921a88c13",
+      "source": "../gns3-dev/activities/gns3-intro/GNS3-Intro-Solution.gns3project"
+    },
+    {
+      "bytes": 53656,
+      "name": "LAN-Routing-Template",
+      "project_id": "1b512575-b508-489d-905f-36643838e54c",
+      "sha256": "da21b8ed6abc9b89dada8ac07db21a9efc4e457a8d28a6efdc9a223112e8b7d4",
+      "source": "../gns3-dev/activities/lan-routing-vlan/LAN-Routing-Template.gns3project"
+    },
+    {
+      "bytes": 26876,
+      "name": "OSPF-Basics-Template",
+      "project_id": "ca295d8e-4bba-4086-8548-e8778fe7e6c8",
+      "sha256": "438607bd4b825c60c10668deff4bc4dc3e5a116a817c5175867eccdeb98e3ab8",
+      "source": "../gns3-dev/activities/ospf-basics/OSPF-Basics-Template.gns3project"
+    },
+    {
+      "bytes": 5538512,
+      "name": "Small-Internet-Demo",
+      "project_id": "df68a26f-671e-4b14-97a7-47cf4f7d3160",
+      "sha256": "520fc311ec1c90434a4b406265b2636f173c239cfb25b7227ffb11498378b842",
+      "source": "../gns3-dev/activities/small-internet/Small-Internet-Demo.gns3project"
+    }
+  ],
+  "system": {
+    "arch": "aarch64",
+    "auto_update_units": {
+      "apt-daily-upgrade.service": "masked",
+      "apt-daily-upgrade.timer": "masked",
+      "apt-daily.service": "masked",
+      "apt-daily.timer": "masked",
+      "unattended-upgrades.service": "masked"
+    },
+    "docker": "Docker version 28.1.1, build 4eba377",
+    "hostname": "gns3vm",
+    "kernel": "5.15.0-136-generic",
+    "reboot_required": false
+  },
+  "templates": [
+    {
+      "name": "ATM switch",
+      "template_id": "aaa764e2-b383-300f-8a0e-3493bbfdb7d2",
+      "type": "atm_switch"
+    },
+    {
+      "name": "Access Point",
+      "template_id": "9cd178b1-6652-4060-84e8-b5ad313ac94f",
+      "type": "docker"
+    },
+    {
+      "name": "Ansible Host",
+      "template_id": "99fd5395-65ac-0384-401d-9b77b8ca48e2",
+      "type": "docker"
+    },
+    {
+      "name": "Cache Server",
+      "template_id": "50fc8b4d-62c8-4ee5-8dca-7a453d950b52",
+      "type": "docker"
+    },
+    {
+      "name": "Cloud",
+      "template_id": "39e257dc-8412-3174-b6b3-0ee3ed6a43e9",
+      "type": "cloud"
+    },
+    {
+      "name": "Cloud Gateway",
+      "template_id": "73eb15cb-cac4-4efe-865f-ee55abd46927",
+      "type": "docker"
+    },
+    {
+      "name": "DHCP Server",
+      "template_id": "02cf5388-0176-4ca8-a72a-69d0d461ec0e",
+      "type": "docker"
+    },
+    {
+      "name": "DNS Server",
+      "template_id": "6512c51d-e014-454b-bc12-f339e4022a68",
+      "type": "docker"
+    },
+    {
+      "name": "Database Server",
+      "template_id": "cb9c2489-82a6-4f43-8e65-11a8a5d6630c",
+      "type": "docker"
+    },
+    {
+      "name": "Domain Client",
+      "template_id": "b73748c9-23ad-4a1c-ab09-4054ec42ea8f",
+      "type": "docker"
+    },
+    {
+      "name": "Domain Controller",
+      "template_id": "bbc13af9-5da1-4ca9-a332-4aa37ba041b7",
+      "type": "docker"
+    },
+    {
+      "name": "Ethernet hub",
+      "template_id": "b4503ea9-d6b6-3695-9fe4-1db3b39290b0",
+      "type": "ethernet_hub"
+    },
+    {
+      "name": "Ethernet switch",
+      "template_id": "1966b864-93e7-32d5-965f-001384eec461",
+      "type": "ethernet_switch"
+    },
+    {
+      "name": "FRR",
+      "template_id": "b1860a3f-5b0e-4218-817c-5d88e6c3c2de",
+      "type": "docker"
+    },
+    {
+      "name": "File Server",
+      "template_id": "1e452d06-78d1-4845-8884-2920742e30d0",
+      "type": "docker"
+    },
+    {
+      "name": "Firefox Host",
+      "template_id": "d2b80f67-7db3-417b-ba68-706f301d1d8d",
+      "type": "docker"
+    },
+    {
+      "name": "Flow Collector",
+      "template_id": "77b69b4f-9ff4-4e55-885e-644a87c2230d",
+      "type": "docker"
+    },
+    {
+      "name": "Frame Relay switch",
+      "template_id": "dd0f6f3a-ba58-3249-81cb-a1dd88407a47",
+      "type": "frame_relay_switch"
+    },
+    {
+      "name": "Git Server",
+      "template_id": "ed262ae1-60a7-4b13-b411-d73cf289088b",
+      "type": "docker"
+    },
+    {
+      "name": "IPsec Gateway",
+      "template_id": "da30170a-a345-44a6-bda4-7247a2701234",
+      "type": "docker"
+    },
+    {
+      "name": "Kerberos Host",
+      "template_id": "1c0487d2-7583-4570-ba9a-e1f49a7eed0e",
+      "type": "docker"
+    },
+    {
+      "name": "Linux Host",
+      "template_id": "e83afe9c-3a66-40c7-8ae9-736105668c87",
+      "type": "docker"
+    },
+    {
+      "name": "Linux Router",
+      "template_id": "3a55bcf5-7b96-4f09-af0b-81d0c0e3af49",
+      "type": "docker"
+    },
+    {
+      "name": "Linux Server",
+      "template_id": "18ee5cf7-73e6-408b-808c-a2bce17ed4ba",
+      "type": "docker"
+    },
+    {
+      "name": "Monitor",
+      "template_id": "95e22a5d-bd5b-4577-9a69-4470ba4d0a73",
+      "type": "docker"
+    },
+    {
+      "name": "NAT",
+      "template_id": "df8f4ea9-33b7-3e96-86a2-c39bc9bb649c",
+      "type": "nat"
+    },
+    {
+      "name": "NAT64Router",
+      "template_id": "4d7e467d-8eb1-47af-a93a-cdf629308c3f",
+      "type": "docker"
+    },
+    {
+      "name": "NETem",
+      "template_id": "e9239096-1d54-4e09-aec2-d114712023ab",
+      "type": "docker"
+    },
+    {
+      "name": "NTP Server",
+      "template_id": "96ec12bd-b5e9-4ce7-88f6-0f323490b7b7",
+      "type": "docker"
+    },
+    {
+      "name": "Open vSwitch",
+      "template_id": "029e8dbd-7c0f-4d49-9d24-24829344d2d4",
+      "type": "docker"
+    },
+    {
+      "name": "OpenWRT Router",
+      "template_id": "f64fa0c3-62be-4080-9ccf-0ddd323341de",
+      "type": "docker"
+    },
+    {
+      "name": "Patch Server",
+      "template_id": "b7c41e08-3f52-4a96-9d17-2ac6f8e5b310",
+      "type": "docker"
+    },
+    {
+      "name": "SDN Controller",
+      "template_id": "ec2f9f5b-861b-418f-96a0-5476f85318e0",
+      "type": "docker"
+    },
+    {
+      "name": "Station",
+      "template_id": "28953d1f-8db3-4b67-b3e4-33970eda230b",
+      "type": "docker"
+    },
+    {
+      "name": "Suricata IDS",
+      "template_id": "b72f4e1a-3c58-4d9b-a021-f8e6c5d9b347",
+      "type": "docker"
+    },
+    {
+      "name": "Traffic Generator",
+      "template_id": "e5ebe6e6-bc2c-4967-a371-8b0f6df040c0",
+      "type": "docker"
+    },
+    {
+      "name": "Ubuntu Host",
+      "template_id": "793a0f66-ad21-4429-9604-934bb79256fb",
+      "type": "docker"
+    },
+    {
+      "name": "VPCS",
+      "template_id": "19021f99-e36f-394d-b4a1-8aaa902ab9cc",
+      "type": "vpcs"
+    },
+    {
+      "name": "VPN Router",
+      "template_id": "e8bb159e-a899-ed9c-702d-f7407dbfb5e2",
+      "type": "docker"
+    },
+    {
+      "name": "Windows Host",
+      "template_id": "8f2c6d51-4a90-4b7e-9c33-7d1e5a0b62f4",
+      "type": "cloud"
+    }
+  ]
+}
