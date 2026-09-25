@@ -21,6 +21,7 @@ in mind — their `-student` / `-staff` filenames are not a naming convention th
 
 | Version | Term | Released | `gns3` | `gns3-dev` | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `v044` | T3 2026 | not yet: arm64 cut 25 Sep 2026, amd64 not built | [`1bbda07`](https://github.com/steve-cqu/gns3/commit/1bbda07) (25 Sep 2026), with [`2116cef`](https://github.com/steve-cqu/gns3/commit/2116cef) applied after the build | `7673b3c` (24 Sep 2026) | arm64 only so far. Changed after its test sweep, see [v044](#v044) |
 | `v027` | T2 2026 | 23 Jun 2026 | [`509278c`](https://github.com/steve-cqu/gns3/commit/509278c) (19 Jun 2026) | `7e444b5` (23 Jun 2026) | One post-release fix issued — see below |
 | `v022` | T1 2026 | ~mid-Mar 2026 | [`5937d74`](https://github.com/steve-cqu/gns3/commit/5937d74) (4 Nov 2025) | `2e77343` (3 Nov 2025) | First release |
 
@@ -38,6 +39,36 @@ They are the best available evidence, not a recorded fact:
   and matches the remembered 13 Apr – 19 Jun window) and confirmed on the `gns3-dev` side.
 
 Every release from v030 on is stamped at build time and needs no reconstruction.
+
+### v044
+
+**Files.** The first release to record its files at cut time.
+
+| Architecture | File | Bytes | sha256 |
+| --- | --- | --- | --- |
+| `arm64` | `GNS3-CQU-v044-arm64.ova` | 3,338,519,552 | `e30c86e2bf05682dff97f6844393817529050bc3f3fc186858d14058db6b4c1f` |
+| `arm64` | `GNS3-CQU-v044-arm64-vmwarevm.zip` | 3,046,022,566 | `7db78086d6c5e966f5f0c0a4ef33f27a9902226aee88f6b117eac97c1ab6252f` |
+| `amd64` | not yet built | | |
+
+Both arm64 files hold the same machine, cut from one snapshot. The zipped `.vmwarevm` is the
+candidate Mac format still being decided. Only one of the two will be handed out.
+
+**The arm64 appliance was changed after its test sweep, and kept the v044 label.** Built 25 Sep
+2026 from `1bbda07` with `verify=all`: 81 pass, 0 fail, 7 skip. Three things were then fixed on
+the built machine before it was cut:
+
+- **The OpenWRT Router image was rebuilt** with the change in `2116cef`. Its `sysfixtime` init
+  script had been copying the VM's hardware clock into the appliance clock, and during the sweep
+  that put the appliance about 10 hours out. The six activities that use the node were re-run on
+  the rebuilt image and passed. So the image recorded in `server/releases/v044/provenance-arm64.json`
+  is from `2116cef`, not `1bbda07`.
+- **`ntpd` was hardened by hand:** `tinker panic 0` in `/etc/ntp.conf` and a `Restart=on-failure`
+  drop-in. The `timesync` build phase does the same from the next build on.
+- **Build-host SSH keys were removed** from the `gns3` user's `authorized_keys`.
+
+Provenance was regenerated after those changes, so `GNS3_CQU_BUILT` reads `2026-09-25T05:44:09Z`,
+the time the appliance was finished rather than when the build ran. `GNS3_CQU_COMMIT` is empty, as
+on every build so far. Treat the `gns3` column above as the record.
 
 ### Keys in this repository, and in the project files
 

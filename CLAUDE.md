@@ -46,12 +46,12 @@ settings. If something is not in the manifest it is not in the appliance.
 Phases, in build order (`BUILD_PHASES` in `gns3build.py`):
 
 ```
-quiesce  templates  docker  qemu  accel  logos  novnc  labnic  projects
+quiesce  timesync  templates  docker  qemu  accel  logos  novnc  labnic  projects
 ```
 
 **Where a phase can run matters.** `validate`, `plan`, `templates`, `projects`, `export-check` and
 `provenance` work from anywhere and take `--server URL` (defaulting to `$GNS3_SERVER`).
-`docker`, `qemu`, `logos`, `novnc`, `labnic` and `quiesce` touch the local Docker daemon,
+`docker`, `qemu`, `logos`, `novnc`, `labnic`, `quiesce` and `timesync` touch the local Docker daemon,
 filesystem, netplan or systemd, so they **run on the GNS3 VM itself** — which is also why images
 are always built natively for the VM's architecture rather than cross-built. (The module docstring
 at the top of `gns3build.py` lists only the first four of those; it is one revision behind.)

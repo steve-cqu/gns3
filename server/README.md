@@ -548,12 +548,13 @@ the VM (`cd ~/git/gns3/server/build`):
 ```sh
 ./gns3build.py validate                    # check the manifest and every template
 ./gns3build.py plan      --profile amd64   # show what would be installed, change nothing
-./gns3build.py build     --profile amd64   # all nine phases below, in order
+./gns3build.py build     --profile amd64   # all ten phases below, in order
 ./gns3build.py templates --profile amd64   # register templates via the GNS3 API
 ./gns3build.py docker    --profile amd64   # build the Docker node images
 ./gns3build.py qemu      --profile amd64   # download + verify the Qemu disks
 ./gns3build.py accel                       # Qemu acceleration in gns3_server.conf
 ./gns3build.py quiesce                     # mask Ubuntu's unattended-upgrade timers
+./gns3build.py timesync                    # keep ntpd alive through a clock jump
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + the gns3-novnc service
 ./gns3build.py labnic --profile arm64      # the Windows Host lab NIC (eth2 amd64 / eth1 arm64)
@@ -581,7 +582,7 @@ Common options:
 `validate`, `plan`, `templates`, `projects`, `export-check` and `provenance` also accept
 `--server http://<vm-ip>` and can be run from your own machine — though `export-check` can
 only half-answer from there and says so (see [Check before you export](#2-check-before-you-export)). `docker`, `qemu`, `logos`,
-`novnc`, `labnic` and `quiesce` must run on the VM itself, because they touch its Docker
+`novnc`, `labnic`, `quiesce` and `timesync` must run on the VM itself, because they touch its Docker
 daemon, filesystem and systemd — which is also why images are always built natively for the
 VM's architecture.
 
@@ -689,6 +690,31 @@ records both `system.reboot_required` and the state of each masked unit. Reboot 
 which is the whole thing this phase exists to prevent.
 
 ---
+
+## The appliance keeps its clock
+
+The `timesync` phase hardens the stock GNS3 VM's classic `ntpd`, from `timesync:` in the
+manifest. It puts `tinker panic 0` at the head of `/etc/ntp.conf` and writes a systemd drop-in,
+`/etc/systemd/system/ntp.service.d/restart.conf`, with `Restart=on-failure`. It restarts `ntp`
+only if it changed something.
+
+**Why.** `ntpd` exits when the clock is more than 1000 seconds out, and the stock unit never
+restarts it. On 25 September 2026, during the v044 arm64 build, an OpenWRT node copied the VM's
+hardware clock, about 10 hours ahead, into the appliance's clock. `ntpd` exited, the clock stayed
+wrong to the end of the build, and every node started after that inherited the wrong time.
+The OpenWRT image no longer touches the clock (see its Dockerfile). This phase makes sure the next
+thing that steps the clock is corrected rather than fatal.
+
+Check it with:
+
+```sh
+systemctl show ntp -p Restart     # expect: Restart=on-failure
+head -2 /etc/ntp.conf             # expect: the marker comment, then tinker panic 0
+ntpq -pn                          # one peer marked *
+```
+
+Do not use `timedatectl` for this. On this appliance it reports `NTP service: n/a` even when
+`ntpd` is healthy.
 
 ## Qemu hardware acceleration
 

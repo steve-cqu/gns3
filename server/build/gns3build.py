@@ -15,6 +15,7 @@ Subcommands
   qemu      --profile P     download + unpack the profile's Qemu images   [run on the VM]
   accel                     Qemu acceleration in gns3_server.conf         [run on the VM]
   quiesce                   mask Ubuntu's unattended-upgrade timers       [run on the VM]
+  timesync                  keep ntpd alive through a clock jump          [run on the VM]
   logos                     install the CQU node symbols                  [run on the VM]
   novnc                     install noVNC + the gns3-novnc service        [run on the VM]
   labnic                    bring up the Windows Host lab NIC (eth2)      [run on the VM]
@@ -30,8 +31,8 @@ Before cutting an OVA:
   provenance   --profile P  record what this appliance actually contains
 
 `validate`/`plan`/`templates`/`projects` work from anywhere (they take --server URL,
-default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `accel`, `quiesce`, `logos`,
-`novnc`, `labnic`, `freeze` and `thaw` touch the local docker daemon, filesystem or systemd,
+default $GNS3_SERVER or http://localhost). `docker`, `qemu`, `accel`, `quiesce`, `timesync`,
+`logos`, `novnc`, `labnic`, `freeze` and `thaw` touch the local docker daemon, filesystem or systemd,
 so they run **on the GNS3 VM** — the Ansible wrapper syncs this tree there and invokes them
 over SSH. `export-check` must also run on the VM: its staged-file scan reads a filesystem, so
 a remote run honestly reports NOT CHECKED and a run through an SSH tunnel would scan the
@@ -1438,6 +1439,99 @@ def cmd_quiesce(args):
 
 
 # --------------------------------------------------------------------------- #
+# Phase: timesync — keep ntpd alive through a clock jump         [run on the VM]
+# --------------------------------------------------------------------------- #
+TIMESYNC_MARK = "# Added by gns3build.py (timesync phase)"
+
+
+def cmd_timesync(args):
+    """Make the stock GNS3 VM's ntpd survive a clock jump instead of dying on it.
+
+    See the `timesync:` comment in the manifest for the incident. In short, ntpd exits when the
+    clock is more than 1000 s out (its panic threshold), and the stock ntp.service has no
+    `Restart=`, so one jump leaves the appliance unsynchronised until the next reboot. Every
+    node started after that inherits the wrong time. Two changes, either sufficient on its own:
+    `tinker panic 0` at the head of ntp.conf (correct any offset, never exit), and a systemd
+    drop-in restarting ntpd if it exits anyway.
+    """
+    m = load_manifest(args.manifest)
+    cfg = m.get("timesync") or {}
+    unit = cfg.get("unit")
+    if not unit:
+        print("  skip   no timesync.unit in the manifest")
+        return 0
+
+    print(f"timesync: hardening {unit}\n")
+    state = unit_state(unit)
+    if state in ("absent", "masked"):
+        # Not an error here: a VM without the classic ntpd keeps time some other way, and this
+        # phase is only about that daemon. Say so rather than invent a unit.
+        print(f"  none   {unit} is {state} on this VM — nothing to harden")
+        return 0
+
+    changed = failed = 0
+
+    conf = cfg.get("config_file", "/etc/ntp.conf")
+    lines = cfg.get("config_lines") or []
+    try:
+        old = Path(conf).read_text()
+    except OSError as e:
+        print(f"  FAIL   cannot read {conf} ({e})")
+        old, failed = None, failed + 1
+    if old is not None and lines:
+        # Drop earlier copies (ours or a hand edit of the same directive) and put the block
+        # first: ntp.conf(5) wants `tinker panic` ahead of the server/pool lines.
+        keys = {" ".join(ln.split()[:2]) for ln in lines}
+        kept = [ln for ln in old.splitlines(keepends=True)
+                if not ln.startswith(TIMESYNC_MARK)
+                and not ln.startswith("# Never exit on a large offset")   # the v044 hand edit
+                and " ".join(ln.split()[0:2]) not in keys]
+        new = (f"{TIMESYNC_MARK} — see server/build/manifest.yml `timesync:`\n"
+               + "".join(ln + "\n" for ln in lines) + "".join(kept))
+        if new == old:
+            print(f"  skip   {conf} (already correct)")
+        elif args.dry_run:
+            print(f"  [dry-run] prepend {', '.join(lines)} to {conf}")
+        else:
+            sudo_write(conf, new)
+            print(f"  write  {conf} ({', '.join(lines)})")
+            changed += 1
+
+    dropin = cfg.get("dropin")
+    service = cfg.get("service") or {}
+    if dropin and service:
+        text = (f"{TIMESYNC_MARK} — see server/build/manifest.yml `timesync:`\n[Service]\n"
+                + "".join(f"{k}={v}\n" for k, v in service.items()))
+        if args.dry_run:
+            print(f"  [dry-run] write {dropin}")
+        else:
+            subprocess.run(["sudo", "mkdir", "-p", str(Path(dropin).parent)], check=False)
+            if sudo_write(dropin, text):
+                subprocess.run(["sudo", "chmod", "644", dropin], check=False)
+                subprocess.run(["sudo", "systemctl", "daemon-reload"], check=False)
+                print(f"  write  {dropin}")
+                changed += 1
+            else:
+                print(f"  skip   {dropin} (already correct)")
+
+    if changed and not args.dry_run:
+        # A restart re-reads the config, and ntpd's -g (NTPD_OPTS on Ubuntu) allows one
+        # unrestricted step, so a clock that is already wrong comes right here too.
+        rc = subprocess.run(["sudo", "systemctl", "restart", unit]).returncode
+        active = subprocess.run(["systemctl", "is-active", unit], stdout=subprocess.PIPE,
+                                universal_newlines=True).stdout.strip()
+        if rc or active != "active":
+            print(f"  FAIL   {unit} did not come back after the restart ({active})")
+            failed += 1
+        else:
+            print(f"  restart {unit} (active)")
+
+    if not args.dry_run:
+        print(f"\ntimesync: {changed} change(s), {failed} failure(s)")
+    return 1 if failed else 0
+
+
+# --------------------------------------------------------------------------- #
 # Phase: novnc — browser access to VNC nodes (runs on the VM)
 #
 # The `labnic` phase follows further down, below the novnc helpers.
@@ -2644,8 +2738,9 @@ def cmd_provenance(args):
 # `quiesce` runs first, and not for tidiness: it is the phase that stops Ubuntu's own upgrade
 # timers competing with the build for a single-core VM's CPU, so it has to land before the two
 # long phases (docker, qemu) rather than after them.
-BUILD_PHASES = ["quiesce", "templates", "docker", "qemu", "accel", "logos", "novnc", "labnic",
-                "projects"]
+# `timesync` follows it so the clock is being kept before anything is built or timestamped.
+BUILD_PHASES = ["quiesce", "timesync", "templates", "docker", "qemu", "accel", "logos", "novnc",
+                "labnic", "projects"]
 
 
 def cmd_build(args):
@@ -2665,9 +2760,9 @@ def cmd_build(args):
                      f"(have: {', '.join(BUILD_PHASES)})")
         phases = [p for p in phases if p not in skip]
 
-    handlers = {"quiesce": cmd_quiesce, "templates": cmd_templates, "docker": cmd_docker,
-                "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos, "novnc": cmd_novnc,
-                "labnic": cmd_labnic, "projects": cmd_projects}
+    handlers = {"quiesce": cmd_quiesce, "timesync": cmd_timesync, "templates": cmd_templates,
+                "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
+                "novnc": cmd_novnc, "labnic": cmd_labnic, "projects": cmd_projects}
     # Every phase reads its options off this one namespace, so it must carry a default
     # for every option any phase's sub-parser defines — a missing one is an AttributeError
     # at run time, not a parse error. Add new phase options here too.
@@ -2778,6 +2873,9 @@ def main():
                                         "(run on the VM)")
     qs.add_argument("--dry-run", action="store_true")
 
+    ts = sub.add_parser("timesync", help="keep ntpd alive through a clock jump (run on the VM)")
+    ts.add_argument("--dry-run", action="store_true")
+
     nv = sub.add_parser("novnc",
                         help="install noVNC + the gns3-novnc service (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
@@ -2841,7 +2939,7 @@ def main():
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
             "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
             "novnc": cmd_novnc, "labnic": cmd_labnic, "quiesce": cmd_quiesce,
-            "projects": cmd_projects, "build": cmd_build,
+            "timesync": cmd_timesync, "projects": cmd_projects, "build": cmd_build,
             "freeze": cmd_freeze, "thaw": cmd_thaw,
             "export-check": cmd_export_check,
             "provenance": cmd_provenance}[args.cmd](args)

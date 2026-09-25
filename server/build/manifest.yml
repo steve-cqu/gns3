@@ -193,6 +193,30 @@ auto_updates:
     - unattended-upgrades.service
   apt_periodic_file: /etc/apt/apt.conf.d/99-cqu-no-auto-upgrades
 
+# The stock GNS3 VM's classic ntpd, hardened by the `timesync` phase so one clock jump cannot
+# leave the appliance unsynchronised.
+#
+# On 25 Sep 2026 (the v044 arm64 build) an OpenWRT node's sysfixtime copied the VM's RTC, then
+# about 10 h ahead, into the appliance clock mid-sweep (fixed in the openwrtnode Dockerfile).
+# ntpd saw a 36001 s offset, exited on its 1000 s panic threshold (255/EXCEPTION), and the stock
+# unit has no Restart=, so the clock stayed wrong to the end of the build and every node started
+# afterwards inherited it. The 21-22 Sep v035 incident was the same exit. Anything else that
+# steps the clock (a suspend/resume, a host that sleeps) meets the same threshold.
+#
+# `tinker panic 0` makes ntpd correct any offset instead of exiting. ntp.conf(5) wants it
+# ahead of the pool lines, so the phase puts it first. The drop-in restarts ntpd if it exits
+# anyway, and Ubuntu's NTPD_OPTS='-g' lets the restart step the clock. Either change alone
+# would have saved v044. Both cost nothing.
+timesync:
+  unit: ntp.service
+  config_file: /etc/ntp.conf
+  config_lines:
+    - tinker panic 0
+  dropin: /etc/systemd/system/ntp.service.d/restart.conf
+  service:
+    Restart: on-failure
+    RestartSec: 30
+
 # The lab NIC — the GNS3 VM's third adapter, on an isolated hypervisor network shared with a
 # Windows VM running beside it. The "Windows Host" Cloud template binds to it.
 #
