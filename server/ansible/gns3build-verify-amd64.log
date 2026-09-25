@@ -1,6 +1,6 @@
-verification of amd64 on http://192.168.56.123 — all
-GNS3 2.2.54 @ http://192.168.56.123
-[provision] importing Add-Routes-Template.gns3project -> autotest-add-routes-d992f0b5
+verification of amd64 on http://192.168.56.124 — all
+GNS3 2.2.54 @ http://192.168.56.124
+[provision] importing Add-Routes-Template.gns3project -> autotest-add-routes-714896b5
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Host5=started, Host6=started, Router1=started, Router2=started, Router3=started, Switch1=started, Switch2=started, Switch3=started, Switch4=started
   settling 12s for boot/ifup ...
 [configure] Router1: 2 cmd(s)
@@ -10,8 +10,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] Host6: running add-routes-test.sh
            PASS (Host6)
-[teardown] deleting project d992f0b5-5ee7-4713-adde-dc4a2c68e537
-[provision] importing Ansible-Basics-Solution.gns3project -> autotest-ansible-basics-1dc2674e
+[teardown] deleting project 714896b5-ecc4-4b10-aa31-2dd0f84b06e6
+[provision] importing Ansible-Basics-Solution.gns3project -> autotest-ansible-basics-957d98d6
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Host5=started, Switch1=started
   settling 15s for boot/ifup ...
 [configure] Host1: 7 cmd(s)
@@ -21,8 +21,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Host5: 5 cmd(s)
 [assert] Host1: running ansible-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 1dc2674e-7623-486b-bbf2-f7fe3d5c6702
-[provision] building topology -> autotest-arp-basics-0a6d84cc
+[teardown] deleting project 957d98d6-8b10-411c-b8bb-7f8321550143
+[provision] building topology -> autotest-arp-basics-aa6d8a94
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Host1: 2 cmd(s)
@@ -31,8 +31,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Host4: 2 cmd(s)
 [assert] Host1: running arp-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 1e49ef11-dbf5-47d0-80bc-4ee5be7271b7
-[provision] building topology -> autotest-arp-spoofing-f6212b22
+[teardown] deleting project 7e4b8662-6be1-41d3-a180-04bcb8e3deef
+[provision] building topology -> autotest-arp-spoofing-c0b1a3cb
   nodes: Switch1=started, attacker=started, server=started, victim=started
   settling 20s for boot/ifup ...
 [configure] server: 4 cmd(s)
@@ -42,8 +42,8 @@ GNS3 2.2.54 @ http://192.168.56.123
   ready: victim-cache-poisoned ok at +5s
 [assert] victim: running arp-spoofing-test.sh
            PASS (victim)
-[teardown] deleting project a0a5747d-616c-4145-9aef-0e030d84bcdb
-[provision] building topology -> autotest-auth-kerberos-64bf74ae
+[teardown] deleting project 654fa67b-1032-4d4e-a0bf-a04071d656fd
+[provision] building topology -> autotest-auth-kerberos-fc806eb6
   nodes: Switch1=started, client=started, kdc=started, server=started
   settling 10s for boot/ifup ...
 [configure] kdc: 13 cmd(s)
@@ -55,22 +55,22 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (server)
 [assert] client: running auth-kerberos-test.sh
            PASS (client)
-[teardown] deleting project e521de9b-d222-495e-a696-4db5309b4b18
-[provision] building topology -> autotest-backup-basics-3ec7c5a6
+[teardown] deleting project fb198270-2413-4566-91e1-a57dd42a9906
+[provision] building topology -> autotest-backup-basics-bf1d6dce
   nodes: FS=started, Server=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] FS: 3 cmd(s)
 [configure] Server: 4 cmd(s)
 [assert] Server: running backup-basics-test.sh
            PASS (Server)
-[teardown] deleting project 6ddd32e9-223a-4c65-b0f2-f16a8165dba3
-[provision] building topology -> autotest-bgp-basics-4fe21762
+[teardown] deleting project 6b781fbb-2dba-47ae-a9b0-d83a85d81d32
+[provision] building topology -> autotest-bgp-basics-cde948de
   nodes: FRR1=started, FRR2=started, Host1=started, Host2=started, Switch1=started, Switch2=started
   settling 35s for boot/ifup ...
 [configure] Host1: 3 cmd(s)
 [configure] Host2: 3 cmd(s)
 [configure] FRR1 (vtysh via docker exec): 8 cmd(s)
-  ssh to gns3@192.168.56.123: password
+  ssh to gns3@192.168.56.124: password
 [configure] FRR2 (vtysh via docker exec): 8 cmd(s)
   ready: polling 1 check(s), timeout 120s
   ready: host1-reaches-host2 ok at +5s
@@ -78,8 +78,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] Host2: running bgp-basics-test.sh
            PASS (Host2)
-[teardown] deleting project 09d426c9-66ce-4935-8879-7565e5b6c67a
-[provision] importing Broken-Network-Base.gns3project -> autotest-broken-network-8521d821
+[teardown] deleting project 052de8a6-b7f3-4e69-ac13-95699c35c22b
+[provision] importing Broken-Network-Base.gns3project -> autotest-broken-network-358a54ac
   nodes: PC-ADMIN=started, PC-GUEST=started, PC-LAB1=started, PC-LAB2=started, R-Core=started, R-North=started, R-South=started, SRV-DNS=started, SRV-WEB=started, SW-Admin=started, SW-Guest=started, SW-Labs=started, SW-Server=started
   settling 14s for boot/ifup ...
 [assert] PC-LAB1: running broken-network-test.sh
@@ -88,8 +88,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (R-Core)
 [assert] SRV-DNS: running broken-network-test.sh
            PASS (SRV-DNS)
-[teardown] deleting project 8521d821-fd4e-47fa-a65b-a2071c48b7c9
-[provision] building topology -> autotest-broken-services-1a4df2e4
+[teardown] deleting project 358a54ac-b89b-49e4-bf08-6cd7a8882e0c
+[provision] building topology -> autotest-broken-services-4f8f7087
   nodes: Cache1=started, Client=started, DB1=started, DNS1=started, sw=started
   settling 10s for boot/ifup ...
 [configure] DNS1: 3 cmd(s)
@@ -98,8 +98,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Client: 3 cmd(s)
 [assert] Client: running broken-services-test.sh
            PASS (Client)
-[teardown] deleting project 87299775-c186-445e-9166-bec2c82eb01a
-[provision] building topology -> autotest-cache-server-basics-74a146a6
+[teardown] deleting project 9385d6d0-6119-406d-8fbf-6d8bf198e7bb
+[provision] building topology -> autotest-cache-server-basics-39caacfa
   nodes: App=started, Cache1=started, Host1=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Cache1: 3 cmd(s)
@@ -111,24 +111,24 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (App)
 [assert] Host1: running cache-server-basics-test.sh
            PASS (Host1)
-[teardown] deleting project f97d544f-bb2f-4d92-a10c-874f7f8684eb
-[provision] importing CampusCoreOSPF.gns3project -> autotest-campus-core-ospf-2bc4912b
+[teardown] deleting project e09dc4d6-9f88-4ec7-b6fb-1eb9aeba20c1
+[provision] importing CampusCoreOSPF.gns3project -> autotest-campus-core-ospf-c5207bdd
   nodes: NETem=started, PC-ADMIN=started, PC-GUEST=started, PC-LAB1=started, R-Core=started, R-North=started, R-South=started, SRV-DNS=started, SRV-WEB=started, SW-Admin=started, SW-Guest=started, SW-Labs=started, SW-Server=started
   settling 40s for boot/ifup ...
 [assert] PC-LAB1: running campus-core-ospf-test.sh
            PASS (PC-LAB1)
 [assert] SRV-DNS: running campus-core-ospf-test.sh
            PASS (SRV-DNS)
-[teardown] deleting project 2bc4912b-5e1e-4ecf-a76f-8d45bf5864eb
-[provision] importing CampusCoreSimple.gns3project -> autotest-campus-core-simple-e11a1db2
+[teardown] deleting project c5207bdd-08fb-43e0-9765-e339843a5ae1
+[provision] importing CampusCoreSimple.gns3project -> autotest-campus-core-simple-f28bee31
   nodes: PC-ADMIN=started, PC-GUEST=started, PC-LAB1=started, R-Core=started, R-North=started, R-South=started, SRV-DNS=started, SRV-WEB=started, SW-Admin=started, SW-Guest=started, SW-Labs=started, SW-Server=started
   settling 12s for boot/ifup ...
 [assert] PC-LAB1: running campus-core-simple-test.sh
            PASS (PC-LAB1)
 [assert] SRV-DNS: running campus-core-simple-test.sh
            PASS (SRV-DNS)
-[teardown] deleting project e11a1db2-1c91-4958-a16a-0cce0fc7d163
-[provision] importing CampusCoreVLAN.gns3project -> autotest-campus-core-vlan-43ff836d
+[teardown] deleting project f28bee31-b6c6-4f59-be30-0f65588f2f98
+[provision] importing CampusCoreVLAN.gns3project -> autotest-campus-core-vlan-c3ca9114
   nodes: PC-ADMIN=started, PC-GUEST=started, PC-LAB1=started, R-Core=started, R-North=started, R-South=started, SRV-DNS=started, SRV-WEB=started, SW-Guest=started, SW-North=started, SW-Server=started
   settling 14s for boot/ifup ...
 [assert] PC-LAB1: running campus-core-vlan-test.sh
@@ -140,19 +140,19 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: trunk on R-North <-> SW-North
   capture: access on PC-LAB1 <-> SW-North
-  capture: HIT  trunk carries VLAN 10, 20 (21 frames on R-North <-> SW-North)
-  capture: HIT  trunk captured 21 frames (>= 6)
-  capture: HIT  access is untagged — 8 frames, no 802.1Q header on PC-LAB1 <-> SW-North
-[teardown] deleting project 43ff836d-2b59-4427-aaf4-a04ce3a84992
-[provision] importing CampusCoreVLSM.gns3project -> autotest-campus-core-vlsm-da4b0ac7
+  capture: HIT  trunk carries VLAN 10, 20 (19 frames on R-North <-> SW-North)
+  capture: HIT  trunk captured 19 frames (>= 6)
+  capture: HIT  access is untagged — 7 frames, no 802.1Q header on PC-LAB1 <-> SW-North
+[teardown] deleting project c3ca9114-dfe7-4546-8a44-365c1550d3de
+[provision] importing CampusCoreVLSM.gns3project -> autotest-campus-core-vlsm-8cf4bc6e
   nodes: PC-ADMIN=started, PC-GUEST=started, PC-LAB1=started, R-Core=started, R-North=started, R-South=started, SRV-DNS=started, SRV-WEB=started, SW-Admin=started, SW-Guest=started, SW-Labs=started, SW-Server=started
   settling 12s for boot/ifup ...
 [assert] PC-LAB1: running campus-core-vlsm-test.sh
            PASS (PC-LAB1)
 [assert] SRV-DNS: running campus-core-vlsm-test.sh
            PASS (SRV-DNS)
-[teardown] deleting project da4b0ac7-ed6a-4140-b5d1-67beec1195d8
-[provision] importing ../setting-ip/Setting-IP-Solution.gns3project -> autotest-capture-basics-f78a731b
+[teardown] deleting project 8cf4bc6e-5769-40d6-b7df-7211a8a62d11
+[provision] importing ../setting-ip/Setting-IP-Solution.gns3project -> autotest-capture-basics-75f22cec
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Switch1=started
   settling 12s for boot/ifup ...
 [configure] Host3: 1 cmd(s)
@@ -163,8 +163,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: ping-netcat on Host1 <-> Switch1
   capture: HIT  ping-netcat captured 21 frames (>= 10)
-[teardown] deleting project f78a731b-7c7c-41b8-a5d0-77b4dc4e6fc8
-[provision] building topology -> autotest-central-logging-9aba4497
+[teardown] deleting project 75f22cec-a4b7-4f12-b5b8-ee36c5e3fb53
+[provision] building topology -> autotest-central-logging-9923b077
   nodes: Switch1=started, client1=started, client2=started, logserver=started
   settling 20s for boot/ifup ...
 [configure] logserver: 4 cmd(s)
@@ -174,8 +174,8 @@ GNS3 2.2.54 @ http://192.168.56.123
   ready: both-clients-logging ok at +0s
 [assert] logserver: running central-logging-test.sh
            PASS (logserver)
-[teardown] deleting project 5821db55-547f-473c-87ed-7a05ee184fcc
-[provision] building topology -> autotest-cloud-vpn-simulated-12beb5ff
+[teardown] deleting project f6052796-4282-4566-a927-4efe5e2ebdfb
+[provision] building topology -> autotest-cloud-vpn-simulated-a8ee1855
   nodes: AppServer=started, CloudGW=started, CloudVM=started, Host-Lab=started, NAT-Router=started
   settling 14s for boot/ifup ...
 [configure] Host-Lab: 3 cmd(s)
@@ -193,9 +193,9 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host-Lab)
 [assert] AppServer: running cloud-vpn-simulated-test.sh
            PASS (AppServer)
-[teardown] deleting project a1bf614b-4008-4b4d-a3c3-015fe157aa81
+[teardown] deleting project 50890ec2-f245-4634-9b86-f7629836c1ea
 [skip] cloud-vpn-wireguard: requires a commercial cloud account and real spend; hand-walk once per term. The testable half is cloud-vpn-simulated, which autotests.
-[provision] importing ConfigAsCode.gns3project -> autotest-config-as-code-demo-c9948da0
+[provision] importing ConfigAsCode.gns3project -> autotest-config-as-code-demo-18656a1f
   nodes: BROWSER=started, CTRL=started, GIT=started, PC=started, R-Site=started, SRV-DNS=started, SRV-WEB=started, SW-Mgmt=started, SW-Server=started
   settling 30s for boot/ifup ...
   ready: polling 2 check(s), timeout 300s
@@ -211,8 +211,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (SRV-WEB)
 [assert] PC: running config-as-code-demo-test.sh
            PASS (PC)
-[teardown] deleting project c9948da0-8bce-4921-8073-3659d6492cdd
-[provision] building topology -> autotest-crypto-file-transfer-3436415d
+[teardown] deleting project 18656a1f-2b1c-452b-a478-8ac6ff5b3783
+[provision] building topology -> autotest-crypto-file-transfer-0c42a0df
   nodes: Alice=started, Bob=started, Eve=started, Hub1=started
   settling 10s for boot/ifup ...
 [configure] Bob: 5 cmd(s)
@@ -225,8 +225,8 @@ GNS3 2.2.54 @ http://192.168.56.123
   capture: HIT  eve-link carries 'Br1sb4ne-Core-2027' in clear text on Eve <-> Hub1
   capture: HIT  eve-link carries 'CONFIDENTIAL MEMO' in clear text on Eve <-> Hub1
   capture: HIT  eve-link captured 13 frames (>= 6)
-[teardown] deleting project f02372cf-8497-4321-800c-b780a3360647
-[provision] building topology -> autotest-crypto-integrity-signatures-17290a6a
+[teardown] deleting project 9a021089-cda6-434b-b460-a67c161386c8
+[provision] building topology -> autotest-crypto-integrity-signatures-0bd0d381
   nodes: Alice=started, Bob=started, Eve=started, Hub1=started
   settling 10s for boot/ifup ...
 [configure] Bob: 4 cmd(s)
@@ -234,8 +234,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Alice: 12 cmd(s)
 [assert] Bob: running crypto-integrity-signatures-test.sh
            PASS (Bob)
-[teardown] deleting project ca0fef05-de33-4944-af7b-7e7e87299291
-[provision] building topology -> autotest-crypto-key-exchange-42fe6670
+[teardown] deleting project 221c8506-8027-4bbc-91c3-f76cb341f233
+[provision] building topology -> autotest-crypto-key-exchange-2164cf58
   nodes: Alice=started, Bob=started, Eve=started, Hub1=started
   settling 10s for boot/ifup ...
 [configure] Eve: 6 cmd(s)
@@ -249,10 +249,10 @@ GNS3 2.2.54 @ http://192.168.56.123
   capture: eve-link on Eve <-> Hub1
   capture: HIT  eve-link carries 'BEGIN PUBLIC KEY' in clear text on Eve <-> Hub1
   capture: HIT  eve-link carries 'U2FsdGVkX1' in clear text on Eve <-> Hub1
-  capture: HIT  eve-link does not carry 'Br1sb4ne-Core-2027' in 18 frames on Eve <-> Hub1
-  capture: HIT  eve-link captured 18 frames (>= 6)
-[teardown] deleting project f4b99c6c-1e45-4b0e-a39c-4743401c6cd6
-[provision] building topology -> autotest-database-server-basics-c1c9920b
+  capture: HIT  eve-link does not carry 'Br1sb4ne-Core-2027' in 21 frames on Eve <-> Hub1
+  capture: HIT  eve-link captured 21 frames (>= 6)
+[teardown] deleting project a631326a-094f-4434-8eb8-e7ecd35c0509
+[provision] building topology -> autotest-database-server-basics-7e853455
   nodes: Client=started, DB1=started, Host1=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] DB1: 3 cmd(s)
@@ -264,8 +264,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Client)
 [assert] Host1: running database-server-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 9d4befd1-c013-4aa3-ad52-63231c7fe568
-[provision] importing Default-Gateway-Solution.gns3project -> autotest-default-gateway-3ccc252d
+[teardown] deleting project 476bdd44-e540-408b-b47e-59e7ff82761f
+[provision] importing Default-Gateway-Solution.gns3project -> autotest-default-gateway-8ae65b3b
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Router1=started, Router2=started, Switch1=started, Switch2=started
   settling 10s for boot/ifup ...
 [assert] Host1: running default-gateway-test.sh
@@ -276,8 +276,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host3)
 [assert] Host4: running default-gateway-test.sh
            PASS (Host4)
-[teardown] deleting project 3ccc252d-4f43-48cf-b13d-16f6fab60ae6
-[provision] importing DHCP-Client-Solution.gns3project -> autotest-dhcp-client-8d74f05b
+[teardown] deleting project 8ae65b3b-f674-45e3-ac75-77916621c555
+[provision] importing DHCP-Client-Solution.gns3project -> autotest-dhcp-client-5d232d81
   nodes: Host1=started, Host2=started, Host3=started, OpenWRT1=started, Switch1=started
   settling 15s for boot/ifup ...
 [assert] Host1: running dhcp-client-test.sh
@@ -286,8 +286,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host2)
 [assert] Host3: running dhcp-client-test.sh
            PASS (Host3)
-[teardown] deleting project 8d74f05b-e5fe-4c2b-b466-110d9f34832c
-[provision] building topology -> autotest-dhcp-server-basics-b4370e34
+[teardown] deleting project 5d232d81-3981-4d5a-85c5-78860d629336
+[provision] building topology -> autotest-dhcp-server-basics-13862e70
   nodes: Host1=started, Host2=started, Host3=started, OpenWRT1=started, Switch1=started
   settling 15s for boot/ifup ...
 [configure] Host3: 3 cmd(s)
@@ -299,8 +299,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] OpenWRT1: running dhcp-server-basics-test.sh
            PASS (OpenWRT1)
-[teardown] deleting project 85fc63c7-b2a7-4590-ba2e-f59cceb3f044
-[provision] building topology -> autotest-dhcp-server-kea-e8c49cc0
+[teardown] deleting project a9702dd1-2d29-4a6e-a465-63caba066fa6
+[provision] building topology -> autotest-dhcp-server-kea-76ead04b
   nodes: DHCP1=started, Host1=started, Host2=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] DHCP1: 3 cmd(s)
@@ -312,8 +312,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host2)
 [assert] DHCP1: running dhcp-server-kea-test.sh
            PASS (DHCP1)
-[teardown] deleting project 3d67390d-2115-4969-ac01-a3f3128b2702
-[provision] building topology -> autotest-directory-ad-basics-ddd36601
+[teardown] deleting project 421d6b4b-2a4c-4fbc-b1d1-d3e7e2d894de
+[provision] building topology -> autotest-directory-ad-basics-f7a7f7e9
   nodes: Client1=started, DC1=started, Switch1=started
   settling 30s for boot/ifup ...
 [configure] DC1: 11 cmd(s)
@@ -322,8 +322,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (DC1)
 [assert] Client1: running directory-ad-basics-test.sh
            PASS (Client1)
-[teardown] deleting project fcbbbb4b-f57d-4125-9370-506eaafaefc1
-[provision] building topology -> autotest-directory-demo-056bd729
+[teardown] deleting project 8f744670-bed9-49bf-a549-470cf83bdc10
+[provision] building topology -> autotest-directory-demo-50329004
   nodes: DC1=started, PC1=started, PC2=started, SW=started
   settling 40s for boot/ifup ...
 [configure] DC1: 11 cmd(s)
@@ -335,8 +335,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (PC1)
 [assert] PC2: running directory-demo-test.sh
            PASS (PC2)
-[teardown] deleting project 619db27d-7e9b-4955-93f9-b7cc844c050f
-[provision] building topology -> autotest-directory-linux-join-8d95a147
+[teardown] deleting project 57fb93a8-ad14-477f-b836-a54fee4022ad
+[provision] building topology -> autotest-directory-linux-join-88ed80a9
   nodes: Client1=started, DC1=started, Switch1=started
   settling 40s for boot/ifup ...
 [configure] DC1: 11 cmd(s)
@@ -345,8 +345,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (DC1)
 [assert] Client1: running directory-linux-join-test.sh
            PASS (Client1)
-[teardown] deleting project 60002751-62df-48a1-818c-7a9fb4748ddc
-[provision] building topology -> autotest-dns-hosts-97966b19
+[teardown] deleting project 90f9b66e-06d6-49da-9cad-9783fc81129c
+[provision] building topology -> autotest-dns-hosts-6f41b1db
   nodes: Host1=started, Host2=started, Host3=started, OpenWRT1=started, Switch1=started
   settling 15s for boot/ifup ...
 [configure] Host2: 3 cmd(s)
@@ -361,8 +361,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] OpenWRT1: running dns-hosts-test.sh
            PASS (OpenWRT1)
-[teardown] deleting project c3473f0f-0715-4d59-8f30-3cdcddb9a57a
-[provision] building topology -> autotest-dns-server-basics-7b90a5f9
+[teardown] deleting project 3cc78a7e-f13f-44b0-9f8a-eb17e36f5cbb
+[provision] building topology -> autotest-dns-server-basics-e8c0252f
   nodes: DNS1=started, Host1=started, Host2=started, Switch1=started, Web=started
   settling 8s for boot/ifup ...
 [configure] DNS1: 3 cmd(s)
@@ -373,8 +373,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (DNS1)
 [assert] Host1: running dns-server-basics-test.sh
            PASS (Host1)
-[teardown] deleting project f0d5e4a4-6ded-4ff4-96bd-4f19370fd468
-[provision] building topology -> autotest-dos-demo-b9e886f8
+[teardown] deleting project aa655f1d-8a7f-48eb-804a-0de0001074a8
+[provision] building topology -> autotest-dos-demo-e8fcda8d
   nodes: R=started, attacker=started, refl1=started, refl2=started, refl3=started, sw1=started, sw2=started, victim=started
   settling 20s for boot/ifup ...
 [configure] R: 10 cmd(s)
@@ -392,8 +392,8 @@ GNS3 2.2.54 @ http://192.168.56.123
   capture: amplified-responses on victim <-> sw2
   capture: HIT  amplified-responses carries 'BBBBBBBBBBBBBBBB' in clear text on victim <-> sw2
   capture: HIT  amplified-responses captured 80 frames (>= 10)
-[teardown] deleting project e24c74c0-257a-4462-9135-ba116f6f9553
-[provision] building topology -> autotest-file-sharing-basics-a65077d3
+[teardown] deleting project b76cbace-6aba-4846-bbd8-c3ab3a8316f1
+[provision] building topology -> autotest-file-sharing-basics-b733ccef
   nodes: FS=started, Host1=started, Host2=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] FS: 3 cmd(s)
@@ -403,8 +403,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (FS)
 [assert] Host1: running file-sharing-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 3063af2a-c9c7-42e1-bea3-1dbff689978d
-[provision] building topology -> autotest-git-basics-d615147a
+[teardown] deleting project 5dcd6d7e-1b5a-4daf-8a43-1d45f9cee3ba
+[provision] building topology -> autotest-git-basics-05d8e368
   nodes: Dev1=started, Dev2=started, GitServer=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Dev1: 6 cmd(s)
@@ -414,8 +414,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Dev1)
 [assert] Dev2: running git-basics-test.sh
            PASS (Dev2)
-[teardown] deleting project 97cc847f-704a-4d39-8444-b4b018569ad1
-[provision] building topology -> autotest-git-server-gitea-95b2cc0b
+[teardown] deleting project 5e62801d-5451-4ee4-96ac-1f6d9b684c83
+[provision] building topology -> autotest-git-server-gitea-6cf6796d
   nodes: Dev1=started, Gitea=started, Switch1=started
   settling 12s for boot/ifup ...
 [configure] Gitea: 3 cmd(s)
@@ -424,15 +424,15 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Gitea)
 [assert] Dev1: running git-server-gitea-test.sh
            PASS (Dev1)
-[teardown] deleting project d3bdb279-c0c2-4c7e-8080-1eee060db404
+[teardown] deleting project 7a7a0074-74d7-4263-bc60-d2923cc68e06
 [skip] gns3-internet-nat: requires real Internet egress from the GNS3 VM (external dependency); hand-walked 21 Aug 2026
-[provision] importing GNS3-Intro-Solution.gns3project -> autotest-gns3-intro-5c6681f9
+[provision] importing GNS3-Intro-Solution.gns3project -> autotest-gns3-intro-4d00b1ef
   nodes: Host1=started
   settling 8s for boot/ifup ...
 [assert] Host1: running gns3-intro-test.sh
            PASS (Host1)
-[teardown] deleting project 5c6681f9-78f8-4f16-8ca9-3dd3042e7a94
-[provision] building topology -> autotest-hardening-baseline-7c2ca46b
+[teardown] deleting project 4d00b1ef-d8d9-45bc-bd95-f67475b7db57
+[provision] building topology -> autotest-hardening-baseline-1c9d0b1c
   nodes: Control=started, File=started, Switch1=started, Web=started
   settling 15s for boot/ifup ...
 [configure] Control: 10 cmd(s)
@@ -440,28 +440,28 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] File: 10 cmd(s)
 [assert] Control: running hardening-baseline-test.sh
            PASS (Control)
-[teardown] deleting project 58740cc3-5f24-48de-92d9-6d3f9dc4a2ee
-[provision] importing HTTPClient-CLI-Basics-Solution.gns3project -> autotest-httpclient-cli-basics-0bd5a391
+[teardown] deleting project 3be053e1-224b-40e8-9469-41298750f288
+[provision] importing HTTPClient-CLI-Basics-Solution.gns3project -> autotest-httpclient-cli-basics-e193b82c
   nodes: Host1=started, Router1=started, Router2=started, Server1=started, Switch1=started, Switch2=started, Switch3=started
   settling 12s for boot/ifup ...
 [assert] Host1: running httpclient-cli-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 0bd5a391-af97-426e-9d59-2104edac8c09
-[provision] importing HTTPClient-GUI-Basics-Solution.gns3project -> autotest-httpclient-gui-basics-f106a201
+[teardown] deleting project e193b82c-2a33-4a4f-a68b-5fa3efc3a8c0
+[provision] importing HTTPClient-GUI-Basics-Solution.gns3project -> autotest-httpclient-gui-basics-acf6e6f6
   nodes: Host1=started, Router1=started, Router2=started, Server1=started, Switch1=started, Switch2=started, Switch3=started
   settling 12s for boot/ifup ...
 [assert] Router1: running httpclient-gui-basics-test.sh
            PASS (Router1)
-[teardown] deleting project f106a201-983e-428b-8e3c-719d5793e319
-[provision] importing HTTPS-Setup-Selfsigned-Solution.gns3project -> autotest-https-setup-selfsigned-dcfb859b
+[teardown] deleting project acf6e6f6-f7a6-409d-8cd9-a18e1e76c706
+[provision] importing HTTPS-Setup-Selfsigned-Solution.gns3project -> autotest-https-setup-selfsigned-0e115f00
   nodes: Host1=started, Router1=started, Router2=started, Server1=started, Switch1=started, Switch2=started, Switch3=started
   settling 12s for boot/ifup ...
 [configure] Server1: 2 cmd(s)
 [assert] Host1: running https-setup-selfsigned-test.sh
            PASS (Host1)
-[teardown] deleting project dcfb859b-3264-46e0-9064-c884b4f2df50
+[teardown] deleting project 0e115f00-14e2-4fff-b157-9b87009827e3
 [skip] ipsec-site-to-site: optional node not installed: template(s) OPNsense — build the appliance with `--with` to run this activity
-[provision] building topology -> autotest-ipsec-swanctl-d7011df5
+[provision] building topology -> autotest-ipsec-swanctl-dac267a1
   nodes: Host1=started, Host2=started, IPsecGW-A=started, IPsecGW-B=started
   settling 10s for boot/ifup ...
 [configure] IPsecGW-A: 6 cmd(s)
@@ -476,8 +476,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (IPsecGW-B)
 [assert] Host1: running ipsec-swanctl-test.sh
            PASS (Host1)
-[teardown] deleting project 2ba62eb5-3fcc-46ca-9e66-291a66dd1b0c
-[provision] building topology -> autotest-ipv6-basics-055c1283
+[teardown] deleting project fb909f71-ef5e-410d-a01b-2d779ceaa8ef
+[provision] building topology -> autotest-ipv6-basics-62e40f0d
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, RouterA=started, RouterB=started, Switch1=started, Switch2=started
   settling 12s for boot/ifup ...
 [configure] Host1: 3 cmd(s)
@@ -493,8 +493,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: subnet2 on RouterA <-> RouterB
   capture: HIT  subnet2 captured 10 frames (>= 8)
-[teardown] deleting project 6f692716-16d1-431e-9949-79eddf722761
-[provision] building topology -> autotest-ipv6-nat64-2ed7ff59
+[teardown] deleting project b6efcb38-f21e-41f3-a6d8-3aa0f3a6199e
+[provision] building topology -> autotest-ipv6-nat64-bf1f5ea3
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, RouterA=started, RouterB=started, Switch1=started, Switch2=started
   settling 12s for boot/ifup ...
 [configure] Host1: 3 cmd(s)
@@ -512,10 +512,10 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: subnet2-ipv6 on RouterA <-> RouterB
   capture: subnet3-ipv4 on RouterB <-> Switch2
-  capture: HIT  subnet2-ipv6 captured 10 frames (>= 8)
+  capture: HIT  subnet2-ipv6 captured 8 frames (>= 8)
   capture: HIT  subnet3-ipv4 captured 10 frames (>= 8)
-[teardown] deleting project 6170bca0-5b72-429c-9c01-2e5082c7d2fc
-[provision] importing LAN-Routing-Solution.gns3project -> autotest-lan-routing-vlan-cb724ada
+[teardown] deleting project c381addb-e456-48f4-9f80-fc14733b7036
+[provision] importing LAN-Routing-Solution.gns3project -> autotest-lan-routing-vlan-ca81e0a2
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Host5=started, Host6=started, Host7=started, Host8=started, Host9=started, Router1=started, Router2=started, Router3=started, Switch1=started, Switch2=started, Switch3=started, Switch4=started, Switch5=started, Switch6=started
   settling 15s for boot/ifup ...
 [configure] Router1: 2 cmd(s)
@@ -525,24 +525,24 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] Host9: running lan-routing-vlan-test.sh
            PASS (Host9)
-[teardown] deleting project cb724ada-4a95-4d45-9f48-e52dab3907e5
-[provision] building topology -> autotest-link-performance-616d1b6e
+[teardown] deleting project ca81e0a2-f840-4aeb-8e21-ae59024d128f
+[provision] building topology -> autotest-link-performance-37854d31
   nodes: Gen1=started, Gen2=started, NETem=started
   settling 10s for boot/ifup ...
 [configure] Gen1: 2 cmd(s)
 [configure] Gen2: 3 cmd(s)
 [assert] Gen1: running link-performance-test.sh
            PASS (Gen1)
-[teardown] deleting project 915a6e1f-1ba8-4134-920a-3379a1b5133b
-[provision] building topology -> autotest-mtls-client-certs-8efa05d5
+[teardown] deleting project 83914880-05ae-49f5-9e29-b3e7f0d59349
+[provision] building topology -> autotest-mtls-client-certs-c416dd81
   nodes: Switch1=started, client=started, server=started
   settling 8s for boot/ifup ...
 [configure] server: 24 cmd(s)
 [configure] client: 8 cmd(s)
 [assert] client: running mtls-client-certs-test.sh
            PASS (client)
-[teardown] deleting project 6e785ed2-abbf-4b1f-b5f5-a80fd83fc678
-[provision] building topology -> autotest-mtu-black-hole-b6834210
+[teardown] deleting project 67bc8132-71ba-4f80-8a87-26b9bba00656
+[provision] building topology -> autotest-mtu-black-hole-0f01cc41
   nodes: Host-A=started, Host-B=started, Internet=started, Router-A=started, Router-B=started
   settling 14s for boot/ifup ...
 [configure] Host-A: 3 cmd(s)
@@ -558,16 +558,16 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host-B)
 [assert] Host-A: running mtu-black-hole-test.sh
            PASS (Host-A)
-[teardown] deleting project 2da288d5-8c5d-4e6d-8a42-fdb8bd8f7f5d
-[provision] building topology -> autotest-netcat-basics-a7d29334
+[teardown] deleting project 2df7f3fc-112e-48e5-84eb-2a8e5bd59442
+[provision] building topology -> autotest-netcat-basics-2be544ca
   nodes: Host1=started, Host2=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Host1: 3 cmd(s)
 [configure] Host2: 3 cmd(s)
 [assert] Host1: running netcat-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 9c5deb92-cb35-47c2-a49b-9d9ebedc19a1
-[provision] building topology -> autotest-netflow-basics-2feed4d6
+[teardown] deleting project 72d90c0b-afd7-4db6-91ea-3ea16248e1ba
+[provision] building topology -> autotest-netflow-basics-3f5ebc75
   nodes: Collector=started, Host1=started, Host2=started, Hub1=started, Probe=started
   settling 8s for boot/ifup ...
 [configure] Collector: 3 cmd(s)
@@ -580,8 +580,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host1)
 [assert] Collector: running netflow-basics-test.sh
            PASS (Collector)
-[teardown] deleting project 4463e2b9-3b02-46d8-bf2f-8359f7cb86a0
-[provision] building topology -> autotest-network-monitoring-basics-0783ec78
+[teardown] deleting project ead01f57-e860-476b-88fc-ed122488cca1
+[provision] building topology -> autotest-network-monitoring-basics-6a495ba9
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Monitor=started, Router=started, Switch1=started, Switch2=started
   settling 25s for boot/ifup ...
 [configure] Router: 5 cmd(s)
@@ -594,8 +594,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Monitor)
 [assert] Host1: running network-monitoring-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 1ef4869b-e085-40fe-91f6-119783d3af3d
-[provision] building topology -> autotest-nftables-firewall-276cdf16
+[teardown] deleting project a241404a-4fb4-4846-aca6-51f3a87333d0
+[provision] building topology -> autotest-nftables-firewall-11c3cee6
   nodes: Switch1=started, server=started, trusted=started, untrusted=started
   settling 20s for boot/ifup ...
 [configure] server: 7 cmd(s)
@@ -610,8 +610,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: untrusted-edge on untrusted <-> Switch1
   capture: HIT  untrusted-edge captured 16 frames (>= 6)
-[teardown] deleting project c6f492b5-5ed1-4ad2-94b8-12a51d9a00c1
-[provision] building topology -> autotest-ntp-basics-aa829cd6
+[teardown] deleting project 7766c5da-366d-43a1-823c-a93a1c789604
+[provision] building topology -> autotest-ntp-basics-96e50201
   nodes: Host1=started, Host2=started, NTP1=started, Switch1=started
   settling 10s for boot/ifup ...
 [configure] NTP1: 3 cmd(s)
@@ -621,8 +621,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (NTP1)
 [assert] Host1: running ntp-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 46ea1dc7-c20e-4d2d-8fa4-f8d2eabc57e0
-[provision] building topology -> autotest-openssl-ca-a67fd2eb
+[teardown] deleting project d44af000-c840-4614-b33c-ba5373fee264
+[provision] building topology -> autotest-openssl-ca-cd10549d
   nodes: CA=started, Client=started, Server=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] CA: 18 cmd(s)
@@ -630,8 +630,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Client: 6 cmd(s)
 [assert] Client: running openssl-ca-test.sh
            PASS (Client)
-[teardown] deleting project 5804a831-fcaa-47f6-89ad-e68cb9edb477
-[provision] building topology -> autotest-openwrt-basics-79484b12
+[teardown] deleting project 30e1d605-8781-4421-94a5-ce44d809b393
+[provision] building topology -> autotest-openwrt-basics-8ec3a4cf
   nodes: OpenWRT1=started, PC1=started, PC2=started, Server1=started, Switch1=started
   settling 30s for boot/ifup ...
 [configure] Server1: 4 cmd(s)
@@ -643,8 +643,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (OpenWRT1)
 [assert] Server1: running openwrt-basics-test.sh
            PASS (Server1)
-[teardown] deleting project 16e30b68-ccaa-4367-8722-fa5b7a0e90f8
-[provision] building topology -> autotest-openwrt-firewall-dmz-65bde8a4
+[teardown] deleting project f973a8ca-5ab2-40bb-a204-9b5bf336d5b4
+[provision] building topology -> autotest-openwrt-firewall-dmz-939bb67a
   nodes: Internet1=started, OpenWRT1=started, PC1=started, PC2=started, Switch1=started, Switch2=started, Web1=started
   settling 30s for boot/ifup ...
 [configure] PC2: 3 cmd(s)
@@ -662,23 +662,23 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Internet1)
 [assert] OpenWRT1: running openwrt-firewall-dmz-test.sh
            PASS (OpenWRT1)
-[teardown] deleting project a4c6f6cd-4e94-48c3-9c8f-91c0b192d5fe
+[teardown] deleting project bd5aad0d-aac9-4331-b7f7-609b8d16e9b4
 [skip] opnsense-firewall: optional node not installed: template(s) OPNsense — build the appliance with `--with` to run this activity
-[provision] importing OSPF-Basics-Solution.gns3project -> autotest-ospf-basics-ecbcbfab
+[provision] importing OSPF-Basics-Solution.gns3project -> autotest-ospf-basics-b0d66e87
   nodes: FRR-1=started, FRR-2=started, FRR-3=started, FRR-4=started, Host1=started, Host2=started, NETem1=started, NETem2=started
   settling 30s for boot/ifup ...
 [assert] Host1: running ospf-basics-test.sh
            PASS (Host1)
 [assert] Host2: running ospf-basics-test.sh
            PASS (Host2)
-[teardown] deleting project ecbcbfab-67d8-4a21-9e21-6389196fa24b
-[provision] building topology -> autotest-password-hashing-7972f4e2
+[teardown] deleting project b0d66e87-de69-4430-bf83-12debeeb565f
+[provision] building topology -> autotest-password-hashing-9c483d0e
   nodes: Target=started
   settling 8s for boot/ifup ...
 [assert] Target: running password-hashing-test.sh
            PASS (Target)
-[teardown] deleting project eef8ff7e-a14a-402c-abfc-eb5e7ca765ad
-[provision] building topology -> autotest-patch-management-9a648faf
+[teardown] deleting project 1fd62880-5353-47ec-a5a6-e1c2f4768f91
+[provision] building topology -> autotest-patch-management-b11caa22
   nodes: App=started, Control=started, File=started, Patch=started, Switch1=started, Web=started
   settling 18s for boot/ifup ...
 [configure] Patch: 3 cmd(s)
@@ -688,16 +688,16 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] App: 14 cmd(s)
 [assert] Control: running patch-management-test.sh
            PASS (Control)
-[teardown] deleting project 2f101a90-2628-49c7-ad8f-7f101b5d408d
-[provision] building topology -> autotest-ping-basics-aafc1001
+[teardown] deleting project 07e8800c-ddf7-4eac-a3e1-017a67ffaa5e
+[provision] building topology -> autotest-ping-basics-0c383b7c
   nodes: Host1=started, Host2=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Host1: 2 cmd(s)
 [configure] Host2: 2 cmd(s)
 [assert] Host1: running ping-basics-test.sh
            PASS (Host1)
-[teardown] deleting project b2dda097-d2a2-4dcf-a46a-bfa1bfe70702
-[provision] building topology -> autotest-port-scanning-8b754da0
+[teardown] deleting project cbbe2891-084d-4333-8ed7-5652ab975394
+[provision] building topology -> autotest-port-scanning-ce8359a9
   nodes: Switch1=started, attacker=started, filehost=started, web=started
   settling 8s for boot/ifup ...
 [configure] web: 4 cmd(s)
@@ -707,9 +707,9 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (attacker)
 [capture] link captures over the API
   capture: attacker-edge on attacker <-> Switch1
-  capture: HIT  attacker-edge captured 531 frames (>= 6)
-[teardown] deleting project 93674fb7-b938-45f5-8a41-ea7a82299be0
-[provision] building topology -> autotest-pq-crypto-basics-65e52afd
+  capture: HIT  attacker-edge captured 532 frames (>= 6)
+[teardown] deleting project d988fafc-6524-4294-b5fa-26d984e10058
+[provision] building topology -> autotest-pq-crypto-basics-ae06106a
   nodes: Client=started, NETem=started, Server=started
   settling 12s for boot/ifup ...
 [configure] Server: 12 cmd(s)
@@ -718,8 +718,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Server)
 [assert] Client: running pq-crypto-basics-test.sh
            PASS (Client)
-[teardown] deleting project ac3aefad-c06b-492a-ba67-966dde735b45
-[provision] importing ResilienceDemo.gns3project -> autotest-resilience-demo-f108dc13
+[teardown] deleting project 85556af9-1efe-45be-99a2-2e0d49a178eb
+[provision] importing ResilienceDemo.gns3project -> autotest-resilience-demo-c43a5a1f
   nodes: CLIENT=started, DNS=started, LB=started, MONITOR=started, SW=started, WEB1=started, WEB2=started, WEB3=started
   settling 30s for boot/ifup ...
   ready: polling 3 check(s), timeout 240s
@@ -740,8 +740,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (LB)
 [assert] CLIENT: running resilience-demo-test.sh
            PASS (CLIENT)
-[teardown] deleting project f108dc13-5a4e-4c15-9917-3106d86cca97
-[provision] importing Reverse-Proxy-Solution.gns3project -> autotest-reverse-proxy-23c12123
+[teardown] deleting project c43a5a1f-24bb-4999-a71a-07d9a6962f34
+[provision] importing Reverse-Proxy-Solution.gns3project -> autotest-reverse-proxy-fffd8146
   nodes: Proxy=started, Switch1=started, WebClient=started, WebServer1=started, WebServer2=started
   settling 12s for boot/ifup ...
 [configure] WebServer1: 2 cmd(s)
@@ -749,8 +749,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Proxy: 2 cmd(s)
 [assert] WebClient: running reverse-proxy-test.sh
            PASS (WebClient)
-[teardown] deleting project 23c12123-a44c-4558-901b-8d8c18c5f2d6
-[provision] building topology -> autotest-sdn-basics-a8ab19c0
+[teardown] deleting project fffd8146-7511-43f9-a5c3-c4f11ae37e60
+[provision] building topology -> autotest-sdn-basics-364a829b
   nodes: Browser=started, Host1=started, Host2=started, Host3=started, Host4=started, MgmtSW=started, Monitor=started, SDN1=started, Switch=started
   settling 30s for boot/ifup ...
 [configure] Host1: 2 cmd(s)
@@ -767,11 +767,11 @@ GNS3 2.2.54 @ http://192.168.56.123
 [capture] link captures over the API
   capture: openflow on SDN1 <-> MgmtSW
   capture: access on Host1 <-> Switch
-  capture: HIT  openflow captured 124 frames (>= 20)
-  capture: HIT  access is untagged — 13 frames, no 802.1Q header on Host1 <-> Switch
-  capture: HIT  access captured 13 frames (>= 8)
-[teardown] deleting project f97cc650-298b-4f2f-aad0-fb65e159d2ed
-[provision] importing SecurityOpsDemo.gns3project -> autotest-security-ops-demo-b3121f69
+  capture: HIT  openflow captured 104 frames (>= 20)
+  capture: HIT  access is untagged — 14 frames, no 802.1Q header on Host1 <-> Switch
+  capture: HIT  access captured 14 frames (>= 8)
+[teardown] deleting project c670e3f5-8440-4ff2-ae52-be33b7332fb8
+[provision] importing SecurityOpsDemo.gns3project -> autotest-security-ops-demo-e8a83012
   nodes: ATTACKER=started, COLLECTOR=started, HUB-Server=started, IDS=started, LOGSRV=started, MONITOR=started, PC-STAFF=started, R-Edge=started, SRV-WEB=started, SW-Office=started
   settling 30s for boot/ifup ...
 [assert] R-Edge: running security-ops-demo-test.sh
@@ -788,9 +788,9 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (LOGSRV)
 [assert] MONITOR: running security-ops-demo-test.sh
            PASS (MONITOR)
-[teardown] deleting project b3121f69-5324-4acd-ab08-8b4c3d658f56
+[teardown] deleting project e8a83012-a014-43ef-8c1a-54eb2a6aa650
 [skip] service-nodes-demo: staff demonstration topology, not a single-assertion activity — verify interactively
-[provision] importing Setting-IP-Solution.gns3project -> autotest-setting-ip-5b050880
+[provision] importing Setting-IP-Solution.gns3project -> autotest-setting-ip-e8d63e62
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Switch1=started
   settling 10s for boot/ifup ...
 [assert] Host1: running setting-ip-test.sh
@@ -799,17 +799,17 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Host2)
 [assert] Host3: running setting-ip-test.sh
            PASS (Host3)
-[teardown] deleting project 5b050880-3fde-4d16-a72c-9e3a6cd60508
+[teardown] deleting project e8d63e62-58ac-481f-9ed0-9c630dac3dc2
 [skip] small-internet: large demo topology, not a single-assertion activity — verify interactively
-[provision] building topology -> autotest-ssh-basics-a3a79c60
+[provision] building topology -> autotest-ssh-basics-b517952f
   nodes: Host1=started, Host2=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Host1: 2 cmd(s)
 [configure] Host2: 3 cmd(s)
 [assert] Host1: running ssh-basics-test.sh
            PASS (Host1)
-[teardown] deleting project abb70ce5-0d1c-455e-9dfb-d26e8b698ef4
-[provision] building topology -> autotest-ssh-hardening-8df5dbaa
+[teardown] deleting project 24d39d26-ce6c-4beb-979b-ba0d2ea87c12
+[provision] building topology -> autotest-ssh-hardening-32aae20f
   nodes: Admin=started, Bastion=started, Internal=started, Server=started, Switch1=started
   settling 10s for boot/ifup ...
 [configure] Admin: 7 cmd(s)
@@ -824,8 +824,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Bastion)
 [assert] Internal: running ssh-hardening-test.sh
            PASS (Internal)
-[teardown] deleting project 48d6ddcf-8f73-471a-a66c-cb6ed83a8117
-[provision] building topology -> autotest-stp-basics-a07cf8b4
+[teardown] deleting project b3a68f80-2ec0-4cf3-9329-96d303f08539
+[provision] building topology -> autotest-stp-basics-07205571
   nodes: Host1=started, Host2=started, SW1=started, SW2=started
   settling 15s for boot/ifup ...
 [configure] SW1 (OVS via docker exec): 1 cmd(s)
@@ -834,8 +834,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Host2: 2 cmd(s)
 [assert] Host1: running stp-basics-test.sh
            PASS (Host1)
-[teardown] deleting project ccd2c8ea-375a-4c8c-a3c8-18697f72321d
-[provision] building topology -> autotest-suricata-basics-0fb89ee2
+[teardown] deleting project df60c5f4-5c87-41c7-a5b9-498d528e4681
+[provision] building topology -> autotest-suricata-basics-b05d4fe9
   nodes: Client=started, Hub1=started, IDS=started, Server=started
   settling 12s for boot/ifup ...
 [configure] Server: 4 cmd(s)
@@ -847,9 +847,9 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (Client)
 [assert] IDS: running suricata-basics-test.sh
            PASS (IDS)
-[teardown] deleting project 65cbe565-91d1-4568-8a82-9e137858e844
+[teardown] deleting project e989c48b-e436-45cc-a1eb-685820091e96
 [skip] tailscale-basics: needs two GNS3 instances + Internet + Tailscale coordination (external dependency)
-[provision] importing ../udp-basics/UDP-Basics-Template.gns3project -> autotest-tcp-basics-6091c6c3
+[provision] importing ../udp-basics/UDP-Basics-Template.gns3project -> autotest-tcp-basics-5f035406
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, NETem1=started, Router1=started, Router2=started, Switch1=started, Switch2=started
   settling 20s for boot/ifup ...
 [configure] NETem1 (menu console via docker exec): 2 cmd(s)
@@ -857,8 +857,8 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Host1: 1 cmd(s)
 [assert] Host3: running tcp-basics-test.sh
            PASS (Host3)
-[teardown] deleting project 6091c6c3-9acd-47b7-beb3-0710a1a3504b
-[provision] importing UDP-Basics-Template.gns3project -> autotest-udp-basics-71030110
+[teardown] deleting project 5f035406-f971-4cc2-935d-0cdc728642e6
+[provision] importing UDP-Basics-Template.gns3project -> autotest-udp-basics-9e2b3063
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, NETem1=started, Router1=started, Router2=started, Switch1=started, Switch2=started
   settling 20s for boot/ifup ...
 [configure] NETem1 (menu console via docker exec): 3 cmd(s)
@@ -866,31 +866,31 @@ GNS3 2.2.54 @ http://192.168.56.123
 [configure] Host1: 1 cmd(s)
 [assert] Host3: running udp-basics-test.sh
            PASS (Host3)
-[teardown] deleting project 71030110-6f7d-4942-9556-b889ba4b7f06
-[provision] importing View-Routes-Solution.gns3project -> autotest-view-routes-c4602f4f
+[teardown] deleting project 9e2b3063-3b5d-4c72-9305-19f5b2fb3cfb
+[provision] importing View-Routes-Solution.gns3project -> autotest-view-routes-fd52c583
   nodes: Host1=started, Host2=started, Host3=started, Router1=started, Switch1=started
   settling 10s for boot/ifup ...
 [assert] Host1: running view-routes-test.sh
            PASS (Host1)
 [assert] Host3: running view-routes-test.sh
            PASS (Host3)
-[teardown] deleting project c4602f4f-8d26-48f2-96be-c31d91c7d603
-[provision] importing VLAN-Basics-Solution.gns3project -> autotest-vlan-basics-0a03ceae
+[teardown] deleting project fd52c583-7bc3-410a-9cce-e43276cce387
+[provision] importing VLAN-Basics-Solution.gns3project -> autotest-vlan-basics-23467a1a
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Switch1=started
   settling 14s for boot/ifup ...
 [configure] Switch1 (OVS via docker exec): 4 cmd(s)
 [assert] Host1: running vlan-basics-test.sh
            PASS (Host1)
-[teardown] deleting project 0a03ceae-a5d2-4a2f-90a8-a45fc9d94058
-[provision] importing VLAN-Router-Solution.gns3project -> autotest-vlan-router-9065bf56
+[teardown] deleting project 23467a1a-f0d8-4b69-8780-2ec99b23d689
+[provision] importing VLAN-Router-Solution.gns3project -> autotest-vlan-router-61c52b30
   nodes: Host1=started, Host2=started, Host3=started, Host4=started, Router1=started, Switch1=started
   settling 14s for boot/ifup ...
 [configure] Switch1 (OVS via docker exec): 5 cmd(s)
 [configure] Router1: 7 cmd(s)
 [assert] Host1: running vlan-router-test.sh
            PASS (Host1)
-[teardown] deleting project 9065bf56-ee42-4d55-ad32-76580123ef4b
-[provision] building topology -> autotest-web-app-attacks-basics-55863f03
+[teardown] deleting project 61c52b30-6e4b-41f1-a548-e31971d1b397
+[provision] building topology -> autotest-web-app-attacks-basics-6cdb22a1
   nodes: Switch1=started, attacker=started, victim=started, webserver=started
   settling 20s for boot/ifup ...
 [configure] webserver: 3 cmd(s)
@@ -904,9 +904,9 @@ GNS3 2.2.54 @ http://192.168.56.123
   capture: cookie-theft on webserver <-> Switch1
   capture: HIT  cookie-theft carries 'password=redgum77' in clear text on webserver <-> Switch1
   capture: HIT  cookie-theft carries 'session=bob|' in clear text on webserver <-> Switch1
-  capture: HIT  cookie-theft captured 29 frames (>= 10)
-[teardown] deleting project 06b1bcbe-c9e8-4be3-b05a-6fa5e1f32c8e
-[provision] building topology -> autotest-web-server-basics-14cb4187
+  capture: HIT  cookie-theft captured 28 frames (>= 10)
+[teardown] deleting project 1d4afa5a-ad1f-42f8-b1c8-3fe4c3a408cd
+[provision] building topology -> autotest-web-server-basics-352a4d01
   nodes: PC1=started, PC2=started, Server1=started, Switch1=started
   settling 8s for boot/ifup ...
 [configure] Server1: 5 cmd(s)
@@ -920,8 +920,8 @@ GNS3 2.2.54 @ http://192.168.56.123
   capture: HIT  server-link carries 'GET /style.css' in clear text on Server1 <-> Switch1
   capture: HIT  server-link carries 'Web Server Basics' in clear text on Server1 <-> Switch1
   capture: HIT  server-link captured 23 frames (>= 6)
-[teardown] deleting project 9ee45430-75dc-4604-b91b-c245efcd5244
-[provision] building topology -> autotest-wireguard-basics-b1bc990b
+[teardown] deleting project f9861b00-dbc2-4ba1-969a-62b55ecf3af5
+[provision] building topology -> autotest-wireguard-basics-6d30f7f2
   nodes: Client=started, Internet=started, LAN-Host=started, Switch1=started, Switch2=started, VPNServer=started
   settling 14s for boot/ifup ...
 [configure] VPNServer: 10 cmd(s)
@@ -932,22 +932,22 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (VPNServer)
 [assert] Client: running wireguard-basics-test.sh
            PASS (Client)
-[teardown] deleting project 4df02406-0f6d-4b0c-9700-51356c584a23
-[provision] building topology -> autotest-wireless-basics-249b7d2d
+[teardown] deleting project 09c10a47-1f31-414a-a45e-a8072822578e
+[provision] building topology -> autotest-wireless-basics-f9166a99
   nodes: AP=started, STA=started
   settling 10s for boot/ifup ...
-[host_setup] (VM host) GNS3_SERVER=http://localhost gns3-wifi-attach autotest-wireless-basics-249b7d2d
+[host_setup] (VM host) GNS3_SERVER=http://localhost gns3-wifi-attach autotest-wireless-basics-f9166a99
 [configure] AP: 1 cmd(s)
 [configure] STA: 1 cmd(s)
 [assert] AP: running wireless-basics-test.sh
            PASS (AP)
 [assert] STA: running wireless-basics-test.sh
            PASS (STA)
-[teardown] deleting project d910e133-38d9-4443-a683-c1bbfe56abe9
-[provision] importing WirelessSite.gns3project -> autotest-wireless-site-demo-7c226698
+[teardown] deleting project 793a5d23-7473-4125-968f-a4ebe7dddc96
+[provision] importing WirelessSite.gns3project -> autotest-wireless-site-demo-493318b4
   nodes: AP-GUEST=started, AP-STAFF=started, R-Site=started, SRV=started, STA1=started, STA2=started, STA3=started, STA4=started, SW-Guest=started, SW-Server=started, SW-Staff=started
   settling 25s for boot/ifup ...
-[host_setup] (VM host) GNS3_SERVER=http://localhost gns3-wifi-attach autotest-wireless-site-demo-7c226698
+[host_setup] (VM host) GNS3_SERVER=http://localhost gns3-wifi-attach autotest-wireless-site-demo-493318b4
 [configure] AP-STAFF: 1 cmd(s)
 [configure] AP-GUEST: 1 cmd(s)
 [configure] STA1: 2 cmd(s)
@@ -970,8 +970,8 @@ GNS3 2.2.54 @ http://192.168.56.123
            PASS (SRV)
 [assert] R-Site: running wireless-site-demo-test.sh
            PASS (R-Site)
-[teardown] deleting project 7c226698-be11-417c-88b9-4e111048c77d
-[provision] building topology -> autotest-xss-basics-07d371ae
+[teardown] deleting project 493318b4-32f0-43af-8f6c-9f5adfcec3d8
+[provision] building topology -> autotest-xss-basics-db8c55f3
   nodes: Switch1=started, attacker=started, browser=started, webserver=started
   settling 20s for boot/ifup ...
 [configure] webserver: 3 cmd(s)
@@ -980,177 +980,177 @@ GNS3 2.2.54 @ http://192.168.56.123
   ready: xss-app-up ok at +0s
 [assert] attacker: running xss-basics-test.sh
            PASS (attacker)
-[teardown] deleting project 071c9aa1-e1ba-48fd-8a48-4ae12f05a748
+[teardown] deleting project d9d4c4b7-b0bf-4c37-8c03-f2d9fb183fef
 
 results[amd64]: /home/sgordon/git/gns3-dev/tools/tests/results-amd64.json  +  table in /home/sgordon/git/gns3-dev/activities/README.md
 
 ==================== RESULTS ====================
   PASS   add-routes                   2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-add-routes-da057ec4.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-add-routes-9d21cfc8.log
   PASS   ansible-basics               1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ansible-basics-d5a66e40.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ansible-basics-f76d4ec8.log
   PASS   arp-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-arp-basics-0a6d84cc.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-arp-basics-aa6d8a94.log
   PASS   arp-spoofing                 1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-arp-spoofing-f6212b22.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-arp-spoofing-c0b1a3cb.log
   PASS   auth-kerberos                3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-auth-kerberos-64bf74ae.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-auth-kerberos-fc806eb6.log
   PASS   backup-basics                1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-backup-basics-3ec7c5a6.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-backup-basics-bf1d6dce.log
   PASS   bgp-basics                   2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-bgp-basics-4fe21762.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-bgp-basics-cde948de.log
   PASS   broken-network               3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-broken-network-b05fa758.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-broken-network-b628f5eb.log
   PASS   broken-services              1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-broken-services-1a4df2e4.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-broken-services-4f8f7087.log
   PASS   cache-server-basics          3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-cache-server-basics-74a146a6.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-cache-server-basics-39caacfa.log
   PASS   campus-core-ospf             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-ospf-c7c63412.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-ospf-79bdf4f2.log
   PASS   campus-core-simple           2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-simple-36eef951.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-simple-afab5250.log
   PASS   campus-core-vlan             3 passed, 0 failed; capture 3 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-vlan-3cf92a30.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-vlan-11a1e561.log
   PASS   campus-core-vlsm             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-vlsm-4b6be3ed.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-campus-core-vlsm-beb81103.log
   PASS   capture-basics               2 passed, 0 failed; capture 1 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-capture-basics-fa766a01.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-capture-basics-687d94a9.log
   PASS   central-logging              1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-central-logging-9aba4497.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-central-logging-9923b077.log
   PASS   cloud-vpn-simulated          5 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-cloud-vpn-simulated-12beb5ff.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-cloud-vpn-simulated-a8ee1855.log
   SKIP   cloud-vpn-wireguard          requires a commercial cloud account and real spend; hand-walk once per term. The testable half is cloud-vpn-simulated, which autotests.
   PASS   config-as-code-demo          5 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-config-as-code-demo-9c9db294.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-config-as-code-demo-a464f42b.log
   PASS   crypto-file-transfer         1 passed, 0 failed; capture 3 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-file-transfer-3436415d.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-file-transfer-0c42a0df.log
   PASS   crypto-integrity-signatures  1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-integrity-signatures-17290a6a.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-integrity-signatures-0bd0d381.log
   PASS   crypto-key-exchange          2 passed, 0 failed; capture 4 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-key-exchange-42fe6670.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-crypto-key-exchange-2164cf58.log
   PASS   database-server-basics       3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-database-server-basics-c1c9920b.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-database-server-basics-7e853455.log
   PASS   default-gateway              4 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-default-gateway-8a20c388.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-default-gateway-17455e24.log
   PASS   dhcp-client                  3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-client-d79678e0.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-client-47dac709.log
   PASS   dhcp-server-basics           3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-server-basics-b4370e34.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-server-basics-13862e70.log
   PASS   dhcp-server-kea              3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-server-kea-e8c49cc0.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dhcp-server-kea-76ead04b.log
   PASS   directory-ad-basics          2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-ad-basics-ddd36601.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-ad-basics-f7a7f7e9.log
   PASS   directory-demo               3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-demo-056bd729.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-demo-50329004.log
   PASS   directory-linux-join         2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-linux-join-8d95a147.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-directory-linux-join-88ed80a9.log
   PASS   dns-hosts                    4 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dns-hosts-97966b19.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dns-hosts-6f41b1db.log
   PASS   dns-server-basics            2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dns-server-basics-7b90a5f9.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dns-server-basics-e8c0252f.log
   PASS   dos-demo                     1 passed, 0 failed; capture 2 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dos-demo-b9e886f8.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-dos-demo-e8fcda8d.log
   PASS   file-sharing-basics          2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-file-sharing-basics-a65077d3.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-file-sharing-basics-b733ccef.log
   PASS   git-basics                   2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-git-basics-d615147a.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-git-basics-05d8e368.log
   PASS   git-server-gitea             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-git-server-gitea-95b2cc0b.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-git-server-gitea-6cf6796d.log
   SKIP   gns3-internet-nat            requires real Internet egress from the GNS3 VM (external dependency); hand-walked 21 Aug 2026
   PASS   gns3-intro                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-gns3-intro-77e39d0a.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-gns3-intro-7fa23957.log
   PASS   hardening-baseline           1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-hardening-baseline-7c2ca46b.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-hardening-baseline-1c9d0b1c.log
   PASS   httpclient-cli-basics        1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-httpclient-cli-basics-1ae11f2f.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-httpclient-cli-basics-b3958bf9.log
   PASS   httpclient-gui-basics        1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-httpclient-gui-basics-cea319ae.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-httpclient-gui-basics-348827f4.log
   PASS   https-setup-selfsigned       1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-https-setup-selfsigned-ab609d91.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-https-setup-selfsigned-7fd55ae8.log
   SKIP   ipsec-site-to-site           optional node not installed: template(s) OPNsense — build the appliance with `--with` to run this activity
   PASS   ipsec-swanctl                3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipsec-swanctl-d7011df5.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipsec-swanctl-dac267a1.log
   PASS   ipv6-basics                  2 passed, 0 failed; capture 1 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipv6-basics-055c1283.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipv6-basics-62e40f0d.log
   PASS   ipv6-nat64                   2 passed, 0 failed; capture 2 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipv6-nat64-2ed7ff59.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ipv6-nat64-bf1f5ea3.log
   PASS   lan-routing-vlan             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-lan-routing-vlan-12875180.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-lan-routing-vlan-85c501a3.log
   PASS   link-performance             1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-link-performance-616d1b6e.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-link-performance-37854d31.log
   PASS   mtls-client-certs            1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-mtls-client-certs-8efa05d5.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-mtls-client-certs-c416dd81.log
   PASS   mtu-black-hole               4 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-mtu-black-hole-b6834210.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-mtu-black-hole-0f01cc41.log
   PASS   netcat-basics                1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-netcat-basics-a7d29334.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-netcat-basics-2be544ca.log
   PASS   netflow-basics               3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-netflow-basics-2feed4d6.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-netflow-basics-3f5ebc75.log
   PASS   network-monitoring-basics    2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-network-monitoring-basics-0783ec78.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-network-monitoring-basics-6a495ba9.log
   PASS   nftables-firewall            3 passed, 0 failed; capture 1 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-nftables-firewall-276cdf16.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-nftables-firewall-11c3cee6.log
   PASS   ntp-basics                   2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ntp-basics-aa829cd6.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ntp-basics-96e50201.log
   PASS   openssl-ca                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openssl-ca-a67fd2eb.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openssl-ca-cd10549d.log
   PASS   openwrt-basics               3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openwrt-basics-79484b12.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openwrt-basics-8ec3a4cf.log
   PASS   openwrt-firewall-dmz         4 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openwrt-firewall-dmz-65bde8a4.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-openwrt-firewall-dmz-939bb67a.log
   SKIP   opnsense-firewall            optional node not installed: template(s) OPNsense — build the appliance with `--with` to run this activity
   PASS   ospf-basics                  2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ospf-basics-18c4b58f.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ospf-basics-60135241.log
   PASS   password-hashing             1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-password-hashing-7972f4e2.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-password-hashing-9c483d0e.log
   PASS   patch-management             1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-patch-management-9a648faf.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-patch-management-b11caa22.log
   PASS   ping-basics                  1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ping-basics-aafc1001.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ping-basics-0c383b7c.log
   PASS   port-scanning                1 passed, 0 failed; capture 1 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-port-scanning-8b754da0.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-port-scanning-ce8359a9.log
   PASS   pq-crypto-basics             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-pq-crypto-basics-65e52afd.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-pq-crypto-basics-ae06106a.log
   PASS   resilience-demo              7 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-resilience-demo-f1389480.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-resilience-demo-bb11bcb8.log
   PASS   reverse-proxy                1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-reverse-proxy-cb8ebf27.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-reverse-proxy-78fcb035.log
   PASS   sdn-basics                   2 passed, 0 failed; capture 3 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-sdn-basics-a8ab19c0.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-sdn-basics-364a829b.log
   PASS   security-ops-demo            7 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-security-ops-demo-33b93e1b.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-security-ops-demo-9a24ea74.log
   SKIP   service-nodes-demo           staff demonstration topology, not a single-assertion activity — verify interactively
   PASS   setting-ip                   3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-setting-ip-7b275738.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-setting-ip-0cf4db87.log
   SKIP   small-internet               large demo topology, not a single-assertion activity — verify interactively
   PASS   ssh-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ssh-basics-a3a79c60.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ssh-basics-b517952f.log
   PASS   ssh-hardening                4 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ssh-hardening-8df5dbaa.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-ssh-hardening-32aae20f.log
   PASS   stp-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-stp-basics-a07cf8b4.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-stp-basics-07205571.log
   PASS   suricata-basics              3 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-suricata-basics-0fb89ee2.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-suricata-basics-b05d4fe9.log
   SKIP   tailscale-basics             needs two GNS3 instances + Internet + Tailscale coordination (external dependency)
   PASS   tcp-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-tcp-basics-1e576bd9.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-tcp-basics-97ca57bf.log
   PASS   udp-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-udp-basics-089184e2.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-udp-basics-d848c686.log
   PASS   view-routes                  2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-view-routes-ea6750ec.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-view-routes-c3060abc.log
   PASS   vlan-basics                  1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-vlan-basics-e1a28669.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-vlan-basics-2d97b33f.log
   PASS   vlan-router                  1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-vlan-router-086483a6.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-vlan-router-d0ed0fad.log
   PASS   web-app-attacks-basics       1 passed, 0 failed; capture 3 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-web-app-attacks-basics-55863f03.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-web-app-attacks-basics-6cdb22a1.log
   PASS   web-server-basics            2 passed, 0 failed; capture 3 hit / 0 miss
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-web-server-basics-14cb4187.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-web-server-basics-352a4d01.log
   PASS   wireguard-basics             2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireguard-basics-b1bc990b.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireguard-basics-6d30f7f2.log
   PASS   wireless-basics              2 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireless-basics-249b7d2d.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireless-basics-f9166a99.log
   PASS   wireless-site-demo           8 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireless-site-demo-2062819e.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-wireless-site-demo-a1942b77.log
   PASS   xss-basics                   1 passed, 0 failed
-         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-xss-basics-07d371ae.log
+         transcript: /home/sgordon/git/gns3-dev/outfiles/autotest-xss-basics-db8c55f3.log
