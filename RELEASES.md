@@ -21,7 +21,7 @@ in mind — their `-student` / `-staff` filenames are not a naming convention th
 
 | Version | Term | Released | `gns3` | `gns3-dev` | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `v044` | T3 2026 | not yet: both cut 25 Sep 2026, not tagged | arm64: [`1bbda07`](https://github.com/steve-cqu/gns3/commit/1bbda07) (25 Sep 2026), with [`2116cef`](https://github.com/steve-cqu/gns3/commit/2116cef) applied after the build. amd64: [`7defc58`](https://github.com/steve-cqu/gns3/commit/7defc58) (25 Sep 2026) | arm64: `7673b3c` (24 Sep 2026). amd64: `b6bd528` (25 Sep 2026) | arm64 changed after its test sweep; amd64 built clean. See [v044](#v044) |
+| `v044` | T3 2026 | 25 Sep 2026 | arm64: [`1bbda07`](https://github.com/steve-cqu/gns3/commit/1bbda07) (25 Sep 2026), with [`2116cef`](https://github.com/steve-cqu/gns3/commit/2116cef) applied after the build. amd64: [`7defc58`](https://github.com/steve-cqu/gns3/commit/7defc58) (25 Sep 2026) | arm64: `7673b3c` (24 Sep 2026). amd64: `b6bd528` (25 Sep 2026) | arm64 changed after its test sweep; amd64 built clean. See [v044](#v044) |
 | `v027` | T2 2026 | 23 Jun 2026 | [`509278c`](https://github.com/steve-cqu/gns3/commit/509278c) (19 Jun 2026) | `7e444b5` (23 Jun 2026) | One post-release fix issued — see below |
 | `v022` | T1 2026 | ~mid-Mar 2026 | [`5937d74`](https://github.com/steve-cqu/gns3/commit/5937d74) (4 Nov 2025) | `2e77343` (3 Nov 2025) | First release |
 
