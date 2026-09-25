@@ -164,6 +164,13 @@ wrong clock rather than generating one of its own.
 If the Linux Host is wrong too, the fault is above the node — fix your computer and the GNS3 VM, and
 the node will come good on its next start.
 
+**On an appliance older than v044, an OpenWRT Router node can set the GNS3 VM's clock hours wrong.**
+When it starts, it copies the virtual machine's hardware clock into the GNS3 VM's clock, and on
+some computers that hardware clock holds local time rather than UTC. That puts the VM hours out,
+often by exactly your time-zone offset. To fix the GNS3 VM, **shut it down and start it again**
+with your computer connected to the internet. It sets its clock from the internet as it starts.
+Then stop and start your nodes. The OpenWRT Router in v044 and later no longer touches the clock.
+
 **Fix.** Correct your computer and the GNS3 VM first, then **stop and start the node**. A node takes
 its start time from the appliance when it boots and keeps its own clock afterwards, so correcting
 the VM does nothing for a node that is already running — it has to be restarted to pick the new time
@@ -196,7 +203,9 @@ wrong. That is why your computer and the GNS3 VM are the first two things to che
 
 *Verified 22 September 2026 on an OPNsense 24.1 node, with the fault reproduced deliberately: the
 Python failure, the dead `configd` and the recovery were all observed. The claim that a node's own
-emulated timer runs away was tested and did not hold.*
+emulated timer runs away was tested and did not hold. The OpenWRT Router cause was found on
+25 September 2026 on an Apple Silicon appliance, from the VM's own logs, and a restart was seen to
+correct the clock. The time-zone-offset explanation on Windows PCs is not yet verified.*
 
 ---
 

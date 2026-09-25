@@ -96,3 +96,17 @@ RUN chmod +x /etc/rc.local
 # base image declared as a volume, so `FROM cqugns3/openwrtnode` + `RUN … /etc/inittab …` would
 # build green and change nothing. Measured 16 August 2026 while testing console variants, which
 # all silently inherited the parent's inittab.
+
+# NEVER LET THIS NODE TOUCH THE CLOCK.
+#
+# OpenWRT's sysfixtime runs `hwclock -s -u -f /dev/rtc0` at boot (and may step the date forward to
+# the newest file in /etc), and `hwclock -w` at stop. GNS3 starts every Docker node privileged
+# (gns3server compute/docker/docker_vm.py, "Privileged": True), so /dev/rtc0 is the APPLIANCE's
+# RTC and the clock it sets is the APPLIANCE's clock, not the container's. On the Fusion arm64
+# appliance that RTC reads ~10 h ahead: on the v044 build (25 September 2026) the first OpenWRT
+# node of the Tier-3 sweep jumped the appliance clock +36001 s, ntpd exited on its 1000 s panic
+# threshold, and every later node and the release stamp inherited the wrong time. The stop hook
+# then wrote that time back into the RTC, so it survived a reboot. Full chain in
+# gns3-dev/admin/diagnostics.md, "Timekeeping". A container has no business keeping time; the
+# appliance's ntpd does that. Removing the rc.d links disables both hooks.
+RUN rm -f /etc/rc.d/S00sysfixtime /etc/rc.d/K90sysfixtime
