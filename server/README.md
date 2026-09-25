@@ -224,7 +224,7 @@ shell you launched it from.
 - A stock GNS3 VM, running, with SSH reachable and the GNS3 API on **port 80**. Built and
   verified on 2.2.54 and 2.2.61; the two differ in where `gns3_server.conf` lives, which the
   build discovers rather than assumes (see
-  [Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it))
+  [Which `gns3_server.conf`](#qemu-hardware-acceleration))
 - **arm64 is capped at 2.2.54, and that is upstream's decision, not a choice made here.**
   GNS3 ships the ARM64 VM as a release asset on `GNS3/gns3-gui`, and
   `GNS3.VM.ARM64.2.2.54.zip` (v2.2.54, 21 Apr 2025) is the last one: every release from 2.2.55
@@ -235,7 +235,8 @@ shell you launched it from.
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
 - About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
-  images after layer sharing, ~3.7 GB of Qemu disks, and well under 100 MB of projects.
+  images after layer sharing and well under 100 MB of projects. A default build downloads no
+  Qemu disks; a `--with` build adds its own (see [Optional nodes](#optional-nodes--retiring-one-without-deleting-it)).
   It was ~12 GB until SDN-Basics-Template came off the appliance; that one project expanded
   to 2.2 GB on import
 
@@ -263,8 +264,9 @@ registers the templates, installs the logos and the noVNC gateway, imports the p
 `projects.txt`, and finally runs a handful of activities against the live VM and **fails if
 any go red**.
 
-The first build takes a while — 14 Docker images built from source (including a 2.9 GB
-Kali) and about 3.7 GB of Qemu disks downloaded and checksummed. Everything is idempotent,
+The first build takes a while: every Docker image is built from source (21 on either profile
+as of September 2026; `gns3build.py plan --profile <p>` lists them). A default build downloads no
+Qemu disks. Everything is idempotent,
 so a re-run does only what is outstanding: a fully-built VM re-runs in well under a second
 per phase.
 
@@ -385,7 +387,7 @@ file the server actually loads and says whether the setting is *there*:
 `NOT APPLIED` **fails the phase** (exit 1), on the same footing as a missing Docker image: a
 Qemu node that will not start on a student's laptop is a broken appliance, and unlike a
 missing image nothing else in the build would notice. This exists because it happened — see
-[Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it). `applied` is also
+[Which `gns3_server.conf`](#qemu-hardware-acceleration). `applied` is also
 allowed to be `null`, meaning the config file was not found at all, which is what a
 `provenance` run from a control node rather than the VM looks like; that does not fail.
 
@@ -899,7 +901,7 @@ localhost on 3080 and 4200, gns3.github.io), so a page served from `:6080` is re
 **Finding the API's port.** This appliance serves it on **80** so students can browse to the
 bare IP, while a stock GNS3 VM uses 3080 — so the service resolves it rather than assuming, in
 four steps: `$GNS3_SERVER`, then `[Server] port` from the config file the running gns3server
-was *given* (see [Which `gns3_server.conf`](#which-gns3_serverconf--the-phase-discovers-it)),
+was *given* (see [Which `gns3_server.conf`](#qemu-hardware-acceleration)),
 then the same key at the historical user path, and finally by asking 80 and 3080 which one
 answers `/v2/version`. A live endpoint is the only answer that cannot go stale, and it is what
 should carry this across the next time the VM's layout moves.
@@ -1017,11 +1019,10 @@ ssh gns3@<vm-ip> 'uname -m; df -h /opt'       # expect aarch64 and ~10 GB free
 `aarch64` is the one that matters: the `arm64` profile builds Docker images **on the VM** so
 they come out native, which only holds if the VM really is arm64.
 
-A correct `arm64` build installs 20 Docker images, **3** Qemu disks and 33 templates
-— three disks rather than the four the PC build once needed, because FRR and NETem are Docker
-on both platforms. Take the counts from `gns3build.py plan --profile arm64` rather than from
-this line, which has gone stale twice as nodes were added. The disks should all be arm64
-variants:
+Take the counts for a correct `arm64` build from `gns3build.py plan --profile arm64`. Fixed
+numbers here went stale three times as nodes were added and retired. A default
+build installs no Qemu disks at all. If you build `--with` a Qemu node, its disk must be the arm64
+variant:
 
 ```
 openwrt-23.05.0-armsr-armv8-generic-ext4-combined.img

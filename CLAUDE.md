@@ -51,10 +51,10 @@ quiesce  timesync  templates  docker  qemu  accel  logos  novnc  labnic  project
 
 **Where a phase can run matters.** `validate`, `plan`, `templates`, `projects`, `export-check` and
 `provenance` work from anywhere and take `--server URL` (defaulting to `$GNS3_SERVER`).
-`docker`, `qemu`, `logos`, `novnc`, `labnic`, `quiesce` and `timesync` touch the local Docker daemon,
-filesystem, netplan or systemd, so they **run on the GNS3 VM itself** — which is also why images
-are always built natively for the VM's architecture rather than cross-built. (The module docstring
-at the top of `gns3build.py` lists only the first four of those; it is one revision behind.)
+`docker`, `qemu`, `accel`, `quiesce`, `timesync`, `logos`, `novnc`, `labnic`, `freeze` and `thaw` touch
+the local Docker daemon, filesystem, netplan or systemd, so they **run on the GNS3 VM itself** —
+which is also why images are always built natively for the VM's architecture rather than
+cross-built. The module docstring at the top of `gns3build.py` carries the same split.
 
 **Retiring a node does not delete it.** A node moved out of a platform's `qemu:`/`docker:` list into
 its `optional:` list keeps everything that defines it and is one `--with <key>` away from being in a

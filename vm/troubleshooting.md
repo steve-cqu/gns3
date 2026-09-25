@@ -125,7 +125,7 @@ reloads within about a second.
 
 ## Inside a node
 
-### A node's date is wrong by years, breaking Python and TLS
+### `Fatal Python error: init_interp_main: can't initialize time`: a node's date is wrong by years
 
 **Applies to:** Qemu nodes (OPNsense, OpenWRT) most severely; any node in principle
 

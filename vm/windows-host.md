@@ -12,8 +12,8 @@ This is a practical guide only. It does not tell you what network to build or wh
 comes from your own unit's activity instructions.
 
 > **Apple Mac computers.** These steps are for a PC running VirtualBox. The same setup works on an
-> Apple Mac, including Apple Silicon, using VMWare Fusion – but the menus and network names are
-> different. If you use a Mac, read *Apple Mac: Using VMWare Fusion* at the end of this guide before
+> Apple Mac, including Apple Silicon, using VMware Fusion – but the menus and network names are
+> different. If you use a Mac, read *Apple Mac: Using VMware Fusion* at the end of this guide before
 > you start. It replaces Steps 2 and 3, and adds two things to Step 4.
 
 ## What You Need
@@ -280,9 +280,9 @@ directly, but sends everything else to the internet adapter, where it disappears
 has more than one subnet, run the script again with the address of the router that connects them,
 for example `-LabGateway 10.10.1.1`.
 
-## Apple Mac: Using VMWare Fusion
+## Apple Mac: Using VMware Fusion
 
-Everything in this guide works on an Apple Mac, including Apple Silicon, using VMWare Fusion instead
+Everything in this guide works on an Apple Mac, including Apple Silicon, using VMware Fusion instead
 of VirtualBox. The idea is identical – a private network joining the GNS3 VM and a Windows machine –
 but Fusion uses different words for the same things, and there are several extra jobs a PC does not
 have.
@@ -293,7 +293,7 @@ additions noted below, and Step 8 has one difference.
 **The Mac is more hands-on than the PC, and deliberately so.** On a PC one command builds the machine
 and Windows installs itself unattended. On a Mac, Windows 11's installer ignores the disc that would
 answer its questions, so you click through Setup yourself, and two jobs – adding a TPM and installing
-VMWare Tools – can only be done from Fusion's menus. Expect to sit with it. Everything below is
+VMware Tools – can only be done from Fusion's menus. Expect to sit with it. Everything below is
 written in the order it happens, and every one of these steps exists because skipping it fails in a
 way that points somewhere else entirely.
 
@@ -302,24 +302,24 @@ way that points somewhere else entirely.
 | The GNS3 VM has **two** adapters, and the lab network is **`eth1`** not `eth2` | Mac Step B |
 | The Windows machine needs a **TPM added by hand** before first boot | Mac Step D |
 | You answer Windows Setup yourself, and choose **Windows 11 Pro** | Mac Additions to Step 4 |
-| **VMWare Tools** is required or Windows has no network at all | Mac Additions to Step 4 |
+| **VMware Tools** is required or Windows has no network at all | Mac Additions to Step 4 |
 | The lab script is run **from the disc**, not downloaded | Mac Step E |
 | The *Windows Host* node binds to **`eth1`** | Step 8 |
 
 ### What Fusion Calls Things
 
-| VirtualBox | VMWare Fusion |
+| VirtualBox | VMware Fusion |
 |---|---|
 | Host-only adapter | *Private to my Mac* |
 | NAT | *Share with my Mac* |
 | Internal Network named `cqulab` | A custom network you create and rename `cqulab` |
 | *Promiscuous Mode: Allow All* | *Require authentication to enter promiscuous mode* – see below |
 
-You will find all of these in one place: the *VMWare Fusion* menu, then *Settings*, then *Network*.
+You will find all of these in one place: the *VMware Fusion* menu, then *Settings*, then *Network*.
 
 ### Mac Step A: Create the Private Lab Network
 
-From the *VMWare Fusion* menu choose *Settings*, then *Network*. Click the padlock at the bottom and
+From the *VMware Fusion* menu choose *Settings*, then *Network*. Click the padlock at the bottom and
 enter your Mac password, or nothing on this screen can be changed.
 
 Click **+** to add a network. With the new network selected, leave all three boxes **unticked**:
@@ -465,11 +465,11 @@ and **`gns3`** as the password, and name the machine **`WinHost`** – later ste
 expect those. On some builds of Windows 11 that command does nothing – use `oobe\bypassnro` instead,
 which restarts the machine and then offers *I don't have internet*.
 
-**Install VMWare Tools before anything else.** On Apple Silicon, Windows has no driver for Fusion's
+**Install VMware Tools before anything else.** On Apple Silicon, Windows has no driver for Fusion's
 network card, so a newly installed Windows has no network at all. It is worse than it sounds: there
 is no error and no warning, and `Get-NetAdapter` simply lists **nothing**, as though the machine had
 never had a network card fitted. As soon as you reach the desktop, choose *Virtual Machine*, then
-*Install VMWare Tools*, run the installer inside Windows, and restart. Tools installs from a disc on
+*Install VMware Tools*, run the installer inside Windows, and restart. Tools installs from a disc on
 your Mac, so it does not need the network it is about to give you. Nothing else in this guide works
 until you have done this.
 
@@ -513,7 +513,7 @@ they actually catch people.
    The *Windows Host* node is bound to `eth2`, which exists on a PC and not on a Mac. Either import
    `Windows-Host-Demo-arm64.gns3project` instead, or change the interface to **`eth1`** – see
    Step 8.
-2. **`Get-NetAdapter` inside Windows lists nothing at all.** VMWare Tools is not installed. This is
+2. **`Get-NetAdapter` inside Windows lists nothing at all.** VMware Tools is not installed. This is
    not a firewall problem and not a GNS3 problem – Windows genuinely has no network card it can use.
    See *Mac Additions to Step 4*.
 3. **Both machines must be on `cqulab`.** Check the GNS3 VM's **second** adapter and the Windows

@@ -133,6 +133,9 @@ SYMBOLS = [
     # removed the other unreferenced symbols and deliberately spared this one.
     ("router-opnsense", "router", "OPNSENSE", None),
     ("router-ap",       "router", "AP",       "antennas"),
+    # NETem sits on a link and bridges it, so it is drawn as forwarding. Until 25 Sep 2026 the
+    # Docker template wore GNS3's stock qemu_guest.svg, which read as a Qemu node on the canvas.
+    ("router-netem",    "router", "NETEM",    None),
 
     # --- Qemu-backed nodes: the same artwork, plus the corner tag ---------
     # Every Qemu node the manifest still defines. All of them are `optional:` — since
