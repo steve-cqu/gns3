@@ -500,6 +500,21 @@ VBoxManage snapshot  "GNS3 VM" take "v<version>"
 VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>-amd64.ova
 ```
 
+**If you exported on Linux or macOS, retarget the host-only adapter for Windows** before
+releasing. The `.ovf` carries the exporting host's name for the host-only network: `vboxnet0`
+here, `VirtualBox Host-Only Ethernet Adapter` on Windows. Without the rewrite, every Windows
+student hits the *interface not found* error in `../vm/troubleshooting.md` on first boot:
+
+```sh
+server/ova-set-hostonly.py GNS3-CQU-v<version>-amd64.ova --show   # expect vboxnet0
+server/ova-set-hostonly.py GNS3-CQU-v<version>-amd64.ova          # rewrites in place
+```
+
+It changes only that name and the `.ovf` digest in the `.mf`, streaming the disk through
+untouched, so it needs free space the size of the OVA. A Linux user importing the result gets the
+same error in reverse, and the same troubleshooting fix covers it. Export on Windows and this step
+is unnecessary.
+
 **VMware Fusion (Mac):**
 
 `ovftool` ships with Fusion but is not on the PATH, and lives in a different directory from
