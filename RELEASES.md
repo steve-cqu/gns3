@@ -46,12 +46,25 @@ Every release from v030 on is stamped at build time and needs no reconstruction.
 
 | Architecture | File | Bytes | sha256 |
 | --- | --- | --- | --- |
-| `arm64` | `GNS3-CQU-v044-arm64.ova` | 3,338,519,552 | `e30c86e2bf05682dff97f6844393817529050bc3f3fc186858d14058db6b4c1f` |
+| `arm64` | `GNS3-CQU-v044-arm64-mac.ova` | 3,338,519,552 | `e30c86e2bf05682dff97f6844393817529050bc3f3fc186858d14058db6b4c1f` |
 | `arm64` | `GNS3-CQU-v044-arm64-vmwarevm.zip` | 3,046,022,566 | `7db78086d6c5e966f5f0c0a4ef33f27a9902226aee88f6b117eac97c1ab6252f` |
-| `amd64` | `GNS3-CQU-v044-amd64.ova` | 3,308,556,288 | `ebca47f2894a2d733fcc99a84e718197f0ef470924247dc00cce90accc8b7f26` |
+| `amd64` | `GNS3-CQU-v044-amd64-linux.ova` | 3,308,556,288 | `ebca47f2894a2d733fcc99a84e718197f0ef470924247dc00cce90accc8b7f26` |
+| `amd64` | `GNS3-CQU-v044-amd64-windows.ova` | 3,308,564,480 | `df0dd493a51828069ea331f2b83fc719edb94600280d2823c637d1340549669a` |
 
 Both arm64 files hold the same machine, cut from one snapshot. The zipped `.vmwarevm` is the
 candidate Mac format still being decided. Only one of the two will be handed out.
+
+**The OVA files were renamed after the cut (26 Sep 2026), and amd64 now ships as two files.**
+They were cut as `-arm64.ova` and `-amd64.ova`, and the checksums above were taken then. A
+rename leaves the contents alone, so the checksums still hold. `-amd64-linux.ova` is the file
+exported on the Linux build host. `-amd64-windows.ova` is the same file after
+`server/ova-set-hostonly.py` rewrote the host-only adapter name from `vboxnet0` to
+`VirtualBox Host-Only Ethernet Adapter`. The rewrite changes only the `.ovf` and its digest in
+the `.mf`, so the Windows file has its own checksum, recorded 27 Sep 2026. It is 8,192 bytes
+larger because Python's tar writer pads the end of the archive to a 10 KB record and VirtualBox's does not. Both amd64 files
+hold the same machine. Before this release, an OVA exported on Linux failed its first boot on
+Windows with the host-only *interface not found* error in `vm/troubleshooting.md`. Shipping both
+files may be dropped in T1 2027, going back to one file per architecture.
 
 **The arm64 appliance was changed after its test sweep, and kept the v044 label.** Built 25 Sep
 2026 from `1bbda07` with `verify=all`: 81 pass, 0 fail, 7 skip. Three things were then fixed on
