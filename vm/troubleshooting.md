@@ -209,6 +209,38 @@ correct the clock. The time-zone-offset explanation on Windows PCs is not yet ve
 
 ---
 
+## Saving and exporting
+
+### `Cannot export project: [Errno 13] Permission denied: /opt/gns3/projects/…/etc/wireguard`
+
+**Applies to:** exporting a project whose nodes keep `/etc` or `/root`, which is the case once you
+have set up persistence as described in [Saving Your Work in GNS3](gns3-saving-work.md). The folder
+named in the error may be different, but it is usually `/etc/wireguard`.
+
+**The fix:** open the project, click **Start all nodes**, wait until every node is green, then
+click **Stop all nodes** and wait until every host and router is red. Then export again. The
+built-in switches stay green after stopping, and that is normal.
+
+Clicking **Stop** on nodes that already look stopped is not enough. They must be started first.
+
+**Why:** some folders inside a node, such as `/etc/wireguard`, can be read only by the node's own
+`root` user. The export cannot read them as they are. When GNS3 stops a node that it started, it
+records each folder's real permissions and then makes the folders readable for the export. If the
+GNS3 VM was shut down while nodes were running, that step never ran. After the project is opened
+again the nodes look stopped, but the folders are still unreadable. Starting the nodes and stopping
+them again lets GNS3 finish the job.
+
+**If it still fails:** start the node that has the folder named in the error, open its console and
+run `chmod -R a+rX /etc/wireguard`, using the folder from the error. Then stop all nodes and export.
+If `wg-quick` later warns that the configuration is world-readable, `chmod 600 /etc/wireguard/*`
+puts it back.
+
+*Reported by a student and fixed by starting and then stopping all nodes, 4 October 2026. The cause
+was confirmed by reading GNS3 2.2.54's own code, but the failure has not been reproduced on a lab
+appliance. The `chmod` fallback has not been tested.*
+
+---
+
 ## Four checks to report a problem
 
 If your tutor asks what your appliance is doing, these four answer most of it. They only read —

@@ -114,6 +114,11 @@ Two things are worth knowing. First, an export contains private keys if your act
 treat the file as something you would not post publicly. Second, an export never contains running
 programs, so after importing you always start the services again.
 
+Before you export, start all nodes, wait until they are green, then stop all nodes. GNS3 only makes
+a node's kept directories readable for the export when it stops a node that has been started, so
+skipping this can make the export fail with `Permission denied` on a folder such as
+`/etc/wireguard`. The built-in switches stay green after stopping, and that is normal.
+
 To export, right-click the project name and choose the export option, then save the file somewhere
 outside the GNS3 VM.
 
