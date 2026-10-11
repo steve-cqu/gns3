@@ -139,6 +139,11 @@ SYMBOLS = [
     # NETem sits on a link and bridges it, so it is drawn as forwarding. Until 25 Sep 2026 the
     # Docker template wore GNS3's stock qemu_guest.svg, which read as a Qemu node on the canvas.
     ("router-netem",    "router", "NETEM",    None),
+    # The RADIUS client: the device that asks a RADIUS server (a switch, AP or VPN gateway), played
+    # by a servicenode with radtest/eapol_test. A router base because it is a network device, not a
+    # host: the lesson is that the user's PC never talks RADIUS. Not "NAS" — students read that as
+    # network-attached storage. Nine characters, the router budget exactly.
+    ("router-radclient", "router", "RADCLIENT", None),
 
     # --- Qemu-backed nodes: the same artwork, plus the corner tag ---------
     # Every Qemu node the manifest still defines. All of them are `optional:` — since
