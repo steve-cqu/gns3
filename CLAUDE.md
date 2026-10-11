@@ -97,11 +97,11 @@ The edit surface for one new image plus one template:
    duplicate id silently updates the wrong template. Ids are deliberately shared across platforms so
    projects stay portable.
 3. `images/symbols/` — add a row to `SYMBOLS` in `make-symbols.py` and run it. **Do not hand-draw
-   a symbol.** Every symbol is one of four bases (`bases/{computer,server,router,ids}.svg`) plus a
-   band naming the role: the base says what class of thing it is, the band says which one, and an
-   unlabelled base is the generic member. (`bases/` also holds `multilayer_switch.svg` and
-   `qemu_guest.svg`, which the generator does not use — they are GNS3 stock artwork some templates
-   reference directly.) Nine characters fit on a host or router, seven on a
+   a symbol.** Every symbol is one of five bases (`bases/{computer,server,router,ids,multilayer_switch}.svg`)
+   plus a band naming the role: the base says what class of thing it is, the band says which one,
+   and an unlabelled base is the generic member. (The switch base joined on 11 October 2026 for the
+   802.1X Switch; unlabelled it is still Open vSwitch's. `bases/` also holds `qemu_guest.svg`, which
+   the generator does not use.) Nine characters fit on a host or router, seven on a
    server or sensor; the script warns past that. A node carrying a real vendor logo keeps it on the
    screen instead — a drawn mark beats a word. The `logos` phase then copies the directory,
    non-recursively, so `bases/` is not installed. Why a band and not text on the artwork:

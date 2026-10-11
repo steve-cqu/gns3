@@ -79,7 +79,14 @@ samba-client \
 cifs-utils \
 sudo \
 jq \
+wpa_supplicant \
  && update-ca-certificates
+# wpa_supplicant (~5 MB with eapol_test, added 11 October 2026) so ANY Linux Host can log in to an
+# 802.1X switch, as every real operating system can: `wpa_supplicant -D wired -i eth0 -c <conf>`.
+# It is the PC half of network access control Design 2 (the 802.1X Switch template on servicenode
+# is the other); without it the PC in the wired lab would have to be a special node, which is the
+# opposite of the lesson. No radio and no Wi-Fi here: the wired driver needs neither. See
+# gns3-dev/notes/nac-8021x-radius.md §4.
 # jq (a few hundred KB, added 6 September 2026) — the ONE thing the image was missing for the
 # cloud/hybrid work. Every provider in the Tier 6 spike (Azure, DigitalOcean, AWS) was driven from
 # a stock node with `curl` against a REST API, and the only gap was having no way to read the JSON

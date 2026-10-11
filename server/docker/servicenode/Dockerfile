@@ -274,6 +274,25 @@ COPY start-radius.sh   /usr/local/bin/start-radius.sh
 COPY radius-status.sh  /usr/local/bin/radius-status.sh
 RUN chmod +x /usr/local/bin/start-radius.sh /usr/local/bin/radius-status.sh
 
+# ---------------------------------------------------------------------------------------------
+# 802.1X Switch — network access control, Design 2 (added 11 October 2026).
+#
+# A wired access switch whose ports stay shut until a user logs in with 802.1X. It joins
+# servicenode because everything it needs is already here except hostapd (~1 MB): the bridge and
+# VLAN tools, nftables for the port gate, and radclient for the VLAN lookup. Design and the spikes
+# that proved it on this kernel: gns3-dev/notes/nac-8021x-radius.md §4 and §6.
+#
+#   hostapd  - the 802.1X authenticator (driver=wired), one config per access port.
+RUN apk add --no-cache hostapd \
+ && mkdir -p /etc/nac /var/log/nac /run/hostapd
+
+COPY 8021x-switch.conf       /etc/nac/switch.conf
+COPY start-8021x-switch.sh   /usr/local/bin/start-8021x-switch.sh
+COPY nac-port-action.sh      /usr/local/bin/nac-port-action.sh
+COPY 8021x-status.sh         /usr/local/bin/8021x-status.sh
+RUN chmod +x /usr/local/bin/start-8021x-switch.sh /usr/local/bin/nac-port-action.sh \
+             /usr/local/bin/8021x-status.sh
+
 # Declared here as well as in the templates' extra_volumes, so a node keeps its zone files, its
 # database, its leases, its captured flows, its shared files and its RADIUS configuration and
 # accounting records even under a template someone registered by hand.

@@ -145,6 +145,13 @@ SYMBOLS = [
     # network-attached storage. Nine characters, the router budget exactly.
     ("router-radclient", "router", "RADCLIENT", None),
 
+    # --- switches, on GNS3's multilayer switch -----------------------------
+    # The first generated switch. The 802.1X access switch is a Linux bridge whose ports stay
+    # shut until a user logs in; it has to read as a switch (it sits where Switch1 sits in every
+    # other topology), and the unlabelled multilayer_switch base is already Open vSwitch's, so the
+    # band is what tells the two apart.
+    ("switch-8021x",     "multilayer_switch", "802.1X", None),
+
     # --- Qemu-backed nodes: the same artwork, plus the corner tag ---------
     # Every Qemu node the manifest still defines. All of them are `optional:` — since
     # 20 August 2026 a default build installs no Qemu node at all — and the tag is why they

@@ -562,10 +562,11 @@ nodes:
     # gns3-dev/notes/tier5-and-spike-designs.md.
     # RADIUS Server (FreeRADIUS) and RADIUS Client added 11 October 2026: network access control
     # Design 1, ~12 MB, servicenode ~133 MB over alpinenode. The client is the same image with
-    # radtest/eapol_test, drawn as a network device. See gns3-dev/notes/nac-8021x-radius.md.
+    # radtest/eapol_test, drawn as a network device. The 802.1X Switch (Design 2, hostapd) joined
+    # the same day. See gns3-dev/notes/nac-8021x-radius.md.
     templates: [docker-dnsserver, docker-ntpserver, docker-dbserver, docker-cacheserver,
                 docker-dhcpserver, docker-flowcollector, docker-fileserver,
-                docker-radiusserver, docker-radiusclient]
+                docker-radiusserver, docker-radiusclient, docker-8021xswitch]
   # Prometheus + Grafana + blackbox_exporter. Own image rather than joining servicenode
   # because Grafana (331 MB) and Prometheus (224 MB) are exactly the runtime the rule above
   # splits on. Alpine-based because Grafana is not in Ubuntu's archive at any version.
