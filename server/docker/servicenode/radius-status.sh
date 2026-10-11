@@ -29,8 +29,9 @@ ADDRS=$(ip -4 addr show | grep -E 'inet ' | grep -v '127.0.0.1')
 echo ""
 
 echo "4. Configuration check:"
-radiusd -C >/tmp/radiusd-check.log 2>&1 && echo "   OK — configuration is valid" \
-    || { echo "   FAILED — the end of the check:"; tail -n 5 /tmp/radiusd-check.log | sed 's/^/   /'; }
+radiusd -XC >/tmp/radiusd-check.log 2>&1 && echo "   OK — configuration is valid" \
+    || { echo "   FAILED:"; grep -E '^/etc/raddb/[^ ]*\[[0-9]+\]|^Failed|^Errors' /tmp/radiusd-check.log \
+             | tail -n 4 | sed 's/^/   /'; }
 echo ""
 
 echo "5. RADIUS clients (devices allowed to ask; from $RADDB/clients.conf):"

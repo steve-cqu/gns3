@@ -21,13 +21,14 @@ mkdir -p /run/radiusd /var/log/radius/radacct
 chown -R radius:radius /run/radiusd /var/log/radius 2>/dev/null
 
 echo "Checking the configuration in $RADDB ..."
-if ! radiusd -C >/tmp/radiusd-check.log 2>&1; then
+# -XC, not -C: plain -C writes its errors to radius.log and prints nothing here. -X sends them
+# to the screen, and every useful line starts with the file and line number it is about.
+if ! radiusd -XC >/tmp/radiusd-check.log 2>&1; then
     echo
     echo "FAILED: the configuration was rejected. Nothing was started."
-    # FreeRADIUS names the file and line of the first error; show those lines and a little context.
-    grep -iE 'error|errors|failed|invalid|unknown|expecting|/etc/raddb/' /tmp/radiusd-check.log \
-        | grep -v '^Including' | tail -n 8 | sed 's/^/   /'
-    echo "Full output: /tmp/radiusd-check.log"
+    grep -E '^/etc/raddb/[^ ]*\[[0-9]+\]|^Failed|^Errors' /tmp/radiusd-check.log \
+        | tail -n 4 | sed 's/^/   /'
+    echo "The number in [brackets] is the line in that file. Full output: /tmp/radiusd-check.log"
     echo "Fix the file it names, then run start-radius.sh again."
     exit 1
 fi

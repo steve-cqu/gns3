@@ -18,7 +18,10 @@
 #     EAP login has already succeeded.
 #
 nac_authorize_only {
-	if (&Service-Type == Authorize-Only) {
+	# Test that the attribute exists first: comparing an absent one is not just false, it also
+	# records "Failed retrieving values required to evaluate condition" as the reason in the
+	# log line of every ordinary failed login.
+	if (&Service-Type && (&Service-Type == Authorize-Only)) {
 		if (&Client-Shortname != "sw1") {
 			reject
 		}
