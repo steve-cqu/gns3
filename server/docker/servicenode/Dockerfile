@@ -168,7 +168,113 @@ RUN chmod +x /usr/local/bin/start-db.sh /usr/local/bin/db-status.sh \
              /usr/local/bin/start-fail2ban.sh /usr/local/bin/fail2ban-status.sh \
              /usr/local/bin/start-fileserver.sh /usr/local/bin/fileshare-status.sh
 
+# ---------------------------------------------------------------------------------------------
+# RADIUS Server (FreeRADIUS) — network access control, Design 1 (added 11 October 2026).
+#
+# The AAA server behind wired 802.1X and WPA2-Enterprise. It joins servicenode because it drags
+# in no new runtime: FreeRADIUS is C, and the whole group below measured 12.4 MB on the v044
+# appliance, taking servicenode from 120 to ~133 MB over alpinenode (decision D2's budget is 150).
+# Design and spikes: gns3-dev/notes/nac-8021x-radius.md.
+#
+#   freeradius, freeradius-eap  - the server and its EAP methods (PEAP, TTLS, TLS). Alpine has
+#                                 3.0.27, not 3.2; everything the labs need is in 3.0.
+#   freeradius-utils            - radtest/radclient, so the node can test itself and a second
+#                                 RADIUS Server node can act as the NAS in a RADIUS-only lab.
+#   wpa_supplicant              - for /sbin/eapol_test, which Alpine ships in this package: an
+#                                 EAP client (PEAP, TTLS, EAP-TLS) that needs no switch or radio.
+#   make                        - the certs/ Makefile, below and for students who regenerate.
+RUN apk add --no-cache \
+    freeradius freeradius-eap freeradius-utils \
+    wpa_supplicant \
+    make
+
+# The lab CA and server certificate, generated at BUILD time with FreeRADIUS's own certs/
+# Makefile. Alpine does not run it at install, so without this step there are no certificates and
+# every EAP method fails. The .cnf files are edited first: the stock subject is "Example Inc." in
+# France, and the stock lifetime is 60 days, which would expire mid-term. Five years outlives any
+# appliance. The server certificate also gets a subjectAltName, which upstream's xpserver_ext
+# leaves out: modern supplicants (Android, Windows 11, wpa_supplicant's domain_match) check the
+# server's name there, and Design 3's evil-twin lesson depends on that check. The CA's private
+# key ships too — this is a lab CA, and students issuing their own client certificate
+# (`make client`) is part of the EAP-TLS lesson. A fresh build makes a fresh CA, so a client's
+# copy of ca.pem belongs to the node it was copied from.
+RUN cd /etc/raddb/certs \
+ && for f in ca.cnf server.cnf client.cnf; do \
+      sed -i -E \
+        -e 's/^(default_days[[:space:]]*=).*/\1 1825/' \
+        -e 's/^(countryName[[:space:]]*=)[[:space:]]*FR$/\1 AU/' \
+        -e 's/^(stateOrProvinceName[[:space:]]*=)[[:space:]]*Radius$/\1 Queensland/' \
+        -e 's/^(localityName[[:space:]]*=)[[:space:]]*Somewhere$/\1 Rockhampton/' \
+        -e 's/^(organizationName[[:space:]]*=)[[:space:]]*Example Inc\.$/\1 CQU GNS3 Lab/' \
+        -e 's/admin@example\.org/admin@lab.example/' \
+        -e 's/user@example\.org/student@lab.example/g' \
+        -e 's/"Example Certificate Authority"/"CQU GNS3 Lab CA"/' \
+        -e 's/"Example Server Certificate"/"radius.lab.example"/' \
+        -e 's/radius\.example\.com/radius.lab.example/' \
+        -e 's/\*\.example\.com/*.lab.example/' \
+        -e 's#http://www\.example\.org/example_ca\.crl#http://ca.lab.example/ca.crl#' \
+        "$f"; \
+    done \
+ && sed -i \
+      -e 's#http://www\.example\.com/example_ca\.crl#http://ca.lab.example/ca.crl#' \
+      -e '/^\[ *xpserver_ext *\]/a subjectAltName = DNS:radius.lab.example' \
+      xpextensions \
+ && grep -q '^subjectAltName = DNS:radius.lab.example$' xpextensions \
+ && ! grep -qE 'Example Inc|= FR$|example\.(com|org)|= 60$' ca.cnf server.cnf client.cnf xpextensions \
+ && if ! make all >/tmp/certs-make.log 2>&1; then cat /tmp/certs-make.log; exit 1; fi \
+ && openssl verify -CAfile ca.pem server.pem client.pem \
+ && chown -R root:radius /etc/raddb/certs \
+ && chmod 640 /etc/raddb/certs/*.key /etc/raddb/certs/*.pem /etc/raddb/certs/*.p12 \
+ && chmod 644 /etc/raddb/certs/ca.pem /etc/raddb/certs/ca.der \
+ && rm -f /tmp/certs-make.log
+
+# The lab configuration, layered onto FreeRADIUS's stock files rather than replacing them, so the
+# hundreds of lines of upstream comments stay where students and the documentation expect them.
+# Every edit is checked with grep afterwards: a sed that silently matches nothing would ship a
+# server without the fix and no build error to say so.
+#
+#   clients.conf  - the lab-nas client (192.168.1.0/24) appended; sw1 for Design 2, commented.
+#   users         - three lab users with VLANs (10 Staff, 20 Student, 50 Guest) put FIRST,
+#                   since the file is first-match.
+#   eap           - use_tunneled_reply = yes in BOTH peap {} and ttls {}. With PEAP the VLAN is
+#                   set inside the tunnel, and without this the outer Access-Accept leaves it out
+#                   (measured 7 Oct 2026: 174 bytes without, 190 with). It also copies the real
+#                   user name out of the tunnel, which is what lets a switch see "fariza" behind
+#                   the anonymous outer identity. Both sections, so TTLS behaves the same.
+#   policy.d/nac  - the Authorize-Only VLAN lookup the Design 2 switch makes, called first in
+#                   authorize {}. It does nothing to an ordinary request.
+#   radiusd.conf  - auth = yes, so radius.log records "Login OK" / "Login incorrect" per
+#                   request. auth_badpass/auth_goodpass stay off: they would log passwords.
+COPY radius-clients.conf /tmp/radius-clients.conf
+COPY radius-users        /tmp/radius-users
+COPY radius-nac-policy   /etc/raddb/policy.d/nac
+RUN cd /etc/raddb \
+ && cat /tmp/radius-clients.conf >> clients.conf \
+ && cat /tmp/radius-users mods-config/files/authorize > /tmp/authorize \
+ && cat /tmp/authorize > mods-config/files/authorize \
+ && rm /tmp/radius-clients.conf /tmp/radius-users /tmp/authorize \
+ && sed -i -E 's/^([[:space:]]*use_tunneled_reply[[:space:]]*=)[[:space:]]*no$/\1 yes/' mods-available/eap \
+ && [ "$(grep -cE '^[[:space:]]*use_tunneled_reply = yes$' mods-available/eap)" = 2 ] \
+ && awk '!done && /^authorize \{/ { print; \
+          print "\t#  The 802.1X lab switch'"'"'s VLAN lookup (policy.d/nac). Does nothing unless the"; \
+          print "\t#  request carries Service-Type = Authorize-Only."; \
+          print "\tnac_authorize_only"; print ""; done=1; next } { print }' \
+        sites-available/default > /tmp/default \
+ && cat /tmp/default > sites-available/default && rm /tmp/default \
+ && grep -q '^	nac_authorize_only$' sites-available/default \
+ && sed -i -E 's/^([[:space:]]*auth[[:space:]]*=)[[:space:]]*no$/\1 yes/' radiusd.conf \
+ && grep -qE '^[[:space:]]*auth = yes$' radiusd.conf \
+ && chown root:radius clients.conf mods-config/files/authorize policy.d/nac \
+ && chmod 640 clients.conf mods-config/files/authorize policy.d/nac \
+ && mkdir -p /var/log/radius/radacct /run/radiusd \
+ && chown -R radius:radius /var/log/radius /run/radiusd \
+ && radiusd -C >/dev/null
+
+COPY start-radius.sh   /usr/local/bin/start-radius.sh
+COPY radius-status.sh  /usr/local/bin/radius-status.sh
+RUN chmod +x /usr/local/bin/start-radius.sh /usr/local/bin/radius-status.sh
+
 # Declared here as well as in the templates' extra_volumes, so a node keeps its zone files, its
-# database, its leases, its captured flows and its shared files even under a template someone
-# registered by hand.
-VOLUME /var/bind /etc/bind /etc/chrony /var/lib/postgresql /var/lib/valkey /var/lib/kea /var/flows /srv
+# database, its leases, its captured flows, its shared files and its RADIUS configuration and
+# accounting records even under a template someone registered by hand.
+VOLUME /var/bind /etc/bind /etc/chrony /var/lib/postgresql /var/lib/valkey /var/lib/kea /var/flows /srv /etc/raddb /var/log/radius

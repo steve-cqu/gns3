@@ -1,0 +1,39 @@
+#
+# Lab users (added by the CQU GNS3 image; FreeRADIUS's own examples follow below).
+#
+# This is /etc/raddb/users (a link to mods-config/files/authorize). Each entry is
+#
+#     <user name>  <check items: what must be true of the request>
+#                  <reply items: what to send back in the Access-Accept>
+#
+# The reply lines are indented, and every one except the last ends with a comma. The file is
+# read top to bottom and the first matching entry wins.
+#
+# Cleartext-Password is stored in the clear because the challenge-response methods (CHAP,
+# MSCHAPv2 inside PEAP) need the server to know the actual password, not just a hash of it.
+#
+# The three Tunnel-* attributes tell an 802.1X switch which VLAN to put the user's port in.
+# The VLAN plan is the one from the network access control Book:
+#     10 Staff    20 Student    50 Guest    99 Quarantine (anyone who does not log in)
+#
+# Run start-radius.sh after editing this file; the server reads it only at start-up.
+
+ritesh	Cleartext-Password := "staffpass"
+	Tunnel-Type = VLAN,
+	Tunnel-Medium-Type = IEEE-802,
+	Tunnel-Private-Group-Id = "10"
+
+fariza	Cleartext-Password := "studentpass"
+	Tunnel-Type = VLAN,
+	Tunnel-Medium-Type = IEEE-802,
+	Tunnel-Private-Group-Id = "20"
+
+visitor	Cleartext-Password := "guestpass"
+	Tunnel-Type = VLAN,
+	Tunnel-Medium-Type = IEEE-802,
+	Tunnel-Private-Group-Id = "50"
+
+#
+# ------------------------------------------------------------------------------------------
+# FreeRADIUS's own example file, unchanged:
+#

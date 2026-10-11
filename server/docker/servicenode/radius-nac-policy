@@ -1,0 +1,34 @@
+#
+# /etc/raddb/policy.d/nac — the VLAN lookup an 802.1X lab switch makes (added by the CQU GNS3 image).
+#
+# Called as the first line of authorize {} in sites-available/default. It does nothing to an
+# ordinary login; it acts only on a request carrying Service-Type = Authorize-Only.
+#
+# Why it exists. A real 802.1X switch reads the user's VLAN from the Access-Accept that ends the
+# login. The lab's Linux access switch runs hostapd, whose wired driver cannot apply a VLAN from
+# the Accept, so after a login succeeds the switch asks this server a second question: "which
+# VLAN is <user> in?". The answer comes from the same users file that holds the passwords, so the
+# policy still lives on the server: move a user to another VLAN in the users file, restart, and
+# the next login lands in the new VLAN with nothing changed on the switch.
+#
+# The lookup carries no password, so it must grant nothing on its own:
+#   - only the switch may ask (its clients.conf shortname is sw1);
+#   - a user with no VLAN in the users file is rejected;
+#   - an Accept to a lookup opens no port by itself; the switch asks only after the user's own
+#     EAP login has already succeeded.
+#
+nac_authorize_only {
+	if (&Service-Type == Authorize-Only) {
+		if (&Client-Shortname != "sw1") {
+			reject
+		}
+		files
+		if (!&reply:Tunnel-Private-Group-Id) {
+			reject
+		}
+		update control {
+			&Auth-Type := Accept
+		}
+		return
+	}
+}

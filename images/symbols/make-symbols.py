@@ -92,6 +92,9 @@ SYMBOLS = [
     # protocol as a directory. A lab can hold both, so they must not share a band.
     ("server-ad",        "server", "AD",      None),
     ("server-sdn",       "server", "SDN",     None),
+    # The AAA server for network access control (802.1X, WPA2-Enterprise). Not "AAA": students
+    # meet the protocol by name in the Book and the capture, so the band names the protocol.
+    ("server-radius",    "server", "RADIUS",  None),
     # The estate's package source (patch-management). A server tower rather than a router:
     # students meet it as a service they point apt at, not as something on the path.
     ("server-patch",     "server", "PATCH",   None),
