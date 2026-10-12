@@ -239,7 +239,7 @@ RUN cd /etc/raddb/certs \
 #   eap           - use_tunneled_reply = yes in BOTH peap {} and ttls {}. With PEAP the VLAN is
 #                   set inside the tunnel, and without this the outer Access-Accept leaves it out
 #                   (measured 7 Oct 2026: 174 bytes without, 190 with). It also copies the real
-#                   user name out of the tunnel, which is what lets a switch see "fariza" behind
+#                   user name out of the tunnel, which is what lets a switch see "riley" behind
 #                   the anonymous outer identity. Both sections, so TTLS behaves the same.
 #   policy.d/nac  - the Authorize-Only VLAN lookup the Design 2 switch makes, called first in
 #                   authorize {}. It does nothing to an ordinary request.

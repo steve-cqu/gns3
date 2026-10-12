@@ -56,7 +56,7 @@ sleep 2
 if pgrep -x radiusd >/dev/null 2>&1; then
     echo "radiusd started. It listens on UDP 1812 (authentication) and 1813 (accounting)."
     echo
-    echo "Test it from this node:     radtest ritesh staffpass 127.0.0.1 0 testing123"
+    echo "Test it from this node:     radtest sam staffpass 127.0.0.1 0 testing123"
     echo "Lab clients and secrets:    $RADDB/clients.conf"
     echo "Users, passwords, VLANs:    $RADDB/users"
     echo "The lab CA certificate:     $RADDB/certs/ca.pem   (copy it to clients that validate the server)"

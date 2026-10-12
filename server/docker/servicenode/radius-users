@@ -18,12 +18,12 @@
 #
 # Run start-radius.sh after editing this file; the server reads it only at start-up.
 
-ritesh	Cleartext-Password := "staffpass"
+sam	Cleartext-Password := "staffpass"
 	Tunnel-Type = VLAN,
 	Tunnel-Medium-Type = IEEE-802,
 	Tunnel-Private-Group-Id = "10"
 
-fariza	Cleartext-Password := "studentpass"
+riley	Cleartext-Password := "studentpass"
 	Tunnel-Type = VLAN,
 	Tunnel-Medium-Type = IEEE-802,
 	Tunnel-Private-Group-Id = "20"
