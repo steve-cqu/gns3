@@ -42,9 +42,14 @@ fi
 ip link set "$IFACE" up
 
 echo "Starting wpa_supplicant on $IFACE ..."
-# -B daemonize, -i interface, -c config, -D nl80211 driver.
-wpa_supplicant -B -i "$IFACE" -c "$CONF" -D nl80211 -P /run/wpa_supplicant/wpa.pid \
-    >/var/log/wifi/wpa_supplicant.log 2>&1
+# -i interface, -c config, -D nl80211 driver. Run in the background with setsid rather than with
+# wpa_supplicant's own -B: once daemonised it writes nothing more to stdout, and this build has no
+# -f (log file) option, so the log held only two start-up lines. In the foreground it prints every
+# event (association, the EAP method, the server's certificate, a certificate error, the four-way
+# handshake), and those lines are what a student needs when a login fails. Measured 14 October 2026.
+setsid wpa_supplicant -i "$IFACE" -c "$CONF" -D nl80211 \
+    </dev/null >/var/log/wifi/wpa_supplicant.log 2>&1 &
+echo $! > /run/wpa_supplicant/wpa.pid
 
 # Give the four-way handshake time to complete. THIRTY seconds, not ten: the poll exits the moment
 # the state reaches COMPLETED, so a longer window costs a fast host nothing and saves a slow one —
