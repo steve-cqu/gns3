@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start this node as a Wi-Fi Access Point (hostapd, WPA2-PSK).
+# Start this node as a Wi-Fi Access Point (hostapd: WPA2-PSK, WPA3-SAE or WPA2-Enterprise).
 # Usage: start-ap.sh [ip/cidr] [wired-iface]      (defaults 10.0.0.1/24, eth0)
 #
 # hostapd turns the node's radio into an access point beaconing the SSID in
@@ -45,8 +45,13 @@ fi
 
 echo "Checking $CONF ..."
 # -t would need the iface; instead let hostapd validate by starting. First, a quick sanity read.
-if ! grep -q '^ssid=' "$CONF" || ! grep -q '^wpa_passphrase=' "$CONF"; then
-    echo "FAILED: $CONF is missing an ssid= or wpa_passphrase= line. Fix it and retry."
+# The AP needs a name and a way to authenticate stations: a passphrase (WPA2-PSK), a WPA3
+# password (sae_password=), or 802.1X (wpa_key_mgmt=WPA-EAP, WPA2-Enterprise, where hostapd asks a
+# RADIUS server or its own EAP server). Until 14 October 2026 only wpa_passphrase= was accepted.
+if ! grep -q '^ssid=' "$CONF" \
+   || ! grep -Eq '^(wpa_passphrase|sae_password)=|^wpa_key_mgmt=.*WPA-EAP' "$CONF"; then
+    echo "FAILED: $CONF is missing an ssid= line, or has no wpa_passphrase=, sae_password= or"
+    echo "wpa_key_mgmt=WPA-EAP line. Fix it and retry."
     exit 1
 fi
 
@@ -89,6 +94,16 @@ if [ -n "$BRIDGE" ]; then
     fi
 fi
 
+# Bridged: address the bridge BEFORE hostapd starts. A WPA2-Enterprise AP (wpa_key_mgmt=WPA-EAP)
+# opens its RADIUS socket to auth_server_addr the moment hostapd starts, and with no address on the
+# bridge there is no route to the server yet. Until 14 October 2026 the address was added after
+# hostapd, which was harmless for WPA2-PSK, where hostapd talks to nobody on the wire.
+if [ -n "$BRIDGE" ]; then
+    ip addr flush dev "$IFACE" 2>/dev/null
+    ip addr flush dev "$BRIDGE" 2>/dev/null
+    ip addr add "$APIP" dev "$BRIDGE"
+fi
+
 echo "Starting hostapd on $IFACE ..."
 # -B daemonize, -P pidfile. Logs go to the file so wifi-status.sh can show them.
 hostapd -B -P /run/hostapd/hostapd.pid "$CONF" >/var/log/wifi/hostapd.log 2>&1
@@ -104,12 +119,11 @@ done
 if pgrep -x hostapd >/dev/null 2>&1; then
     SSID=$(grep '^ssid=' "$CONF" | cut -d= -f2)
     if [ -n "$BRIDGE" ]; then
-        # The radio is a port on the bridge now, so the address goes on the bridge. An address left
-        # on wlan0 would be on an interface that no longer terminates traffic, which looks right in
-        # `ip addr` and answers nothing.
+        # The radio is a port on the bridge now, so the address is on the bridge (set above, before
+        # hostapd). An address left on wlan0 would be on an interface that no longer terminates
+        # traffic, which looks right in `ip addr` and answers nothing; flush it in case hostapd's
+        # start put anything back.
         ip addr flush dev "$IFACE" 2>/dev/null
-        ip addr flush dev "$BRIDGE" 2>/dev/null
-        ip addr add "$APIP" dev "$BRIDGE"
         MEMBERS=$(ls /sys/class/net/"$BRIDGE"/brif 2>/dev/null | tr '\n' ' ')
         echo "hostapd started. Access point '$SSID' is beaconing on $IFACE,"
         echo "bridged onto $BRIDGE ($APIP) with: ${MEMBERS:-nothing yet}"

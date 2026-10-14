@@ -1,5 +1,6 @@
 #!/bin/bash
-# Start this node as a Wi-Fi Station (client): associate to the AP with wpa_supplicant (WPA2-PSK).
+# Start this node as a Wi-Fi Station (client): associate to the AP with wpa_supplicant
+# (WPA2-PSK, WPA3-SAE or WPA2-Enterprise, whichever wpa_supplicant.conf asks for).
 # Usage: start-sta.sh [ip/cidr]        (default 10.0.0.2/24)
 #
 # wpa_supplicant scans for the SSID in /etc/wpa_supplicant/wpa_supplicant.conf and completes the
@@ -20,8 +21,14 @@ if ! ip link show "$IFACE" >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! grep -q 'ssid=' "$CONF" || ! grep -q 'psk=' "$CONF"; then
-    echo "FAILED: $CONF is missing an ssid or psk line. Fix it and retry."
+# A network needs a name and a way to authenticate: a passphrase (psk=, WPA2-PSK), a WPA3
+# password (sae_password=), or an 802.1X login (key_mgmt=WPA-EAP, WPA2-Enterprise, where the
+# identity and password are checked by a RADIUS server, not by the AP). Until 14 October 2026 this
+# gate accepted psk= only, so a SAE or Enterprise config was refused before wpa_supplicant ran.
+if ! grep -q 'ssid=' "$CONF" \
+   || ! grep -Eq 'psk=|sae_password=|key_mgmt=.*WPA-EAP' "$CONF"; then
+    echo "FAILED: $CONF is missing an ssid line, or has no psk=, sae_password= or"
+    echo "key_mgmt=WPA-EAP line. Fix it and retry."
     exit 1
 fi
 
@@ -35,9 +42,14 @@ fi
 ip link set "$IFACE" up
 
 echo "Starting wpa_supplicant on $IFACE ..."
-# -B daemonize, -i interface, -c config, -D nl80211 driver.
-wpa_supplicant -B -i "$IFACE" -c "$CONF" -D nl80211 -P /run/wpa_supplicant/wpa.pid \
-    >/var/log/wifi/wpa_supplicant.log 2>&1
+# -i interface, -c config, -D nl80211 driver. Run in the background with setsid rather than with
+# wpa_supplicant's own -B: once daemonised it writes nothing more to stdout, and this build has no
+# -f (log file) option, so the log held only two start-up lines. In the foreground it prints every
+# event (association, the EAP method, the server's certificate, a certificate error, the four-way
+# handshake), and those lines are what a student needs when a login fails. Measured 14 October 2026.
+setsid wpa_supplicant -i "$IFACE" -c "$CONF" -D nl80211 \
+    </dev/null >/var/log/wifi/wpa_supplicant.log 2>&1 &
+echo $! > /run/wpa_supplicant/wpa.pid
 
 # Give the four-way handshake time to complete. THIRTY seconds, not ten: the poll exits the moment
 # the state reaches COMPLETED, so a longer window costs a fast host nothing and saves a slow one —
@@ -78,7 +90,8 @@ if [ "$assoc" = 1 ]; then
 else
     echo "Did not associate within 30s. Last lines of /var/log/wifi/wpa_supplicant.log:"
     tail -n 12 /var/log/wifi/wpa_supplicant.log 2>/dev/null | sed 's/^/   /'
-    echo "Check that the AP is running (start-ap.sh) and the SSID/passphrase match."
+    echo "Check that the AP is running (start-ap.sh) and the SSID/passphrase match"
+    echo "(for WPA2-Enterprise: the identity, password and certificate settings)."
     echo
     echo "$STAIP has been set on $IFACE anyway, so if the handshake completes late the link will"
     if [ "$STAIP" = "10.0.0.2/24" ]; then
