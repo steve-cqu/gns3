@@ -3,13 +3,22 @@
 # This file is only read when hostapd.conf has eap_server=1 (the rogue block). The real
 # WPA2-Enterprise AP forwards logins to a RADIUS server instead and never looks here.
 #
-# Phase 1 (outer EAP identity, sent in the clear): allow any identity to start PEAP.
+# Phase 1 (outer EAP identity, in the clear): allow any identity to start PEAP.
 *               PEAP
 
-# Phase 2 (inner, inside the TLS tunnel): offer MSCHAPv2 to any inner user name.
-# A rogue has no real password database, so the inner check does not pass — but by the time
-# hostapd asks for the inner identity, the victim station (which did not check the certificate)
-# has already built the tunnel and sent its user name and MSCHAPv2 challenge/response. hostapd
-# logs that inner identity, so the rogue learns who connected and captures the exchange. That the
-# login then fails is beside the point: the credentials have already left the laptop.
-*               MSCHAPV2        [2]
+# Phase 2 (inner, inside the TLS tunnel): the lab users, with a throwaway password.
+#
+# The twin does NOT know the real passwords and the login never succeeds. The point is what
+# happens on the way to that failure: because these identities are listed, hostapd goes ahead and
+# runs the MSCHAPv2 exchange, so the victim station sends its Challenge/Peer-Challenge and, above
+# all, its NT-Response — the value derived from the real password. hostapd compares it against the
+# throwaway password, the two differ, and it logs "Invalid NT-Response" and fails. But the captured
+# Challenge + NT-Response is exactly what an attacker feeds to an offline cracker (asleap, hashcat
+# -m 5500) to recover the password at leisure. Run the twin with `start-ap.sh -d` to see it in
+# /var/log/wifi/hostapd.log.
+#
+# A real attack tool (hostapd-wpe) accepts ANY inner identity automatically and needs no such list;
+# stock hostapd needs the identity here to proceed to the challenge. The NT-Response it captures is
+# the same either way — listing the two lab users just keeps this image stock hostapd.
+"sam"           MSCHAPV2        "x"             [2]
+"riley"         MSCHAPV2        "x"             [2]

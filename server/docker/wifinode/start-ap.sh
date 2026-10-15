@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start this node as a Wi-Fi Access Point (hostapd: WPA2-PSK, WPA3-SAE or WPA2-Enterprise).
-# Usage: start-ap.sh [ip/cidr] [wired-iface]      (defaults 10.0.0.1/24, eth0)
+# Usage: start-ap.sh [-d] [ip/cidr] [wired-iface]   (defaults 10.0.0.1/24, eth0; -d = debug logging)
 #
 # hostapd turns the node's radio into an access point beaconing the SSID in
 # /etc/hostapd/hostapd.conf. A Station node running start-sta.sh then associates to it. The config
@@ -24,6 +24,14 @@
 
 CONF=/etc/hostapd/hostapd.conf
 IFACE=wlan0
+
+# -d / --debug: run hostapd with full debug logging (hostapd -dd) instead of quietly daemonised,
+# so /var/log/wifi/hostapd.log records the whole EAP conversation — the per-station identity and,
+# for a rogue AP running its own EAP server, the MSCHAPv2 Challenge/NT-Response the victim sends.
+# That capture is the point of the Evil Twin activity; for an ordinary AP it is just verbose.
+DEBUG=0
+if [ "$1" = "-d" ] || [ "$1" = "--debug" ]; then DEBUG=1; shift; fi
+
 APIP="${1:-10.0.0.1/24}"
 WIRED="${2:-eth0}"
 
@@ -106,7 +114,15 @@ fi
 
 echo "Starting hostapd on $IFACE ..."
 # -B daemonize, -P pidfile. Logs go to the file so wifi-status.sh can show them.
-hostapd -B -P /run/hostapd/hostapd.pid "$CONF" >/var/log/wifi/hostapd.log 2>&1
+# With -d/--debug, run under setsid with -dd instead: -B stops logging the moment it daemonises
+# (the same reason start-sta.sh uses setsid), so the EAP detail the Evil Twin lab needs would be
+# lost. setsid keeps it running after this script exits while everything still reaches the log.
+if [ "$DEBUG" = 1 ]; then
+    echo "   (debug: hostapd -dd, full EAP logging to /var/log/wifi/hostapd.log)"
+    setsid hostapd -dd -P /run/hostapd/hostapd.pid "$CONF" </dev/null >/var/log/wifi/hostapd.log 2>&1 &
+else
+    hostapd -B -P /run/hostapd/hostapd.pid "$CONF" >/var/log/wifi/hostapd.log 2>&1
+fi
 
 # Poll rather than sleep a flat 2 s, for the same reason start-sta.sh polls for 30: a fixed wait is
 # a race with the slowest machine that will ever run this, and it exits as soon as hostapd is up.
