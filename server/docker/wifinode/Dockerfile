@@ -40,9 +40,27 @@ RUN mkdir -p /run/hostapd /run/wpa_supplicant /var/log/wifi
 
 # Shipped configuration — valid as it stands and meant to be edited; the config IS the lesson, the
 # same standard as the other CQU service nodes. hostapd.conf brings up SSID "cqu-lab" on channel 6
-# with WPA2-PSK; wpa_supplicant.conf joins that SSID with the same passphrase.
+# with WPA2-PSK; wpa_supplicant.conf joins that SSID with the same passphrase. hostapd.conf also
+# carries two commented alternatives: a WPA2-Enterprise block (wifi-enterprise) and a rogue-AP block
+# that turns on hostapd's own EAP server (evil-twin-8021x).
 COPY hostapd.conf         /etc/hostapd/hostapd.conf
 COPY wpa_supplicant.conf  /etc/wpa_supplicant/wpa_supplicant.conf
+COPY hostapd.eap_user     /etc/hostapd/hostapd.eap_user
+
+# The rogue AP's self-signed certificate, generated at BUILD time (openssl is in the alpinenode
+# base). It is NOT signed by the lab CA — that is the point: a station that validates the server
+# (ca_cert=) rejects it, a station that does not validate hands over its credentials. The subject
+# deliberately SPOOFS the real server's name (CN=radius.lab.example), so the lesson is sharp: even
+# copying the name does not help the attacker, because the certificate still does not chain to the
+# lab CA. Harmless on every other node, where nothing references it (eap_server stays off). These
+# are throwaway lab credentials in a public repo by design; see gns3/CLAUDE.md.
+RUN mkdir -p /etc/hostapd/rogue \
+ && openssl req -x509 -newkey rsa:2048 -nodes -days 1825 \
+      -keyout /etc/hostapd/rogue/rogue.key \
+      -out    /etc/hostapd/rogue/rogue.pem \
+      -subj '/C=AU/ST=Queensland/O=Free Coffee WiFi/CN=radius.lab.example' \
+      -addext 'subjectAltName=DNS:radius.lab.example' \
+ && chmod 600 /etc/hostapd/rogue/rogue.key
 
 # Helper scripts in /usr/local/bin (persisted, and ahead of /bin in PATH) so a student's edits
 # survive a project close — the lesson recorded in ipv6node's Dockerfile.

@@ -1,0 +1,15 @@
+# hostapd integrated EAP server — user database for the ROGUE access point (Evil Twin lab).
+#
+# This file is only read when hostapd.conf has eap_server=1 (the rogue block). The real
+# WPA2-Enterprise AP forwards logins to a RADIUS server instead and never looks here.
+#
+# Phase 1 (outer EAP identity, sent in the clear): allow any identity to start PEAP.
+*               PEAP
+
+# Phase 2 (inner, inside the TLS tunnel): offer MSCHAPv2 to any inner user name.
+# A rogue has no real password database, so the inner check does not pass — but by the time
+# hostapd asks for the inner identity, the victim station (which did not check the certificate)
+# has already built the tunnel and sent its user name and MSCHAPv2 challenge/response. hostapd
+# logs that inner identity, so the rogue learns who connected and captures the exchange. That the
+# login then fails is beside the point: the credentials have already left the laptop.
+*               MSCHAPV2        [2]
