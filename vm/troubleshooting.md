@@ -78,8 +78,9 @@ host-only network itself exists — see
 
 ### `KVM acceleration cannot be used (/dev/kvm doesn't exist)`
 
-**Applies to:** Qemu nodes only — OpenWRT, OPNsense. Docker nodes are unaffected, so most
-activities still work.
+**Applies to:** Qemu nodes only — OPNsense, and OpenWRT where your appliance has the Qemu version
+(the standard OpenWRT Router is a Docker node). Docker nodes are unaffected, so most activities
+still work.
 
 Your host has no nested virtualisation to pass through to the GNS3 VM. The usual causes are a
 managed Windows laptop where Credential Guard or memory integrity keeps Hyper-V holding VT-x, so
@@ -127,7 +128,7 @@ reloads within about a second.
 
 ### `Fatal Python error: init_interp_main: can't initialize time`: a node's date is wrong by years
 
-**Applies to:** Qemu nodes (OPNsense, OpenWRT) most severely; any node in principle
+**Applies to:** Qemu nodes (OPNsense, and the Qemu OpenWRT) most severely; any node in principle
 
 A node reports a date far in the future or the past — a year such as 2319 rather than the current
 one. On OPNsense the boot messages give it away before the date line does:
@@ -168,13 +169,21 @@ the node will come good on its next start.
 When it starts, it copies the virtual machine's hardware clock into the GNS3 VM's clock, and on
 some computers that hardware clock holds local time rather than UTC. That puts the VM hours out,
 often by exactly your time-zone offset. To fix the GNS3 VM, **shut it down and start it again**
-with your computer connected to the internet. It sets its clock from the internet as it starts.
-Then stop and start your nodes. The OpenWRT Router in v044 and later no longer touches the clock.
+with your computer's clock correct and, if you can, connected to the internet. As it starts, it
+takes its time from your computer and from internet time servers when it can reach them. The
+OpenWRT Router in v044 and later no longer touches the clock.
 
-**Fix.** Correct your computer and the GNS3 VM first, then **stop and start the node**. A node takes
-its start time from the appliance when it boots and keeps its own clock afterwards, so correcting
-the VM does nothing for a node that is already running — it has to be restarted to pick the new time
-up.
+**Fix.** Correct your computer and the GNS3 VM first. What happens next depends on the node:
+
+- **A Docker node** (Linux Host, Ubuntu Host and almost every other node) has no clock of its own.
+  It always shows the GNS3 VM's time, so it is right again the moment the VM is, with no restart.
+- **A Qemu node** (OPNsense) takes its time from the VM when it boots and keeps its own clock
+  afterwards. **Stop and start it** to pick up the corrected time.
+
+**Do not fix a wrong clock with `date` on a Docker node.** Because every Docker node shares the
+GNS3 VM's clock, setting it on one node changes it for the VM and every node in every project. If
+you get it wrong by less than 20 minutes, a PC's GNS3 VM does not put it right by itself. A
+restart of the GNS3 VM, with your computer's clock correct, does.
 
 If the node is still wrong after a restart, set it at the console. OPNsense is FreeBSD, which takes
 `CCYYMMDDhhmm.ss`, in UTC. On `OPNsense1`:

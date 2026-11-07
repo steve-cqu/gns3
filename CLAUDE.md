@@ -138,6 +138,10 @@ The edit surface for one new image plus one template:
 - **Services start from a script, never `systemctl`** — Alpine has no systemd. Validate the config
   before starting (`named-checkconf`, `promtool check config`), be idempotent, and print where the
   logs are. Name the script in the template's `usage` field.
+- **Check what the images already have before adding a node or a package.** The measured
+  image-by-image limits (no systemd, cron and syslog not running, no internet, shared clock,
+  BusyBox tools, persisted paths) and the GNS3 platform quirks are in
+  `gns3-dev/notes/node-capabilities.md`; `gns3-dev/tools/node-capability-probe.sh` re-measures them.
 - **Qemu is a last resort.** A Qemu node means a per-architecture disk, a download and an md5, and
   any `.gns3project` containing one is permanently bound to the architecture it was exported on.
   FRR, NETem and the SDN controller were all migrated off Qemu for this reason.

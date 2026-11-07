@@ -23,10 +23,18 @@ Three things behave differently, and the difference matters:
   kept directory is gone.
 - **Restarting or shutting down the GNS3 VM** has the same effect as closing the project.
 
-Out of the box, only a small number of directories are kept – `/etc/ssh`, `/root/.ssh`, `/data` and
-`/home/student`. That is why work such as a certificate authority under `/root`, a WireGuard key in
-`/etc/wireguard`, a user account in `/etc/shadow` or a Kerberos database in `/var/lib/krb5kdc` is
-lost when you close a project, even though your `sshd_config` survives.
+Which directories are kept depends on the node type and on how old your GNS3 VM is. On a current
+appliance (v044 and later), the general-purpose nodes keep `/etc`, `/root`, `/home`, `/data` and
+`/usr/local/bin` (Linux Host and Ubuntu Host also keep `/var/www`), and each server node also keeps
+its own data directory. Some nodes keep far less: Suricata IDS keeps only its configuration, rule
+and log directories, FRR keeps only `/etc/frr`, and NETem keeps nothing you would edit. Everything else, including `/tmp`, `/var/log`, `/opt` and any software you installed, is
+lost when you close a project.
+
+On an **older** appliance, only `/etc/ssh`, `/root/.ssh`, `/data` and `/home/student` were kept.
+That is why work such as a certificate authority under `/root`, a WireGuard key in
+`/etc/wireguard`, a user account in `/etc/shadow` or a Kerberos database in `/var/lib/krb5kdc` was
+lost when you closed a project, even though your `sshd_config` survived. The next section fixes
+that.
 
 There is one more thing that is never kept, no matter what you do: **running programs**. A web
 server, `suricata`, a listener you started with `nc`, or the SSH daemon are processes, not files.

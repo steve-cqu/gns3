@@ -802,8 +802,9 @@ docker image inspect cqugns3/alpinenode:latest --format '{{json .Config.Volumes}
 
 | Image | Declares in its Dockerfile |
 |---|---|
-| `alpinenode`, `ubuntunode`, `ipv6node` | `/data` `/etc/ssh` `/home/student` `/root/.ssh` |
-| `auth-kerberos` | those four **plus `/etc`** |
+| `alpinenode`, `ipv6node` | `/data` `/etc/ssh` `/home` `/root/.ssh` (`/home`, not `/home/student`, since 29 August 2026) |
+| `ubuntunode` | `/data` `/etc/ssh` `/home/student` `/root/.ssh` |
+| `auth-kerberos` | the `alpinenode` four **plus `/etc`** |
 | `net_toolbox` | `/etc` `/root` `/var/www` `/tftpboot` `/var/log` |
 | `suricata` | `/etc/suricata` `/var/lib/suricata/rules` `/var/log/suricata` |
 | `frrnode` | `/etc/frr` |
