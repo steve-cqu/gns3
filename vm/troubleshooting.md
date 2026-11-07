@@ -207,6 +207,33 @@ emulated timer runs away was tested and did not hold. The OpenWRT Router cause w
 25 September 2026 on an Apple Silicon appliance, from the VM's own logs, and a restart was seen to
 correct the clock. The time-zone-offset explanation on Windows PCs is not yet verified.*
 
+### `cannot stop container: … tried to kill container, but did not receive an exit event`
+
+**Applies to:** any node that has mounted a file share with `mount -t cifs`, such as the
+*Database Server* in the backup activity
+
+A node will not stop. GNS3 shows the error above, the node stays *started*, and its console refuses
+to open. Stopping it again takes about twenty seconds and fails the same way. Closing the project
+can fail with `Could not close node`, and deleting it afterwards can fail with
+`Permission denied: '.gns3_perms'`.
+
+**Why:** a mounted share is handled by the GNS3 VM's own kernel, which every node shares. If a
+project is closed or deleted while one of its nodes still has a share mounted, the kernel keeps
+trying to reach the file server that has gone. When a later project mounts a new file server **at
+the same address**, the kernel can match it to the stale connection, and the node's process
+waits in the kernel where nothing can stop it.
+
+**The fix:** restart the GNS3 VM. Nothing short of a restart frees the stuck process. Then stop and
+delete the affected project normally.
+
+**To avoid it:** unmount shares before stopping a node or closing a project, for example
+`umount /mnt/backup` on the server that mounted it.
+
+*Verified 7 November 2026, appliance v044 (amd64): the kernel log showed the stale sessions
+(`has not responded in 180 seconds. Reconnecting...`), a mount to a reused address was followed by
+a process stuck in uninterruptible sleep, and a VM restart cleared it. That the stale session alone
+causes the hang, without the reused address, is not established.*
+
 ---
 
 ## Saving and exporting
