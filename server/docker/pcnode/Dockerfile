@@ -41,6 +41,9 @@ ENV POWERSHELL_TELEMETRY_OPTOUT=1 \
 COPY NetCompat /usr/local/share/powershell/Modules/NetCompat
 COPY profile.ps1 /opt/microsoft/powershell/7/profile.ps1
 COPY start-pc /usr/local/bin/start-pc
-RUN chmod +x /usr/local/bin/start-pc
+# The base image's nginx welcome page is removed so that Start-Service W3SVC writes a page naming the
+# PC; students then add their own pages to /var/www/html (persisted by the template).
+RUN chmod +x /usr/local/bin/start-pc \
+ && rm -f /var/www/html/index.nginx-debian.html
 
 CMD ["/usr/local/bin/start-pc"]

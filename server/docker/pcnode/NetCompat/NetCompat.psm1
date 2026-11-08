@@ -113,8 +113,23 @@ function Format-LinkSpeed {
 # -Drop: addresses to leave out although still live (removed from the persistent store only).
 # -Keep: @{ Dev; Local; PrefixLength } entries to write although no longer live (removed from the
 # active store only). Windows keeps the two stores separately; these let one answer differ.
+# Routes added by New-NetRoute carry `proto static`; they are persisted as `up ip route add` lines in
+# their interface's stanza. -DropRoute / -KeepRoute do for routes what -Drop / -Keep do for addresses
+# (objects with Dst, Gw, Dev, Metric).
 function Save-NetConfig {
-    param([string[]]$Drop = @(), [object[]]$Keep = @())
+    param([string[]]$Drop = @(), [object[]]$Keep = @(), [object[]]$DropRoute = @(), [object[]]$KeepRoute = @())
+    $routeKey = { param($r) "$($r.Dst)|$($r.Gw)|$($r.Dev)" }
+    $dropKeys = @($DropRoute | ForEach-Object { & $routeKey $_ })
+    $statics = [System.Collections.Generic.List[object]]::new()
+    foreach ($r in Invoke-IpJson -4 route show proto static) {
+        if ($r.dst -eq 'default') { continue }
+        $o = [pscustomobject]@{ Dst = $r.dst; Gw = $(if ($r.PSObject.Properties['gateway']) { $r.gateway } else { '' })
+                                Dev = $r.dev; Metric = $(if ($r.PSObject.Properties['metric']) { $r.metric } else { 0 }) }
+        if ($dropKeys -notcontains (& $routeKey $o)) { $statics.Add($o) }
+    }
+    foreach ($k in $KeepRoute) { if ($k.Dst -ne '0.0.0.0/0') { $statics.Add($k) } }
+    $keepDefault = @($KeepRoute | Where-Object { $_.Dst -eq '0.0.0.0/0' })
+    $dropDefault = @($DropRoute | Where-Object { $_.Dst -eq '0.0.0.0/0' })
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add($script:BlockBegin)
     $defaults = @(Invoke-IpJson -4 route show default)
@@ -131,10 +146,17 @@ function Save-NetConfig {
         $lines.Add("    address $($first.local)")
         $lines.Add("    netmask $(ConvertTo-Netmask $first.prefixlen)")
         $lines.Add("    broadcast +")
-        $gw = @($defaults | Where-Object { $_.dev -eq $i.ifname -and $_.PSObject.Properties['gateway'] })
-        if ($gw.Count -gt 0) { $lines.Add("    gateway $($gw[0].gateway)") }
+        $gw = @($defaults | Where-Object { $_.dev -eq $i.ifname -and $_.PSObject.Properties['gateway'] -and
+                                           @($dropDefault | Where-Object Gw -eq $_.gateway).Count -eq 0 } | ForEach-Object { $_.gateway })
+        $gw += @($keepDefault | Where-Object Dev -eq $i.ifname | ForEach-Object { $_.Gw })
+        if ($gw.Count -gt 0) { $lines.Add("    gateway $($gw[0])") }
         foreach ($a in $addrs | Select-Object -Skip 1) {
             $lines.Add("    up ip addr add $($a.local)/$($a.prefixlen) brd + dev $($i.ifname)")
+        }
+        foreach ($r in $statics | Where-Object Dev -eq $i.ifname) {
+            $via = if ($r.Gw) { "via $($r.Gw) " } else { '' }
+            $met = if ($r.Metric) { " metric $($r.Metric)" } else { '' }
+            $lines.Add("    up ip route add $($r.Dst) $($via)dev $($i.ifname) proto static$met")
         }
     }
     $lines.Add($script:BlockEnd)
@@ -491,9 +513,6 @@ function Test-NetConnection {
         [ValidateSet('Quiet', 'Detailed')][string]$InformationLevel,
         [switch]$TraceRoute
     )
-    if ($TraceRoute) {
-        Stop-NetCompat $PSCmdlet 'On the simulated PC, -TraceRoute is not available yet. Use tracert <address>.' 'NotImplemented'
-    }
     if (-not $ComputerName) {
         Stop-NetCompat $PSCmdlet 'On the simulated PC, give a computer name or address, for example: Test-NetConnection 78.1.2.4'
     }
@@ -516,6 +535,7 @@ function Test-NetConnection {
         PingSucceeded    = $false
         PingReplyDetails = $null
         TcpTestSucceeded = $false
+        TraceRoute       = $null
     }
 
     $tcpOk = $null
@@ -539,6 +559,11 @@ function Test-NetConnection {
         }
         if ($Port) { Write-Warning "TCP connect to ($addr : $Port) failed" }
         if (-not $result.PingSucceeded) { Write-Warning "Ping to $addr failed with status: $($echo.Status)" }
+    }
+    if ($TraceRoute) {
+        $hops = [System.Collections.Generic.List[string]]::new()
+        Invoke-TraceHops $addr 30 2000 1 { param($ttl, $times, $from) $hops.Add($(if ($from) { $from } else { '0.0.0.0' })) }
+        $result.TraceRoute = $hops.ToArray()
     }
     if ($InformationLevel -eq 'Quiet') {
         if ($Port) { return [bool]$tcpOk }
@@ -774,6 +799,425 @@ function ipconfig {
         $gw = @($c.IPv4DefaultGateway)
         "   Default Gateway . . . . . . . . . : $(if ($gw.Count) { $gw[0] })"
     }
+}
+
+#endregion
+
+#region phase 2: routes, web server, tracert -----------------------------------------------------
+
+# Parse an address into a big-endian BigInteger, for sorting routes the way Windows lists them
+# (destination address descending).
+function ConvertTo-AddrKey {
+    param([string]$Prefix)
+    $a = [System.Net.IPAddress]::Parse(($Prefix -split '/')[0])
+    $b = $a.GetAddressBytes(); [array]::Reverse($b)
+    [System.Numerics.BigInteger]::new([byte[]]($b + 0))
+}
+
+function ConvertTo-Network {
+    param([string]$Address, [int]$PrefixLength)
+    $bytes = [System.Net.IPAddress]::Parse($Address).GetAddressBytes()
+    $bits = $PrefixLength
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        $keep = [math]::Max(0, [math]::Min(8, $bits)); $bits -= 8
+        $bytes[$i] = $bytes[$i] -band ([byte](0xFF -shl (8 - $keep) -band 0xFF))
+    }
+    "$([System.Net.IPAddress]::new($bytes))/$PrefixLength"
+}
+
+function ConvertTo-Broadcast {
+    param([string]$Address, [int]$PrefixLength)
+    $bytes = [System.Net.IPAddress]::Parse($Address).GetAddressBytes(); [array]::Reverse($bytes)
+    $n = [BitConverter]::ToUInt32($bytes, 0) -bor ([uint32]::MaxValue -shr $PrefixLength)
+    $b = [BitConverter]::GetBytes([uint32]$n); [array]::Reverse($b)
+    [System.Net.IPAddress]::new($b).ToString()
+}
+
+# Build the route table Windows would show. Linux's main table has only the subnet and any
+# default/static routes; Windows also lists, per interface, the limited broadcast, multicast, the
+# subnet broadcast and the host's own /32 (IPv4), and ff00::/8 and each address's /128 (IPv6).
+function Get-WinRouteTable {
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $ifs = @(Get-IfTable | Where-Object { $_.Dev -eq 'lo' -or $_.Dev -notmatch $script:HiddenDevs })
+    $addrs = @(Invoke-IpJson addr show)
+    $mk = {
+        param($If, [string]$Dst, [string]$Hop, [int]$Metric = 256, [string]$Proto = 'Local')
+        $isLo = $If.Dev -eq 'lo'
+        [pscustomobject]@{
+            PSTypeName        = 'NetCompat.NetRoute'
+            ifIndex           = $If.Index
+            InterfaceAlias    = $If.Alias
+            DestinationPrefix = $Dst
+            NextHop           = $Hop
+            RouteMetric       = $Metric
+            ifMetric          = $(if ($isLo) { 75 } else { 25 })
+            PolicyStore       = 'ActiveStore'
+            AddressFamily     = $(if ($Dst -like '*:*') { 'IPv6' } else { 'IPv4' })
+            Protocol          = $Proto
+            ifName            = $If.Dev
+        }
+    }
+    foreach ($if in $ifs) {
+        $info = $addrs | Where-Object ifname -eq $if.Dev | Select-Object -First 1
+        $ai = if ($info) { @($info.addr_info) } else { @() }
+        & $mk $if '255.255.255.255/32' '0.0.0.0' | ForEach-Object { $rows.Add($_) }
+        & $mk $if '224.0.0.0/4' '0.0.0.0' | ForEach-Object { $rows.Add($_) }
+        foreach ($a in $ai | Where-Object family -eq 'inet') {
+            if ($a.prefixlen -lt 31) { $rows.Add((& $mk $if "$(ConvertTo-Broadcast $a.local $a.prefixlen)/32" '0.0.0.0')) }
+            $rows.Add((& $mk $if "$($a.local)/32" '0.0.0.0'))
+            $rows.Add((& $mk $if (ConvertTo-Network $a.local $a.prefixlen) '0.0.0.0'))
+        }
+        $rows.Add((& $mk $if 'ff00::/8' '::'))
+        foreach ($a in $ai | Where-Object family -eq 'inet6') {
+            $rows.Add((& $mk $if "$($a.local)/128" '::'))
+            if ($a.local -like 'fe80:*') { $rows.Add((& $mk $if 'fe80::/64' '::')) }
+            elseif ($a.prefixlen -lt 128) { $rows.Add((& $mk $if (ConvertTo-Network $a.local $a.prefixlen) '::')) }
+        }
+    }
+    $byDev = @{}; foreach ($if in $ifs) { $byDev[$if.Dev] = $if }
+    foreach ($fam in '-4', '-6') {
+        foreach ($r in Invoke-IpJson $fam route show) {
+            if (-not $r.PSObject.Properties['gateway'] -and $r.dst -ne 'default' -and
+                -not ($r.PSObject.Properties['protocol'] -and $r.protocol -eq 'static')) { continue }  # connected: done above
+            if (-not $byDev.ContainsKey($r.dev)) { continue }
+            $dst = if ($r.dst -eq 'default') { if ($fam -eq '-4') { '0.0.0.0/0' } else { '::/0' } }
+                   elseif ($r.dst -notlike '*/*') { if ($fam -eq '-4') { "$($r.dst)/32" } else { "$($r.dst)/128" } }
+                   else { $r.dst }
+            $hop = if ($r.PSObject.Properties['gateway']) { $r.gateway } elseif ($fam -eq '-4') { '0.0.0.0' } else { '::' }
+            $met = if ($r.PSObject.Properties['metric'] -and $r.metric -gt 0) { [int]$r.metric } else { 256 }
+            $rows.Add((& $mk $byDev[$r.dev] $dst $hop $met 'NetMgmt'))
+        }
+    }
+    # Windows order: IPv4 then IPv6; destination descending; then interface metric, then index.
+    $rows | Sort-Object @{ Expression = { $_.AddressFamily -eq 'IPv6' } },
+                        @{ Expression = { ConvertTo-AddrKey $_.DestinationPrefix }; Descending = $true },
+                        @{ Expression = { [int]($_.DestinationPrefix -split '/')[1] }; Descending = $true },
+                        ifMetric, ifIndex
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Gets the IP route table.
+.EXAMPLE
+Get-NetRoute -AddressFamily IPv4
+.EXAMPLE
+Get-NetRoute -InterfaceIndex 12
+#>
+function Get-NetRoute {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0)][string[]]$DestinationPrefix,
+        [Alias('ifAlias')][string[]]$InterfaceAlias,
+        [Alias('ifIndex')][uint32[]]$InterfaceIndex,
+        [string[]]$NextHop,
+        [ValidateSet('IPv4', 'IPv6')][string[]]$AddressFamily
+    )
+    $rows = @(Get-WinRouteTable | Where-Object {
+        $r = $_
+        (-not $InterfaceAlias -or @($InterfaceAlias | Where-Object { $r.InterfaceAlias -like $_ -or $r.ifName -like $_ }).Count) -and
+        (-not $InterfaceIndex -or $InterfaceIndex -contains $r.ifIndex) -and
+        (-not $AddressFamily -or $AddressFamily -contains $r.AddressFamily) -and
+        (-not $DestinationPrefix -or @($DestinationPrefix | Where-Object { $r.DestinationPrefix -like $_ }).Count) -and
+        (-not $NextHop -or $NextHop -contains $r.NextHop)
+    })
+    if ($rows.Count -eq 0 -and ($DestinationPrefix -or $InterfaceAlias -or $InterfaceIndex -or $NextHop)) {
+        Write-Error 'No matching MSFT_NetRoute objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetRoute class on the  CIM server: SELECT * FROM MSFT_NetRoute. Verify query parameters and retry.'
+        return
+    }
+    $rows
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Adds a route to the route table.
+.DESCRIPTION
+The route is applied at once and kept across restarts (written to /etc/network/interfaces).
+-NextHop 0.0.0.0 means the destination is directly connected on that interface.
+.EXAMPLE
+New-NetRoute -DestinationPrefix 0.0.0.0/0 -InterfaceAlias "Ethernet" -NextHop 78.1.1.1
+.EXAMPLE
+New-NetRoute -DestinationPrefix 78.1.2.0/24 -InterfaceAlias "Ethernet" -NextHop 78.1.1.1
+#>
+function New-NetRoute {
+    [CmdletBinding(DefaultParameterSetName = 'ByAlias')]
+    param(
+        [Parameter(Mandatory, Position = 0)][string]$DestinationPrefix,
+        [Parameter(ParameterSetName = 'ByAlias', Mandatory)][Alias('ifAlias')][string]$InterfaceAlias,
+        [Parameter(ParameterSetName = 'ByIndex', Mandatory)][Alias('ifIndex')][uint32]$InterfaceIndex,
+        [string]$NextHop,
+        [ValidateRange(0, 9999)][int]$RouteMetric = 256,
+        [ValidateSet('ActiveStore', 'PersistentStore')][string]$PolicyStore
+    )
+    $parts = $DestinationPrefix -split '/'
+    $ip = $null
+    if ($parts.Count -ne 2 -or -not [System.Net.IPAddress]::TryParse($parts[0], [ref]$ip) -or $parts[1] -notmatch '^\d+$') {
+        Stop-NetCompat $PSCmdlet "The DestinationPrefix `"$DestinationPrefix`" is not valid. Use an address and prefix length, for example 78.1.2.0/24."
+    }
+    $isV6 = $ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6
+    $len = [int]$parts[1]
+    $norm = ConvertTo-Network $parts[0] $len
+    if ($norm -ne "$($ip)/$len") {
+        Stop-NetCompat $PSCmdlet "The DestinationPrefix `"$DestinationPrefix`" has host bits set. Did you mean $($norm)?"
+    }
+    try { $if = Resolve-OneIf -InterfaceAlias $InterfaceAlias -InterfaceIndex $InterfaceIndex }
+    catch { Stop-NetCompat $PSCmdlet $_.Exception.Message 'ObjectNotFound' }
+    $onLink = -not $NextHop -or $NextHop -in '0.0.0.0', '::'
+    $hopShown = if ($onLink) { if ($isV6) { '::' } else { '0.0.0.0' } } else { $NextHop }
+    if (@(Get-WinRouteTable | Where-Object { $_.DestinationPrefix -eq $norm -and $_.NextHop -eq $hopShown -and $_.ifName -eq $if.Dev }).Count) {
+        Stop-NetCompat $PSCmdlet 'Instance MSFT_NetRoute already exists'
+    }
+    $dst = if ($len -eq 0) { 'default' } else { $norm }
+    $via = if ($onLink) { @() } else { @('via', $NextHop) }
+    $fam = if ($isV6) { '-6' } else { '-4' }
+    $out = & ip $fam route add $dst @via dev $if.Dev proto static metric $RouteMetric 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ("$out" -match 'Nexthop has invalid gateway|Network is unreachable') {
+            Stop-NetCompat $PSCmdlet "The next hop $NextHop is not on a network connected to $($if.Alias)."
+        }
+        Stop-NetCompat $PSCmdlet "Could not add the route: $out"
+    }
+    Save-NetConfig
+    foreach ($store in 'ActiveStore', 'PersistentStore') {
+        $o = Get-WinRouteTable | Where-Object { $_.DestinationPrefix -eq $norm -and $_.ifName -eq $if.Dev -and $_.NextHop -eq $hopShown } | Select-Object -First 1
+        if ($o) { $o.PolicyStore = $store; $o }
+    }
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Changes a route's metric.
+.EXAMPLE
+Set-NetRoute -DestinationPrefix 78.1.2.0/24 -InterfaceAlias "Ethernet" -RouteMetric 10
+#>
+function Set-NetRoute {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Position = 0, ValueFromPipelineByPropertyName)][string[]]$DestinationPrefix,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifAlias')][string[]]$InterfaceAlias,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifIndex')][uint32[]]$InterfaceIndex,
+        [Parameter(ValueFromPipelineByPropertyName)][string[]]$NextHop,
+        [Parameter(Mandatory)][ValidateRange(0, 9999)][int]$RouteMetric
+    )
+    process {
+        $get = @{}
+        foreach ($k in 'DestinationPrefix', 'InterfaceAlias', 'InterfaceIndex', 'NextHop') {
+            if ($PSBoundParameters.ContainsKey($k)) { $get[$k] = $PSBoundParameters[$k] }
+        }
+        $targets = @(Get-NetRoute @get -ErrorAction SilentlyContinue | Where-Object Protocol -eq 'NetMgmt')
+        if ($targets.Count -eq 0) {
+            Write-Error 'No matching MSFT_NetRoute objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetRoute class on the  CIM server: SELECT * FROM MSFT_NetRoute. Verify query parameters and retry.'
+            return
+        }
+        foreach ($t in $targets) {
+            if (-not $PSCmdlet.ShouldProcess("NetRoute -DestinationPrefix $($t.DestinationPrefix) -InterfaceIndex $($t.ifIndex) -NextHop $($t.NextHop)", 'Set')) { continue }
+            $fam = if ($t.AddressFamily -eq 'IPv6') { '-6' } else { '-4' }
+            $dst = if ($t.DestinationPrefix -in '0.0.0.0/0', '::/0') { 'default' } else { $t.DestinationPrefix }
+            $via = if ($t.NextHop -in '0.0.0.0', '::') { @() } else { @('via', $t.NextHop) }
+            & ip $fam route del $dst @via dev $t.ifName 2>$null
+            & ip $fam route add $dst @via dev $t.ifName proto static metric $RouteMetric 2>&1 | Out-Null
+        }
+        Save-NetConfig
+    }
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Removes a route from the route table.
+.EXAMPLE
+Remove-NetRoute -DestinationPrefix 78.1.2.0/24 -InterfaceAlias "Ethernet"
+#>
+function Remove-NetRoute {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    param(
+        [Parameter(Position = 0, ValueFromPipelineByPropertyName)][string[]]$DestinationPrefix,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifAlias')][string[]]$InterfaceAlias,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifIndex')][uint32[]]$InterfaceIndex,
+        [Parameter(ValueFromPipelineByPropertyName)][string[]]$NextHop
+    )
+    begin {
+        $changed = $false
+        $dropR = [System.Collections.Generic.List[object]]::new()
+        $keepR = [System.Collections.Generic.List[object]]::new()
+    }
+    process {
+        if (-not ($DestinationPrefix -or $InterfaceAlias -or $InterfaceIndex -or $NextHop)) {
+            Stop-NetCompat $PSCmdlet 'On the simulated PC, give -DestinationPrefix (and -InterfaceAlias or -NextHop) so only the intended route is removed.'
+        }
+        $get = @{}
+        foreach ($k in 'DestinationPrefix', 'InterfaceAlias', 'InterfaceIndex', 'NextHop') {
+            if ($PSBoundParameters.ContainsKey($k)) { $get[$k] = $PSBoundParameters[$k] }
+        }
+        $all = @(Get-NetRoute @get -ErrorAction SilentlyContinue)
+        $targets = @($all | Where-Object Protocol -eq 'NetMgmt')
+        if ($targets.Count -eq 0) {
+            if ($all.Count) { Stop-NetCompat $PSCmdlet 'On the simulated PC, only routes added with New-NetRoute or a default gateway can be removed; the others belong to an IP address. Remove the address instead.' }
+            Write-Error 'No matching MSFT_NetRoute objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetRoute class on the  CIM server: SELECT * FROM MSFT_NetRoute. Verify query parameters and retry.'
+            return
+        }
+        foreach ($t in $targets) {
+            $removedActive = $false
+            $rec = [pscustomobject]@{ Dst = $t.DestinationPrefix; Gw = $(if ($t.NextHop -in '0.0.0.0', '::') { '' } else { $t.NextHop }); Dev = $t.ifName; Metric = $t.RouteMetric }
+            foreach ($store in 'Active', 'Persistent') {
+                $desc = "NetRoute -DestinationPrefix $($t.DestinationPrefix) -InterfaceIndex $($t.ifIndex) -NextHop $($t.NextHop) -Store $store"
+                $ok = $PSCmdlet.ShouldProcess("Remove $desc",
+                    "Are you sure you want to perform this action?`nPerforming operation `"Remove`" on Target `"$desc`"", 'Confirm')
+                if ($store -eq 'Active') {
+                    if (-not $ok) { continue }
+                    $fam = if ($t.AddressFamily -eq 'IPv6') { '-6' } else { '-4' }
+                    $dst = if ($t.DestinationPrefix -in '0.0.0.0/0', '::/0') { 'default' } else { $t.DestinationPrefix }
+                    $via = if ($rec.Gw) { @('via', $rec.Gw) } else { @() }
+                    & ip $fam route del $dst @via dev $t.ifName 2>&1 | Out-Null
+                    $removedActive = $true; $changed = $true
+                } elseif ($ok) { $dropR.Add($rec); $changed = $true }
+                elseif ($removedActive) { $keepR.Add($rec) }
+            }
+        }
+    }
+    end { if ($changed) { Save-NetConfig -DropRoute $dropR -KeepRoute $keepR } }
+}
+
+# --- the web server: IIS's service name, backed by nginx ------------------------------------------
+
+$script:WebRoot = '/var/www/html'
+
+function Get-W3svcObject {
+    $running = [bool](& pgrep -x nginx 2>$null)
+    [pscustomobject]@{
+        PSTypeName  = 'NetCompat.Service'
+        Status      = $(if ($running) { 'Running' } else { 'Stopped' })
+        Name        = 'W3SVC'
+        DisplayName = 'World Wide Web Publishing Service'
+    }
+}
+
+function Assert-W3svcName {
+    param($Cmdlet, [string[]]$Name)
+    foreach ($n in $Name) {
+        if ($n -notlike 'W3SVC' -and 'W3SVC' -notlike $n) {
+            Stop-NetCompat $Cmdlet "Cannot find any service with service name '$n'. The simulated PC has one service, W3SVC (the web server)." 'ObjectNotFound'
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Simulated PC: shows the web server service (W3SVC). Web pages go in /var/www/html.
+.EXAMPLE
+Get-Service W3SVC
+#>
+function Get-Service {
+    [CmdletBinding()]
+    param([Parameter(Position = 0)][Alias('ServiceName')][string[]]$Name = @('*'))
+    Assert-W3svcName $PSCmdlet $Name
+    Get-W3svcObject
+}
+
+<#
+.SYNOPSIS
+Simulated PC: starts the web server (W3SVC). It serves the files in /var/www/html on port 80.
+.EXAMPLE
+Start-Service W3SVC
+#>
+function Start-Service {
+    [CmdletBinding()]
+    param([Parameter(Mandatory, Position = 0)][Alias('ServiceName')][string[]]$Name, [switch]$PassThru)
+    Assert-W3svcName $PSCmdlet $Name
+    if (-not (Test-Path $script:WebRoot)) { New-Item -ItemType Directory -Path $script:WebRoot -Force | Out-Null }
+    if (-not (Get-ChildItem $script:WebRoot -Filter 'index.*' -ErrorAction SilentlyContinue)) {
+        $h = [System.Net.Dns]::GetHostName()
+        Set-Content -Path (Join-Path $script:WebRoot 'index.html') -Value "<!DOCTYPE html>`n<html><head><title>$h</title></head><body><h1>Web server on $h</h1><p>Put your pages in $script:WebRoot</p></body></html>"
+    }
+    if ((Get-W3svcObject).Status -ne 'Running') {
+        $out = & nginx 2>&1
+        if ($LASTEXITCODE -ne 0) { Stop-NetCompat $PSCmdlet "Service 'World Wide Web Publishing Service (W3SVC)' cannot be started: $out" 'OpenError' }
+    }
+    if ($PassThru) { Get-W3svcObject }
+}
+
+<#
+.SYNOPSIS
+Simulated PC: stops the web server (W3SVC).
+#>
+function Stop-Service {
+    [CmdletBinding()]
+    param([Parameter(Mandatory, Position = 0)][Alias('ServiceName')][string[]]$Name, [switch]$PassThru, [switch]$Force)
+    Assert-W3svcName $PSCmdlet $Name
+    if ((Get-W3svcObject).Status -eq 'Running') { & nginx -s stop 2>&1 | Out-Null; Start-Sleep -Milliseconds 300 }
+    if ($PassThru) { Get-W3svcObject }
+}
+
+<#
+.SYNOPSIS
+Simulated PC: restarts the web server (W3SVC).
+#>
+function Restart-Service {
+    [CmdletBinding()]
+    param([Parameter(Mandatory, Position = 0)][Alias('ServiceName')][string[]]$Name, [switch]$PassThru, [switch]$Force)
+    Stop-Service -Name $Name
+    Start-Service -Name $Name -PassThru:$PassThru
+}
+
+# --- tracert / Test-NetConnection -TraceRoute ----------------------------------------------------
+
+# Probe hop by hop with ICMP echo and a rising TTL, as Windows tracert does. .NET's Ping reports
+# TtlExpired with the router's address on Linux (measured in Phase 2).
+function Invoke-TraceHops {
+    param([string]$Address, [int]$MaxHops = 30, [int]$TimeoutMs = 4000, [int]$Probes = 3, [scriptblock]$OnHop)
+    $p = [System.Net.NetworkInformation.Ping]::new()
+    $buf = [byte[]]::new(32)
+    try {
+        for ($ttl = 1; $ttl -le $MaxHops; $ttl++) {
+            $times = @(); $from = $null; $done = $false
+            for ($i = 0; $i -lt $Probes; $i++) {
+                $r = $null
+                try { $r = $p.Send($Address, $TimeoutMs, $buf, [System.Net.NetworkInformation.PingOptions]::new($ttl, $true)) } catch { }
+                if ($r -and $r.Status -in 'Success', 'TtlExpired', 'TimeExceeded') {
+                    $times += [long]$r.RoundtripTime
+                    if (-not $from) { $from = $r.Address.ToString() }
+                    if ($r.Status -eq 'Success') { $done = $true }
+                } else { $times += $null }
+            }
+            & $OnHop $ttl $times $from      # whatever OnHop outputs flows to the caller as it happens
+            if ($done) { return }
+        }
+    } finally { $p.Dispose() }
+}
+
+<#
+.SYNOPSIS
+Windows-style tracert on the simulated PC.
+.EXAMPLE
+tracert 78.1.2.10
+#>
+function tracert {
+    $max = 30; $timeout = 4000; $target = $null
+    for ($i = 0; $i -lt $args.Count; $i++) {
+        $a = [string]$args[$i]
+        switch -Regex ($a) {
+            '^[-/]h$' { $max = [int]$args[++$i]; continue }
+            '^[-/]w$' { $timeout = [int]$args[++$i]; continue }
+            '^[-/][d46]$' { continue }
+            '^[-/]' { "Bad option $a."; return }
+            default { $target = $a }
+        }
+    }
+    if (-not $target) { 'Usage: tracert [-d] [-h maximum_hops] [-w timeout] target_name'; return }
+    $addr = Resolve-Target $target
+    if (-not $addr) { "Unable to resolve target system name $target."; return }
+    $label = if ($addr -eq $target) { $addr } else { "$target [$addr]" }
+    ''
+    "Tracing route to $label"
+    "over a maximum of $max hops:"
+    ''
+    $fmt = { param($t) if ($null -eq $t) { '    *   ' } elseif ($t -lt 1) { '   <1 ms' } else { '{0,5} ms' -f $t } }
+    Invoke-TraceHops $addr $max $timeout 3 {
+        param($ttl, $times, $from)
+        $cols = ($times | ForEach-Object { & $fmt $_ }) -join ' '
+        $tail = if ($from) { $from } else { 'Request timed out.' }
+        '{0,3} {1}  {2}' -f $ttl, $cols, $tail
+    }
+    ''
+    'Trace complete.'
 }
 
 #endregion

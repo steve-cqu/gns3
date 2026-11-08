@@ -82,6 +82,43 @@ Check 'Get-NetNeighbor has the peer' { @($nb | Where-Object { $_.IPAddress -eq $
 Check 'Get-NetNeighbor has subnet broadcast, Permanent' { @($nb | Where-Object { $_.LinkLayerAddress -eq 'FF-FF-FF-FF-FF-FF' -and $_.State -eq 'Permanent' }).Count -ge 1 }
 Check 'Get-NetNeighbor -State Permanent filters' { @(Get-NetNeighbor -State Permanent | Where-Object State -ne 'Permanent').Count -eq 0 }
 
+# --- routes (Phase 2) ----------------------------------------------------------------------------
+$idx = (Get-NetAdapter -Name Ethernet).ifIndex
+$rt = @(Get-NetRoute -InterfaceIndex $idx -AddressFamily IPv4)
+$net = (Get-NetIPConfiguration -InterfaceAlias Ethernet).IPv4Address[0]
+$expect = @('255.255.255.255/32', '224.0.0.0/4', "$Self/32")
+Check 'Get-NetRoute has the Windows rows (broadcasts, multicast, host /32, subnet)' {
+    $d = $rt.DestinationPrefix
+    @($expect | Where-Object { $d -notcontains $_ }).Count -eq 0 -and @($d | Where-Object { $_ -like "*/$PrefixLength" }).Count -ge 1 -and
+    @($rt | Where-Object { $_.RouteMetric -ne 256 -or $_.ifMetric -ne 25 -or $_.NextHop -ne '0.0.0.0' -and $_.DestinationPrefix -ne '0.0.0.0/0' }).Count -eq 0 }
+Check 'Get-NetRoute order: 255.255.255.255 first' { $rt[0].DestinationPrefix -eq '255.255.255.255/32' }
+Check 'Get-NetRoute loopback rows ifMetric 75' { @(Get-NetRoute -InterfaceIndex 1 | Where-Object ifMetric -ne 75).Count -eq 0 }
+Check 'Get-NetRoute table header' { (Text { Get-NetRoute }) -match 'ifIndex DestinationPrefix\s+NextHop\s+RouteMetric ifMetric PolicyStore' }
+$nr = @(New-NetRoute -DestinationPrefix 10.99.0.0/16 -InterfaceAlias Ethernet -NextHop $Peer)
+Check 'New-NetRoute returns ActiveStore + PersistentStore' { $nr.Count -eq 2 -and $nr[1].PolicyStore -eq 'PersistentStore' }
+Check 'New-NetRoute duplicate: Windows message' { (Text { New-NetRoute -DestinationPrefix 10.99.0.0/16 -InterfaceAlias Ethernet -NextHop $Peer }) -match 'Instance MSFT_NetRoute already exists' }
+Check 'New-NetRoute host bits: helpful message' { (Text { New-NetRoute -DestinationPrefix 10.99.1.0/8 -InterfaceAlias Ethernet -NextHop $Peer }) -match 'Did you mean 10\.0\.0\.0/8' }
+Check 'New-NetRoute persisted' { (Get-Content /etc/network/interfaces -Raw) -match 'up ip route add 10\.99\.0\.0/16 via' }
+Set-NetRoute -DestinationPrefix 10.99.0.0/16 -RouteMetric 10
+Check 'Set-NetRoute changes the metric' { (Get-NetRoute -DestinationPrefix 10.99.0.0/16).RouteMetric -eq 10 }
+Get-NetRoute -DestinationPrefix 10.99.0.0/16 | Remove-NetRoute -Confirm:$false
+Check 'Remove-NetRoute (pipeline) removes and unpersists' {
+    -not (Get-NetRoute -DestinationPrefix 10.99.0.0/16 -ErrorAction SilentlyContinue) -and (Get-Content /etc/network/interfaces -Raw) -notmatch '10\.99\.0\.0' }
+Check 'Remove-NetRoute on a connected route explains' { (Text { Remove-NetRoute -DestinationPrefix "$Self/32" -Confirm:$false }) -match 'Remove the address instead' }
+
+# --- web server and tracert (Phase 2) -------------------------------------------------------------
+Stop-Service W3SVC
+Check 'Get-Service W3SVC Stopped' { (Get-Service W3SVC).Status -eq 'Stopped' }
+Start-Service W3SVC
+Check 'Start-Service W3SVC: Running, port 80 answers' { (Get-Service W3SVC).Status -eq 'Running' -and (Test-NetConnection $Self -Port 80).TcpTestSucceeded }
+Check 'default page names the PC' { (Invoke-WebRequest "http://$Self/" -UseBasicParsing).Content -match [System.Net.Dns]::GetHostName() }
+Stop-Service W3SVC
+Check 'Stop-Service W3SVC' { (Get-Service W3SVC).Status -eq 'Stopped' }
+Check 'unknown service: clear message' { (Text { Start-Service Spooler }) -match "Cannot find any service with service name 'Spooler'" }
+$tr = Text { tracert $Peer }
+Check 'tracert to peer: one hop, Trace complete' { $tr -match "Tracing route to $([regex]::Escape($Peer))" -and $tr -match "\s1\s+(<1 ms|\d+ ms).*$([regex]::Escape($Peer))" -and $tr -match 'Trace complete\.' }
+Check 'Test-NetConnection -TraceRoute' { @((Test-NetConnection $Peer -TraceRoute).TraceRoute)[-1] -eq $Peer }
+
 # --- removal -----------------------------------------------------------------------------------
 Get-NetIPAddress -IPAddress $Self | Remove-NetIPAddress -Confirm:$false   # the pipeline idiom
 Check 'Remove-NetIPAddress removes live address' { -not (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias Ethernet -ErrorAction SilentlyContinue) }

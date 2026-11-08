@@ -88,6 +88,11 @@
                 <PropertyName>TcpTestSucceeded</PropertyName>
                 <ItemSelectionCondition><ScriptBlock>$_.RemotePort -ne 0</ScriptBlock></ItemSelectionCondition>
               </ListItem>
+              <ListItem>
+                <Label>TraceRoute</Label>
+                <ScriptBlock>@($_.TraceRoute) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.TraceRoute</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
             </ListItems>
           </ListEntry>
         </ListEntries>
@@ -166,6 +171,52 @@
           </ListEntry>
         </ListEntries>
       </ListControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetRoute.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetRoute</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>DestinationPrefix</Label><Width>37</Width></TableColumnHeader>
+          <TableColumnHeader><Label>NextHop</Label><Width>37</Width></TableColumnHeader>
+          <TableColumnHeader><Label>RouteMetric</Label><Width>11</Width><Alignment>Right</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>ifMetric</Label><Width>8</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>PolicyStore</Label><Width>15</Width></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>DestinationPrefix</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>NextHop</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>RouteMetric</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ifMetric</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>PolicyStore</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.Service.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.Service</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>Status</Label><Width>8</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Name</Label><Width>18</Width></TableColumnHeader>
+          <TableColumnHeader><Label>DisplayName</Label></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Name</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>DisplayName</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
     </View>
   </ViewDefinitions>
 </Configuration>
