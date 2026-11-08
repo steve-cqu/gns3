@@ -110,13 +110,20 @@ function Format-LinkSpeed {
 }
 
 # Rewrite the NetCompat block of /etc/network/interfaces from the live IPv4 state of eth*.
+# -Drop: addresses to leave out although still live (removed from the persistent store only).
+# -Keep: @{ Dev; Local; PrefixLength } entries to write although no longer live (removed from the
+# active store only). Windows keeps the two stores separately; these let one answer differ.
 function Save-NetConfig {
+    param([string[]]$Drop = @(), [object[]]$Keep = @())
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add($script:BlockBegin)
     $defaults = @(Invoke-IpJson -4 route show default)
-    foreach ($i in Invoke-IpJson -4 addr show) {
+    foreach ($i in Invoke-IpJson addr show) {
         if ($i.ifname -notmatch '^eth\d+$') { continue }
-        $addrs = @($i.addr_info | Where-Object { $_.scope -eq 'global' -and -not ($_.PSObject.Properties['dynamic'] -and $_.dynamic) })
+        $addrs = @($i.addr_info | Where-Object { $_.family -eq 'inet' -and $_.scope -eq 'global' -and -not ($_.PSObject.Properties['dynamic'] -and $_.dynamic) -and $Drop -notcontains $_.local })
+        foreach ($k in $Keep | Where-Object { $_.Dev -eq $i.ifname }) {
+            $addrs += [pscustomobject]@{ local = $k.Local; prefixlen = $k.PrefixLength }
+        }
         if ($addrs.Count -eq 0) { continue }
         $first = $addrs[0]
         $lines.Add("auto $($i.ifname)")
@@ -374,15 +381,32 @@ function Remove-NetIPAddress {
         Write-Error 'No matching MSFT_NetIPAddress objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetIPAddress class on the  CIM server: SELECT * FROM MSFT_NetIPAddress. Verify query parameters and retry.'
         return
     }
+    # Windows confirms once per store, Active then Persistent, with this wording:
+    #   Performing operation "Remove" on Target "NetIPAddress -IPv4Address 49.1.1.20 -InterfaceIndex 12 -Store Active"
     $changed = $false
+    $drop = [System.Collections.Generic.List[string]]::new()
+    $keep = [System.Collections.Generic.List[object]]::new()
     foreach ($t in $targets) {
-        $target = "IPAddress: $($t.IPAddress) DefaultGateway: $DefaultGateway InterfaceAlias: $($t.InterfaceAlias)"
-        if ($PSCmdlet.ShouldProcess($target, 'Delete')) {
-            $out = & ip addr del "$(($t.IPAddress -split '%')[0])/$($t.PrefixLength)" dev $t.ifName 2>&1
-            if ($LASTEXITCODE -ne 0) { Write-Error "Could not remove $($t.IPAddress): $out"; continue }
-            if ($DefaultGateway) { & ip route del default via $DefaultGateway dev $t.ifName 2>$null }
-            $changed = $true
+        $bare = ($t.IPAddress -split '%')[0]
+        $famWord = if ($t.AddressFamily -eq 'IPv6') { 'IPv6Address' } else { 'IPv4Address' }
+        $removedActive = $false
+        foreach ($store in 'Active', 'Persistent') {
+            $desc = "NetIPAddress -$famWord $bare -InterfaceIndex $($t.InterfaceIndex) -Store $store"
+            $ok = $PSCmdlet.ShouldProcess("Remove $desc",
+                "Are you sure you want to perform this action?`nPerforming operation `"Remove`" on Target `"$desc`"",
+                'Confirm')
+            if ($store -eq 'Active') {
+                if (-not $ok) { continue }
+                $out = & ip addr del "$bare/$($t.PrefixLength)" dev $t.ifName 2>&1
+                if ($LASTEXITCODE -ne 0) { Write-Error "Could not remove $($t.IPAddress): $out"; continue }
+                if ($DefaultGateway) { & ip route del default via $DefaultGateway dev $t.ifName 2>$null }
+                $removedActive = $true; $changed = $true
+            } elseif ($ok) {
+                $drop.Add($bare); $changed = $true
+            } elseif ($removedActive -and $t.AddressFamily -eq 'IPv4') {
+                $keep.Add([pscustomobject]@{ Dev = $t.ifName; Local = $bare; PrefixLength = $t.PrefixLength })
+            }
         }
     }
-    if ($changed) { Save-NetConfig }
+    if ($changed) { Save-NetConfig -Drop $drop -Keep $keep }
 }
