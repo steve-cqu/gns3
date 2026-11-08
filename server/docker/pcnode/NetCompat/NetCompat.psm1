@@ -130,10 +130,11 @@ function Save-NetConfig {
         $lines.Add("iface $($i.ifname) inet static")
         $lines.Add("    address $($first.local)")
         $lines.Add("    netmask $(ConvertTo-Netmask $first.prefixlen)")
+        $lines.Add("    broadcast +")
         $gw = @($defaults | Where-Object { $_.dev -eq $i.ifname -and $_.PSObject.Properties['gateway'] })
         if ($gw.Count -gt 0) { $lines.Add("    gateway $($gw[0].gateway)") }
         foreach ($a in $addrs | Select-Object -Skip 1) {
-            $lines.Add("    up ip addr add $($a.local)/$($a.prefixlen) dev $($i.ifname)")
+            $lines.Add("    up ip addr add $($a.local)/$($a.prefixlen) brd + dev $($i.ifname)")
         }
     }
     $lines.Add($script:BlockEnd)
@@ -331,7 +332,9 @@ function New-NetIPAddress {
         if (@(Invoke-IpJson $fam route show default).Count -gt 0) { Stop-NetCompat $PSCmdlet 'Instance MSFT_NetRoute already exists' }
     }
 
-    $out = & ip addr add "$($ip)/$PrefixLength" dev $if.Dev 2>&1
+    # brd + sets the subnet broadcast address, as Windows has one.
+    $brd = if ($isV6) { @() } else { @('brd', '+') }
+    $out = & ip addr add "$($ip)/$PrefixLength" @brd dev $if.Dev 2>&1
     if ($LASTEXITCODE -ne 0) { Stop-NetCompat $PSCmdlet "Could not add $($ip)/$PrefixLength to $($if.Alias): $out" }
     if ($DefaultGateway) {
         $out = & ip route add default via $DefaultGateway dev $if.Dev 2>&1
@@ -363,50 +366,414 @@ Remove-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 78.1.2.3 -DefaultGatew
 function Remove-NetIPAddress {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
+        [Parameter(Position = 0, ValueFromPipelineByPropertyName)][string[]]$IPAddress,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifAlias')][string[]]$InterfaceAlias,
+        [Parameter(ValueFromPipelineByPropertyName)][Alias('ifIndex')][uint32[]]$InterfaceIndex,
+        [Parameter(ValueFromPipelineByPropertyName)][ValidateSet('IPv4', 'IPv6')][string[]]$AddressFamily,
+        [string]$DefaultGateway
+    )
+    begin {
+        # Windows confirms once per store, Active then Persistent, with this wording:
+        #   Performing operation "Remove" on Target "NetIPAddress -IPv4Address 49.1.1.20 -InterfaceIndex 12 -Store Active"
+        $changed = $false
+        $drop = [System.Collections.Generic.List[string]]::new()
+        $keep = [System.Collections.Generic.List[object]]::new()
+    }
+    process {
+        if (-not ($IPAddress -or $InterfaceAlias -or $InterfaceIndex)) {
+            Stop-NetCompat $PSCmdlet 'On the simulated PC, give -IPAddress and/or -InterfaceAlias so only the intended address is removed.'
+        }
+        $get = @{}
+        foreach ($k in 'IPAddress', 'InterfaceAlias', 'InterfaceIndex', 'AddressFamily') {
+            if ($PSBoundParameters.ContainsKey($k)) { $get[$k] = $PSBoundParameters[$k] }
+        }
+        if ($get.ContainsKey('IPAddress')) { $get.IPAddress = @($get.IPAddress | ForEach-Object { ($_ -split '%')[0] }) }
+        $targets = @(Get-NetIPAddress @get -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne 'WellKnown' })
+        if ($targets.Count -eq 0) {
+            Write-Error 'No matching MSFT_NetIPAddress objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetIPAddress class on the  CIM server: SELECT * FROM MSFT_NetIPAddress. Verify query parameters and retry.'
+            return
+        }
+        foreach ($t in $targets) {
+            $bare = ($t.IPAddress -split '%')[0]
+            $famWord = if ($t.AddressFamily -eq 'IPv6') { 'IPv6Address' } else { 'IPv4Address' }
+            $removedActive = $false
+            foreach ($store in 'Active', 'Persistent') {
+                $desc = "NetIPAddress -$famWord $bare -InterfaceIndex $($t.InterfaceIndex) -Store $store"
+                $ok = $PSCmdlet.ShouldProcess("Remove $desc",
+                    "Are you sure you want to perform this action?`nPerforming operation `"Remove`" on Target `"$desc`"",
+                    'Confirm')
+                if ($store -eq 'Active') {
+                    if (-not $ok) { continue }
+                    $out = & ip addr del "$bare/$($t.PrefixLength)" dev $t.ifName 2>&1
+                    if ($LASTEXITCODE -ne 0) { Write-Error "Could not remove $($t.IPAddress): $out"; continue }
+                    if ($DefaultGateway) { & ip route del default via $DefaultGateway dev $t.ifName 2>$null }
+                    $removedActive = $true; $changed = $true
+                } elseif ($ok) {
+                    $drop.Add($bare); $changed = $true
+                } elseif ($removedActive -and $t.AddressFamily -eq 'IPv4') {
+                    $keep.Add([pscustomobject]@{ Dev = $t.ifName; Local = $bare; PrefixLength = $t.PrefixLength })
+                }
+            }
+        }
+    }
+    end {
+        if ($changed) { Save-NetConfig -Drop $drop -Keep $keep }
+    }
+}
+
+#region phase 1: testing and neighbours ------------------------------------------------------
+
+# One ICMP echo through Linux `ping`, which reports the TTL reliably. Returns Status
+# (Success | TimedOut | DestinationHostUnreachable | DestinationNetworkUnreachable), the RTT in
+# milliseconds, the TTL, and the address that answered.
+function Invoke-EchoOnce {
+    param([string]$Address, [int]$TimeoutMs = 4000, [int]$Size = 32, [int]$Ttl = 0)
+    $w = [math]::Max(1, [math]::Ceiling($TimeoutMs / 1000))
+    $pingArgs = @('-n', '-c', '1', '-W', "$w", '-s', "$Size")
+    if ($Ttl -gt 0) { $pingArgs += @('-t', "$Ttl") }
+    $text = (& /bin/ping @pingArgs $Address 2>&1) -join "`n"
+    if ($text -match 'from (\S+?):? icmp_seq=\d+ ttl=(\d+) time=([\d.]+) ms') {
+        return [pscustomobject]@{ Status = 'Success'; From = $Matches[1]; Ttl = [int]$Matches[2]; RttMs = [double]$Matches[3] }
+    }
+    if ($text -match 'From (\S+) icmp_seq=\d+ Destination Host Unreachable') {
+        return [pscustomobject]@{ Status = 'DestinationHostUnreachable'; From = $Matches[1]; Ttl = 0; RttMs = 0 }
+    }
+    if ($text -match 'Network is unreachable|Destination Net Unreachable') {
+        return [pscustomobject]@{ Status = 'DestinationNetworkUnreachable'; From = ''; Ttl = 0; RttMs = 0 }
+    }
+    [pscustomobject]@{ Status = 'TimedOut'; From = ''; Ttl = 0; RttMs = 0 }
+}
+
+# Resolve a name or address to one IP address string, or $null.
+function Resolve-Target {
+    param([string]$Name)
+    $ip = $null
+    if ([System.Net.IPAddress]::TryParse($Name, [ref]$ip)) { return $ip.ToString() }
+    try {
+        $a = [System.Net.Dns]::GetHostAddresses($Name) |
+            Sort-Object { if ($_.AddressFamily -eq 'InterNetwork') { 0 } else { 1 } } | Select-Object -First 1
+        if ($a) { return $a.ToString() }
+    } catch { }
+    $null
+}
+
+# The interface and source address the kernel would use to reach an address.
+function Get-RouteTo {
+    param([string]$Address)
+    $r = @(Invoke-IpJson route get $Address) | Select-Object -First 1
+    if (-not $r) { return $null }
+    $dev = $r.dev
+    [pscustomobject]@{
+        Dev    = $dev
+        Alias  = ConvertTo-WinAlias $dev
+        Source = $(if ($r.PSObject.Properties['prefsrc']) { $r.prefsrc } else { '' })
+    }
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Displays diagnostic information for a connection.
+.DESCRIPTION
+With just a computer name or address, sends one ping and reports whether it succeeded and the
+round-trip time. With -Port, also tries a TCP connection to that port (for example a web server
+on port 80).
+.EXAMPLE
+Test-NetConnection 78.1.2.4
+.EXAMPLE
+Test-NetConnection 78.1.2.4 -Port 80
+#>
+function Test-NetConnection {
+    [CmdletBinding(DefaultParameterSetName = 'ICMP')]
+    param(
+        [Parameter(Position = 0)][Alias('RemoteAddress', 'cn')][string]$ComputerName,
+        [Parameter(ParameterSetName = 'RemotePort', Mandatory)][Alias('RemotePort')][ValidateRange(1, 65535)][int]$Port,
+        [Parameter(ParameterSetName = 'CommonTCPPort', Mandatory, Position = 1)][ValidateSet('HTTP', 'RDP', 'SMB', 'WINRM')][string]$CommonTCPPort,
+        [ValidateSet('Quiet', 'Detailed')][string]$InformationLevel,
+        [switch]$TraceRoute
+    )
+    if ($TraceRoute) {
+        Stop-NetCompat $PSCmdlet 'On the simulated PC, -TraceRoute is not available yet. Use tracert <address>.' 'NotImplemented'
+    }
+    if (-not $ComputerName) {
+        Stop-NetCompat $PSCmdlet 'On the simulated PC, give a computer name or address, for example: Test-NetConnection 78.1.2.4'
+    }
+    if ($CommonTCPPort) { $Port = @{ HTTP = 80; RDP = 3389; SMB = 445; WINRM = 5985 }[$CommonTCPPort] }
+
+    $addr = Resolve-Target $ComputerName
+    if (-not $addr) {
+        Write-Warning "Name resolution of $ComputerName failed"
+        if ($InformationLevel -eq 'Quiet') { return $false }
+        return
+    }
+    $route = Get-RouteTo $addr
+    $result = [ordered]@{
+        PSTypeName       = 'NetCompat.TestNetConnectionResult'
+        ComputerName     = $ComputerName
+        RemoteAddress    = $addr
+        RemotePort       = $(if ($Port) { $Port } else { 0 })
+        InterfaceAlias   = $(if ($route) { $route.Alias } else { '' })
+        SourceAddress    = $(if ($route) { $route.Source } else { '' })
+        PingSucceeded    = $false
+        PingReplyDetails = $null
+        TcpTestSucceeded = $false
+    }
+
+    $tcpOk = $null
+    if ($Port) {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $task = $client.ConnectAsync($addr, $Port)
+            $tcpOk = $task.Wait(5000) -and $client.Connected
+        } catch { $tcpOk = $false } finally { $client.Dispose() }
+        $result.TcpTestSucceeded = [bool]$tcpOk
+    }
+    # Windows pings when no port is given, and also when the TCP test fails.
+    if (-not $Port -or -not $tcpOk) {
+        $echo = Invoke-EchoOnce $addr 2000
+        $result.PingSucceeded = $echo.Status -eq 'Success'
+        $result.PingReplyDetails = [pscustomobject]@{
+            PSTypeName    = 'NetCompat.PingReply'
+            Address       = $addr
+            Status        = $echo.Status
+            RoundtripTime = [long][math]::Floor($echo.RttMs)
+        }
+        if ($Port) { Write-Warning "TCP connect to ($addr : $Port) failed" }
+        if (-not $result.PingSucceeded) { Write-Warning "Ping to $addr failed with status: $($echo.Status)" }
+    }
+    if ($InformationLevel -eq 'Quiet') {
+        if ($Port) { return [bool]$tcpOk }
+        return $result.PingSucceeded
+    }
+    [pscustomobject]$result
+}
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Gets neighbour cache entries (the ARP table for IPv4).
+.EXAMPLE
+Get-NetNeighbor -AddressFamily IPv4
+.EXAMPLE
+Get-NetNeighbor -State Reachable
+#>
+function Get-NetNeighbor {
+    [CmdletBinding()]
+    param(
         [Parameter(Position = 0)][string[]]$IPAddress,
         [Alias('ifAlias')][string[]]$InterfaceAlias,
         [Alias('ifIndex')][uint32[]]$InterfaceIndex,
         [ValidateSet('IPv4', 'IPv6')][string[]]$AddressFamily,
-        [string]$DefaultGateway
+        [ValidateSet('Unreachable', 'Incomplete', 'Probe', 'Delay', 'Stale', 'Reachable', 'Permanent')][string[]]$State
     )
-    if (-not ($IPAddress -or $InterfaceAlias -or $InterfaceIndex)) {
-        Stop-NetCompat $PSCmdlet 'On the simulated PC, give -IPAddress and/or -InterfaceAlias so only the intended address is removed.'
+    $table = @(Get-IfTable | Where-Object { $_.Dev -notmatch $script:HiddenDevs })
+    $table = @(Select-If $table $InterfaceAlias)
+    if ($InterfaceIndex) { $table = @($table | Where-Object { $InterfaceIndex -contains $_.Index }) }
+    $byDev = @{}; foreach ($t in $table) { $byDev[$t.Dev] = $t }
+    $stateMap = @{ REACHABLE = 'Reachable'; STALE = 'Stale'; DELAY = 'Delay'; PROBE = 'Probe'; FAILED = 'Unreachable';
+                   INCOMPLETE = 'Incomplete'; PERMANENT = 'Permanent'; NOARP = 'Permanent' }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $add = {
+        param($If, [string]$Ip, [string]$Mac, [string]$St)
+        $rows.Add([pscustomobject]@{
+            PSTypeName       = 'NetCompat.NetNeighbor'
+            ifIndex          = $If.Index
+            InterfaceAlias   = $If.Alias
+            IPAddress        = $Ip
+            LinkLayerAddress = $(if ($Mac) { $Mac.ToUpper().Replace(':', '-') } else { '' })
+            State            = $St
+            AddressFamily    = $(if ($Ip -like '*:*') { 'IPv6' } else { 'IPv4' })
+            PolicyStore      = 'ActiveStore'
+        })
     }
-    $get = @{}
-    foreach ($k in 'IPAddress', 'InterfaceAlias', 'InterfaceIndex', 'AddressFamily') {
-        if ($PSBoundParameters.ContainsKey($k)) { $get[$k] = $PSBoundParameters[$k] }
+    foreach ($n in Invoke-IpJson neigh show) {
+        if (-not $byDev.ContainsKey($n.dev)) { continue }
+        $st = 'Stale'
+        foreach ($s in @($n.state)) { if ($stateMap.ContainsKey($s)) { $st = $stateMap[$s]; break } }
+        $mac = if ($n.PSObject.Properties['lladdr']) { $n.lladdr } else { '' }
+        & $add $byDev[$n.dev] $n.dst $mac $st
     }
-    $targets = @(Get-NetIPAddress @get -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne 'WellKnown' })
-    if ($targets.Count -eq 0) {
-        Write-Error 'No matching MSFT_NetIPAddress objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetIPAddress class on the  CIM server: SELECT * FROM MSFT_NetIPAddress. Verify query parameters and retry.'
-        return
-    }
-    # Windows confirms once per store, Active then Persistent, with this wording:
-    #   Performing operation "Remove" on Target "NetIPAddress -IPv4Address 49.1.1.20 -InterfaceIndex 12 -Store Active"
-    $changed = $false
-    $drop = [System.Collections.Generic.List[string]]::new()
-    $keep = [System.Collections.Generic.List[object]]::new()
-    foreach ($t in $targets) {
-        $bare = ($t.IPAddress -split '%')[0]
-        $famWord = if ($t.AddressFamily -eq 'IPv6') { 'IPv6Address' } else { 'IPv4Address' }
-        $removedActive = $false
-        foreach ($store in 'Active', 'Persistent') {
-            $desc = "NetIPAddress -$famWord $bare -InterfaceIndex $($t.InterfaceIndex) -Store $store"
-            $ok = $PSCmdlet.ShouldProcess("Remove $desc",
-                "Are you sure you want to perform this action?`nPerforming operation `"Remove`" on Target `"$desc`"",
-                'Confirm')
-            if ($store -eq 'Active') {
-                if (-not $ok) { continue }
-                $out = & ip addr del "$bare/$($t.PrefixLength)" dev $t.ifName 2>&1
-                if ($LASTEXITCODE -ne 0) { Write-Error "Could not remove $($t.IPAddress): $out"; continue }
-                if ($DefaultGateway) { & ip route del default via $DefaultGateway dev $t.ifName 2>$null }
-                $removedActive = $true; $changed = $true
-            } elseif ($ok) {
-                $drop.Add($bare); $changed = $true
-            } elseif ($removedActive -and $t.AddressFamily -eq 'IPv4') {
-                $keep.Add([pscustomobject]@{ Dev = $t.ifName; Local = $bare; PrefixLength = $t.PrefixLength })
-            }
+    # Windows also lists each subnet's broadcast address as a permanent entry. Computed from the
+    # address and prefix, since an address added without `brd` has none set in Linux.
+    foreach ($i in Invoke-IpJson -4 addr show) {
+        if (-not $byDev.ContainsKey($i.ifname)) { continue }
+        foreach ($a in @($i.addr_info)) {
+            if ($a.scope -ne 'global' -or $a.prefixlen -ge 31) { continue }
+            $bytes = [System.Net.IPAddress]::Parse($a.local).GetAddressBytes()
+            [array]::Reverse($bytes)
+            $n = [BitConverter]::ToUInt32($bytes, 0) -bor ([uint32]::MaxValue -shr $a.prefixlen)
+            $b = [BitConverter]::GetBytes([uint32]$n); [array]::Reverse($b)
+            & $add $byDev[$i.ifname] ([System.Net.IPAddress]::new($b)).ToString() 'ff:ff:ff:ff:ff:ff' 'Permanent'
         }
     }
-    if ($changed) { Save-NetConfig -Drop $drop -Keep $keep }
+    $rows | Where-Object {
+        $r = $_
+        (-not $AddressFamily -or $AddressFamily -contains $r.AddressFamily) -and
+        (-not $State -or $State -contains $r.State) -and
+        (-not $IPAddress -or @($IPAddress | Where-Object { $r.IPAddress -like $_ }).Count -gt 0)
+    } | Sort-Object -Stable { if ($_.AddressFamily -eq 'IPv6') { 0 } else { 1 } }
 }
+
+<#
+.SYNOPSIS
+Emulation of the Windows cmdlet on Linux. Gets the IP configuration: addresses, gateway, DNS servers.
+.EXAMPLE
+Get-NetIPConfiguration
+.EXAMPLE
+Get-NetIPConfiguration -InterfaceAlias "Ethernet"
+#>
+function Get-NetIPConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0)][Alias('ifAlias')][string[]]$InterfaceAlias,
+        [Alias('ifIndex')][uint32[]]$InterfaceIndex,
+        [switch]$All,
+        [switch]$Detailed
+    )
+    $table = @(Get-IfTable | Where-Object { $_.Dev -notmatch $script:HiddenDevs })
+    $table = @(Select-If $table $InterfaceAlias)
+    if ($InterfaceIndex) { $table = @($table | Where-Object { $InterfaceIndex -contains $_.Index }) }
+    if ($table.Count -eq 0 -and ($InterfaceAlias -or $InterfaceIndex)) {
+        $what = if ($InterfaceAlias) { "InterfaceAlias' equal to '$($InterfaceAlias -join ', ')" } else { "InterfaceIndex' equal to '$($InterfaceIndex -join ', ')" }
+        Write-Error "No MSFT_NetIPInterface objects found with property '$what'. Verify the value of the property and retry."
+        return
+    }
+    $dns = @()
+    if (Test-Path /etc/resolv.conf) {
+        $dns = @(Get-Content /etc/resolv.conf | Where-Object { $_ -match '^\s*nameserver\s+(\S+)' } | ForEach-Object { ($_ -split '\s+')[1] })
+    }
+    $v4def = @(Invoke-IpJson -4 route show default)
+    $v6def = @(Invoke-IpJson -6 route show default)
+    $addrs = @(Get-NetIPAddress -ErrorAction SilentlyContinue)
+    foreach ($row in $table | Sort-Object Alias) {
+        $v4 = @($addrs | Where-Object { $_.ifName -eq $row.Dev -and $_.AddressFamily -eq 'IPv4' })
+        $v6 = @($addrs | Where-Object { $_.ifName -eq $row.Dev -and $_.AddressFamily -eq 'IPv6' -and $_.PrefixOrigin -ne 'WellKnown' })
+        $ll = @($addrs | Where-Object { $_.ifName -eq $row.Dev -and $_.AddressFamily -eq 'IPv6' -and $_.SuffixOrigin -eq 'Link' })
+        $flags = @($row.Link.flags)
+        $status = if ($flags -notcontains 'UP') { 'Disabled' } elseif ($flags -contains 'LOWER_UP') { 'Up' } else { 'Disconnected' }
+        [pscustomobject]@{
+            PSTypeName           = 'NetCompat.NetIPConfiguration'
+            InterfaceAlias       = $row.Alias
+            InterfaceIndex       = $row.Index
+            InterfaceDescription = ConvertTo-WinDescription $row.Dev
+            IPv4Address          = $v4
+            IPv6Address          = $v6
+            IPv6LinkLocalAddress = $ll
+            IPv4DefaultGateway   = @($v4def | Where-Object { $_.dev -eq $row.Dev -and $_.PSObject.Properties['gateway'] } | ForEach-Object { $_.gateway })
+            IPv6DefaultGateway   = @($v6def | Where-Object { $_.dev -eq $row.Dev -and $_.PSObject.Properties['gateway'] } | ForEach-Object { $_.gateway })
+            DNSServer            = $dns
+            NetAdapterStatus     = $status
+            Detailed             = [bool]$Detailed
+        }
+    }
+}
+
+#endregion
+
+#region legacy commands students also type ------------------------------------------------------
+
+<#
+.SYNOPSIS
+Windows-style ping on the simulated PC: 4 echoes by default, Windows output layout.
+.DESCRIPTION
+Options: -n <count>, -t (until Ctrl+C), -l <size>, -w <timeout ms>, -i <TTL>. The TTL in replies
+is whatever the other device sets: 64 for the simulated PCs and routers, which are Linux.
+.EXAMPLE
+ping 78.1.2.4
+.EXAMPLE
+ping -n 10 78.1.2.4
+#>
+function ping {
+    $count = 4; $forever = $false; $size = 32; $timeout = 4000; $ttl = 0; $target = $null
+    for ($i = 0; $i -lt $args.Count; $i++) {
+        $a = [string]$args[$i]
+        switch -Regex ($a) {
+            '^[-/]n$' { $count = [int]$args[++$i]; continue }
+            '^[-/]t$' { $forever = $true; continue }
+            '^[-/]l$' { $size = [int]$args[++$i]; continue }
+            '^[-/]w$' { $timeout = [int]$args[++$i]; continue }
+            '^[-/]i$' { $ttl = [int]$args[++$i]; continue }
+            '^[-/][46aR]$' { continue }
+            '^[-/]' { "Bad option $a."; return }
+            default { $target = $a }
+        }
+    }
+    if (-not $target) {
+        'Usage: ping [-t] [-n count] [-l size] [-w timeout] [-i TTL] target_name'
+        return
+    }
+    $addr = Resolve-Target $target
+    if (-not $addr) { "Ping request could not find host $target. Please check the name and try again."; return }
+    $label = if ($addr -eq $target) { $addr } else { "$target [$addr]" }
+    ''
+    "Pinging $label with $size bytes of data:"
+    $sent = 0; $recv = 0; $rtts = [System.Collections.Generic.List[double]]::new()
+    try {
+        while ($forever -or $sent -lt $count) {
+            $start = [DateTime]::UtcNow
+            $r = Invoke-EchoOnce $addr $timeout $size $ttl
+            $sent++
+            switch ($r.Status) {
+                'Success' {
+                    $recv++; $rtts.Add($r.RttMs)
+                    $ms = [math]::Floor($r.RttMs)
+                    $t = if ($ms -lt 1) { 'time<1ms' } else { "time=$($ms)ms" }
+                    "Reply from $($r.From): bytes=$size $t TTL=$($r.Ttl)"
+                }
+                'DestinationHostUnreachable' {
+                    # Windows counts this as a received reply (it came from this PC's own stack).
+                    $recv++
+                    "Reply from $($r.From): Destination host unreachable."
+                }
+                'DestinationNetworkUnreachable' { 'PING: transmit failed. General failure.' }
+                default { 'Request timed out.' }
+            }
+            if ($forever -or $sent -lt $count) {
+                $left = 1000 - ([DateTime]::UtcNow - $start).TotalMilliseconds
+                if ($left -gt 0) { Start-Sleep -Milliseconds ([int]$left) }
+            }
+        }
+    } finally {
+        $lost = $sent - $recv
+        $pct = if ($sent) { [math]::Floor(100 * $lost / $sent) } else { 0 }
+        $stats = @('', "Ping statistics for $($addr):", "    Packets: Sent = $sent, Received = $recv, Lost = $lost ($pct% loss),")
+        if ($rtts.Count) {
+            $min = [math]::Floor(($rtts | Measure-Object -Minimum).Minimum)
+            $max = [math]::Floor(($rtts | Measure-Object -Maximum).Maximum)
+            $avg = [math]::Floor(($rtts | Measure-Object -Average).Average)
+            $stats += @('Approximate round trip times in milli-seconds:', "    Minimum = $($min)ms, Maximum = $($max)ms, Average = $($avg)ms")
+        }
+        # After Ctrl+C the pipeline is stopping, so write straight to the console.
+        if ($forever) { $stats | ForEach-Object { [Console]::WriteLine($_) }; [Console]::WriteLine('Control-C') }
+        else { $stats }
+    }
+}
+
+<#
+.SYNOPSIS
+Windows-style ipconfig on the simulated PC (no options; use Get-NetIPConfiguration for more).
+#>
+function ipconfig {
+    if ($args.Count -gt 0) { "On the simulated PC, ipconfig takes no options. Use Get-NetIPConfiguration -Detailed for more."; return }
+    ''
+    'Windows IP Configuration'
+    ''
+    foreach ($c in Get-NetIPConfiguration) {
+        ''
+        "Ethernet adapter $($c.InterfaceAlias):"
+        ''
+        if ($c.NetAdapterStatus -ne 'Up') {
+            '   Media State . . . . . . . . . . . : Media disconnected'
+            '   Connection-specific DNS Suffix  . :'
+            continue
+        }
+        '   Connection-specific DNS Suffix  . :'
+        foreach ($l in $c.IPv6LinkLocalAddress) { "   Link-local IPv6 Address . . . . . : $($l.IPAddress)" }
+        foreach ($a in $c.IPv4Address) {
+            "   IPv4 Address. . . . . . . . . . . : $($a.IPAddress)"
+            "   Subnet Mask . . . . . . . . . . . : $(ConvertTo-Netmask $a.PrefixLength)"
+        }
+        $gw = @($c.IPv4DefaultGateway)
+        "   Default Gateway . . . . . . . . . : $(if ($gw.Count) { $gw[0] })"
+    }
+}
+
+#endregion

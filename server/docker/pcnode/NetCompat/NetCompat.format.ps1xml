@@ -60,5 +60,112 @@
         </ListEntries>
       </ListControl>
     </View>
+    <View>
+      <Name>NetCompat.TestNetConnectionResult.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.TestNetConnectionResult</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>ComputerName</PropertyName></ListItem>
+              <ListItem><PropertyName>RemoteAddress</PropertyName></ListItem>
+              <ListItem>
+                <PropertyName>RemotePort</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$_.RemotePort -ne 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>SourceAddress</PropertyName></ListItem>
+              <ListItem>
+                <PropertyName>PingSucceeded</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.PingReplyDetails</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>PingReplyDetails (RTT)</Label>
+                <ScriptBlock>"$($_.PingReplyDetails.RoundtripTime) ms"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.PingReplyDetails</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <PropertyName>TcpTestSucceeded</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$_.RemotePort -ne 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetNeighbor.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetNeighbor</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>IPAddress</Label><Width>50</Width></TableColumnHeader>
+          <TableColumnHeader><Label>LinkLayerAddress</Label><Width>19</Width></TableColumnHeader>
+          <TableColumnHeader><Label>State</Label><Width>11</Width></TableColumnHeader>
+          <TableColumnHeader><Label>PolicyStore</Label><Width>11</Width></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>IPAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>LinkLayerAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>State</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>PolicyStore</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetIPConfiguration.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetIPConfiguration</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceIndex</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceDescription</PropertyName></ListItem>
+              <ListItem>
+                <Label>NetAdapter.Status</Label>
+                <ScriptBlock>$_.NetAdapterStatus</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -ne 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6Address</Label>
+                <ScriptBlock>($_.IPv6Address | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up' -and @($_.IPv6Address).Count -gt 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6LinkLocalAddress</Label>
+                <ScriptBlock>($_.IPv6LinkLocalAddress | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up' -and $_.Detailed</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv4Address</Label>
+                <ScriptBlock>($_.IPv4Address | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6DefaultGateway</Label>
+                <ScriptBlock>@($_.IPv6DefaultGateway) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv4DefaultGateway</Label>
+                <ScriptBlock>@($_.IPv4DefaultGateway) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>DNSServer</Label>
+                <ScriptBlock>@($_.DNSServer) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
   </ViewDefinitions>
 </Configuration>

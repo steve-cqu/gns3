@@ -3,7 +3,8 @@
 # PowerShell on Linux has none of them (they are Windows CIM wrappers), so NetCompat rebuilds them
 # on `ip -json`. Design and measurements: gns3-dev notes/powershell-pc-node.md.
 #
-# SPIKE (Phase 0): built by hand as cqugns3/pcnode-spike; not yet in manifest.yml.
+# Template: ../../templates/docker-pcnode.conf ("PowerShell PC"). NOT YET in manifest.yml: built by
+# hand as cqugns3/pcnode-spike for Phases 0-1. Tests (not shipped): tests/NetCompat.SelfTest.ps1.
 FROM cqugns3/ubuntunode
 
 # PowerShell from Microsoft's release tarball, pinned and checksummed. The tarball, not apt: it is
