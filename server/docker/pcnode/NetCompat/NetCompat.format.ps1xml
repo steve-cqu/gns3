@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default views for NetCompat objects: Get-NetAdapter as a table, Get-NetIPAddress as a list,
+     the shapes the Windows cmdlets use. `Format-List -Property *` still shows every property. -->
+<Configuration>
+  <ViewDefinitions>
+    <View>
+      <Name>NetCompat.NetAdapter.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetAdapter</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>Name</Label><Width>25</Width></TableColumnHeader>
+          <TableColumnHeader><Label>InterfaceDescription</Label><Width>40</Width></TableColumnHeader>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Right</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>Status</Label><Width>12</Width></TableColumnHeader>
+          <TableColumnHeader><Label>MacAddress</Label><Width>17</Width></TableColumnHeader>
+          <TableColumnHeader><Label>LinkSpeed</Label><Width>12</Width><Alignment>Right</Alignment></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>Name</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>InterfaceDescription</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>MacAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>LinkSpeed</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetIPAddress.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetIPAddress</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>IPAddress</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceIndex</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>AddressFamily</PropertyName></ListItem>
+              <ListItem><PropertyName>Type</PropertyName></ListItem>
+              <ListItem><PropertyName>PrefixLength</PropertyName></ListItem>
+              <ListItem><PropertyName>PrefixOrigin</PropertyName></ListItem>
+              <ListItem><PropertyName>SuffixOrigin</PropertyName></ListItem>
+              <ListItem><PropertyName>AddressState</PropertyName></ListItem>
+              <ListItem>
+                <Label>ValidLifetime</Label>
+                <ScriptBlock>if ($_.ValidLifetime -eq [TimeSpan]::MaxValue) { 'Infinite ([TimeSpan]::MaxValue)' } else { $_.ValidLifetime }</ScriptBlock>
+              </ListItem>
+              <ListItem>
+                <Label>PreferredLifetime</Label>
+                <ScriptBlock>if ($_.PreferredLifetime -eq [TimeSpan]::MaxValue) { 'Infinite ([TimeSpan]::MaxValue)' } else { $_.PreferredLifetime }</ScriptBlock>
+              </ListItem>
+              <ListItem><PropertyName>SkipAsSource</PropertyName></ListItem>
+              <ListItem><PropertyName>PolicyStore</PropertyName></ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
+    <View>
+      <Name>NetCompat.TestNetConnectionResult.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.TestNetConnectionResult</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>ComputerName</PropertyName></ListItem>
+              <ListItem><PropertyName>RemoteAddress</PropertyName></ListItem>
+              <ListItem>
+                <PropertyName>RemotePort</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$_.RemotePort -ne 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>SourceAddress</PropertyName></ListItem>
+              <ListItem>
+                <PropertyName>PingSucceeded</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.PingReplyDetails</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>PingReplyDetails (RTT)</Label>
+                <ScriptBlock>"$($_.PingReplyDetails.RoundtripTime) ms"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.PingReplyDetails</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <PropertyName>TcpTestSucceeded</PropertyName>
+                <ItemSelectionCondition><ScriptBlock>$_.RemotePort -ne 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>TraceRoute</Label>
+                <ScriptBlock>@($_.TraceRoute) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$null -ne $_.TraceRoute</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetNeighbor.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetNeighbor</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>IPAddress</Label><Width>50</Width></TableColumnHeader>
+          <TableColumnHeader><Label>LinkLayerAddress</Label><Width>19</Width></TableColumnHeader>
+          <TableColumnHeader><Label>State</Label><Width>11</Width></TableColumnHeader>
+          <TableColumnHeader><Label>PolicyStore</Label><Width>11</Width></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>IPAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>LinkLayerAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>State</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>PolicyStore</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetIPConfiguration.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetIPConfiguration</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceIndex</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceDescription</PropertyName></ListItem>
+              <ListItem>
+                <Label>NetAdapter.Status</Label>
+                <ScriptBlock>$_.NetAdapterStatus</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -ne 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6Address</Label>
+                <ScriptBlock>($_.IPv6Address | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up' -and @($_.IPv6Address).Count -gt 0</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6LinkLocalAddress</Label>
+                <ScriptBlock>($_.IPv6LinkLocalAddress | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up' -and $_.Detailed</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv4Address</Label>
+                <ScriptBlock>($_.IPv4Address | ForEach-Object { $_.IPAddress }) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv6DefaultGateway</Label>
+                <ScriptBlock>@($_.IPv6DefaultGateway) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>IPv4DefaultGateway</Label>
+                <ScriptBlock>@($_.IPv4DefaultGateway) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+              <ListItem>
+                <Label>DNSServer</Label>
+                <ScriptBlock>@($_.DNSServer) -join "`n"</ScriptBlock>
+                <ItemSelectionCondition><ScriptBlock>$_.NetAdapterStatus -eq 'Up'</ScriptBlock></ItemSelectionCondition>
+              </ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetRoute.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetRoute</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>DestinationPrefix</Label><Width>37</Width></TableColumnHeader>
+          <TableColumnHeader><Label>NextHop</Label><Width>37</Width></TableColumnHeader>
+          <TableColumnHeader><Label>RouteMetric</Label><Width>11</Width><Alignment>Right</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>ifMetric</Label><Width>8</Width><Alignment>Left</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>PolicyStore</Label><Width>15</Width></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>DestinationPrefix</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>NextHop</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>RouteMetric</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ifMetric</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>PolicyStore</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.Service.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.Service</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>Status</Label><Width>8</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Name</Label><Width>18</Width></TableColumnHeader>
+          <TableColumnHeader><Label>DisplayName</Label></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Name</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>DisplayName</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+  </ViewDefinitions>
+</Configuration>

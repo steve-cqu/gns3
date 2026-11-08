@@ -1,0 +1,45 @@
+#!/bin/bash
+# PID 1's command on the Lab Router: start FRR, apply the factory default if nothing was saved,
+# then run the IOS-style console in a loop (exit/logout returns to "Press RETURN to get started.").
+
+# An unsaved hostname (ios-cli keeps it in /run) must not survive a restart; /run is not tmpfs here.
+rm -f /run/ios-hostname
+
+# A /dev/log, so FRR's syslog messages do not fall back to /dev/console (the student's console).
+python3 /usr/local/bin/devlog-sink >/dev/null 2>&1 &
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S /dev/log ] && break; sleep 0.1; done
+
+sysctl -w net.ipv4.ip_forward=1 >/dev/null
+sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null
+# FRR's own start-up messages (watchfrr) would land on the student's console: send them away.
+/usr/lib/frr/frrinit.sh start >/dev/null 2>&1
+
+# The saved configuration ("startup-config"). FRR runs in split-config mode here (one file per
+# daemon) and in that mode neither the daemons nor `vtysh -b` load the saved files at boot (measured
+# 8 Nov 2026: the running config came up empty after a project close/reopen). So replay them:
+# zebra.conf first (addresses, shutdown, hostname), then staticd.conf, whose routes are only
+# installed once their next hops are on a connected network.
+if [ -s /etc/frr/zebra.conf ]; then
+    vtysh -f /etc/frr/zebra.conf >/dev/null 2>&1
+    sleep 1
+    [ -s /etc/frr/staticd.conf ] && vtysh -f /etc/frr/staticd.conf >/dev/null 2>&1
+fi
+
+# Factory default, like the C921: the WAN ports GigabitEthernet4 and 5 are administratively down
+# until `no shutdown`. Only when no configuration has been saved (`write memory` creates zebra.conf).
+if [ ! -s /etc/frr/zebra.conf ]; then
+    for p in eth4 eth5; do
+        [ -e /sys/class/net/$p ] && vtysh -c 'configure terminal' -c "interface $p" -c 'shutdown' >/dev/null
+    done
+fi
+
+# The web console leaves the terminal 0x0; readline needs a size (see the PC node's start-pc).
+case "$(stty size 2>/dev/null)" in ""|"0 0"|"0 "*|*" 0") stty rows 40 cols 120 2>/dev/null ;; esac
+export TERM="${TERM:-xterm}"
+
+while true; do
+    python3 /usr/local/bin/ios-cli
+    host=$(cat /run/ios-hostname /etc/frr/ios-hostname 2>/dev/null | head -1)
+    printf '\n%s con0 is now available\n\n\n\n\n\nPress RETURN to get started.\n' "${host:-Router}"
+    read -r _ || sleep 1
+done

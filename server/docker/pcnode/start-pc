@@ -1,0 +1,37 @@
+#!/bin/bash
+# PID 1's command on the PC node, so the GNS3 console opens in PowerShell rather than bash.
+# GNS3's own init.sh has already brought the interfaces up from /etc/network/interfaces
+# (`ifup -a -f`), which is where NetCompat persists addresses, so nothing is re-applied here.
+#
+# PC_CONSOLE_LAZY=1 waits for Enter before starting pwsh, so a node nobody opens holds no
+# PowerShell process (Phase 0 measures what that saves).
+
+export TERM="${TERM:-xterm}"
+
+# The GNS3 web console (xterm.js) never negotiates a window size, so the node's terminal is 0x0.
+# PSReadLine cannot render in a 0x0 buffer and crashes on the first key. Give it a size when it
+# has none; a telnet client that sends NAWS (PuTTY, the desktop GNS3 console) overrides this.
+ensure_size() {
+    case "$(stty size 2>/dev/null)" in
+        ""|"0 0"|"0 "*|*" 0") stty rows "${PC_ROWS:-40}" cols "${PC_COLS:-120}" 2>/dev/null ;;
+    esac
+}
+
+banner() {
+    echo
+    echo "PowerShell 7 on a simulated PC ($(hostname))."
+    echo "The networking cmdlets (Get-NetAdapter, New-NetIPAddress, ...) are emulated:"
+    echo "they behave like Windows, but output may differ slightly."
+    echo
+}
+
+while true; do
+    if [ "${PC_CONSOLE_LAZY:-0}" = "1" ]; then
+        read -r -p "Press Enter to start PowerShell. " _ || sleep 1
+    fi
+    ensure_size
+    banner
+    pwsh -NoLogo
+    echo "PowerShell exited. Starting it again..."
+    sleep 1
+done
