@@ -1,5 +1,5 @@
 # Lab Router: FRR with an IOS-style command line in front, for introductory labs that copy a bench
-# with a small Cisco router (the C921 in COIT11238). FRR routes; ios-cli.py accepts the IOS commands
+# with a small Cisco router such as the C921. FRR routes; ios-cli.py accepts the IOS commands
 # students use (enable, configure terminal, interface GigabitEthernet 4, ip address <addr> <mask>,
 # no shutdown, show interfaces, show ip route, ping) and prints IOS-style output.
 # Design: gns3-dev notes/powershell-pc-node.md (Phase 2).
