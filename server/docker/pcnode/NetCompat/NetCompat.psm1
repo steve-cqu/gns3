@@ -99,6 +99,9 @@ function ConvertTo-Netmask {
 
 function Format-LinkSpeed {
     param([string]$Dev)
+    # A GNS3 link has no real speed, and Linux reports a nominal 10 Mbps for the virtual Ethernet
+    # pair. The lab's Windows VM shows its Hyper-V virtual adapter as 10 Gbps, so report that.
+    if ($Dev -match '^eth\d+$') { return '10 Gbps' }
     $mbps = $null
     try { $mbps = [long](Get-Content "/sys/class/net/$Dev/speed" -ErrorAction Stop) } catch { }
     if ($null -eq $mbps -or $mbps -le 0) { return '0 bps' }
@@ -164,7 +167,8 @@ function New-NetIPAddressObject {
     }
     [pscustomobject]@{
         PSTypeName        = 'NetCompat.NetIPAddress'
-        IPAddress         = $AddrInfo.local
+        # Windows appends the zone (the interface index) to a link-local address: fe80::1%12.
+        IPAddress         = $(if ($isV6 -and $AddrInfo.local -like 'fe80:*') { "$($AddrInfo.local)%$($If.Index)" } else { $AddrInfo.local })
         InterfaceIndex    = $If.Index
         InterfaceAlias    = $If.Alias
         AddressFamily     = $(if ($isV6) { 'IPv6' } else { 'IPv4' })
@@ -260,18 +264,21 @@ function Get-NetIPAddress {
     $table = @(Select-If @(Get-IfTable) $InterfaceAlias)
     if ($InterfaceIndex) { $table = @($table | Where-Object { $InterfaceIndex -contains $_.Index }) }
     $byDev = @{}; foreach ($t in $table) { $byDev[$t.Dev] = $t }
-    $found = 0
+    $all = [System.Collections.Generic.List[object]]::new()
     foreach ($i in Invoke-IpJson addr show) {
         if (-not $byDev.ContainsKey($i.ifname)) { continue }
         foreach ($a in @($i.addr_info)) {
             $o = New-NetIPAddressObject $byDev[$i.ifname] $a
             if ($AddressFamily -and $AddressFamily -notcontains $o.AddressFamily) { continue }
-            if ($IPAddress -and -not @($IPAddress | Where-Object { $o.IPAddress -like $_ }).Count) { continue }
+            $bare = ($o.IPAddress -split '%')[0]
+            if ($IPAddress -and -not @($IPAddress | Where-Object { $o.IPAddress -like $_ -or $bare -like $_ }).Count) { continue }
             if ($PrefixLength -and $PrefixLength -notcontains $o.PrefixLength) { continue }
-            $found++
-            $o
+            $all.Add($o)
         }
     }
+    # Windows lists IPv6 addresses before IPv4.
+    $all | Sort-Object -Stable { if ($_.AddressFamily -eq 'IPv6') { 0 } else { 1 } }
+    $found = $all.Count
     if ($found -eq 0 -and ($IPAddress -or $InterfaceAlias -or $InterfaceIndex)) {
         Write-Error 'No matching MSFT_NetIPAddress objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetIPAddress class on the  CIM server: SELECT * FROM MSFT_NetIPAddress. Verify query parameters and retry.'
     }
@@ -328,7 +335,13 @@ function New-NetIPAddress {
     # Windows writes the address to two stores and prints both objects.
     foreach ($store in 'ActiveStore', 'PersistentStore') {
         $a = Invoke-IpJson addr show dev $if.Dev | ForEach-Object { $_.addr_info } | Where-Object { $_.local -eq $ip.ToString() } | Select-Object -First 1
-        if ($a) { New-NetIPAddressObject $if $a $store }
+        # Windows reports the new address as Tentative (duplicate-address detection under way)
+        # in the active store and Invalid in the persistent store, so copy that.
+        if ($a) {
+            $o = New-NetIPAddressObject $if $a $store
+            $o.AddressState = if ($store -eq 'ActiveStore') { 'Tentative' } else { 'Invalid' }
+            $o
+        }
     }
 }
 
@@ -365,7 +378,7 @@ function Remove-NetIPAddress {
     foreach ($t in $targets) {
         $target = "IPAddress: $($t.IPAddress) DefaultGateway: $DefaultGateway InterfaceAlias: $($t.InterfaceAlias)"
         if ($PSCmdlet.ShouldProcess($target, 'Delete')) {
-            $out = & ip addr del "$($t.IPAddress)/$($t.PrefixLength)" dev $t.ifName 2>&1
+            $out = & ip addr del "$(($t.IPAddress -split '%')[0])/$($t.PrefixLength)" dev $t.ifName 2>&1
             if ($LASTEXITCODE -ne 0) { Write-Error "Could not remove $($t.IPAddress): $out"; continue }
             if ($DefaultGateway) { & ip route del default via $DefaultGateway dev $t.ifName 2>$null }
             $changed = $true
