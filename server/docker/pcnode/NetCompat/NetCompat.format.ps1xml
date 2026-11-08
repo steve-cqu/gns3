@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default views for NetCompat objects: Get-NetAdapter as a table, Get-NetIPAddress as a list,
+     the shapes the Windows cmdlets use. `Format-List -Property *` still shows every property. -->
+<Configuration>
+  <ViewDefinitions>
+    <View>
+      <Name>NetCompat.NetAdapter.Table</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetAdapter</TypeName></ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>Name</Label><Width>25</Width></TableColumnHeader>
+          <TableColumnHeader><Label>InterfaceDescription</Label><Width>40</Width></TableColumnHeader>
+          <TableColumnHeader><Label>ifIndex</Label><Width>7</Width><Alignment>Right</Alignment></TableColumnHeader>
+          <TableColumnHeader><Label>Status</Label><Width>12</Width></TableColumnHeader>
+          <TableColumnHeader><Label>MacAddress</Label><Width>17</Width></TableColumnHeader>
+          <TableColumnHeader><Label>LinkSpeed</Label><Width>12</Width><Alignment>Right</Alignment></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>Name</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>InterfaceDescription</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ifIndex</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>MacAddress</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>LinkSpeed</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>NetCompat.NetIPAddress.List</Name>
+      <ViewSelectedBy><TypeName>NetCompat.NetIPAddress</TypeName></ViewSelectedBy>
+      <ListControl>
+        <ListEntries>
+          <ListEntry>
+            <ListItems>
+              <ListItem><PropertyName>IPAddress</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceIndex</PropertyName></ListItem>
+              <ListItem><PropertyName>InterfaceAlias</PropertyName></ListItem>
+              <ListItem><PropertyName>AddressFamily</PropertyName></ListItem>
+              <ListItem><PropertyName>Type</PropertyName></ListItem>
+              <ListItem><PropertyName>PrefixLength</PropertyName></ListItem>
+              <ListItem><PropertyName>PrefixOrigin</PropertyName></ListItem>
+              <ListItem><PropertyName>SuffixOrigin</PropertyName></ListItem>
+              <ListItem><PropertyName>AddressState</PropertyName></ListItem>
+              <ListItem>
+                <Label>ValidLifetime</Label>
+                <ScriptBlock>if ($_.ValidLifetime -eq [TimeSpan]::MaxValue) { 'Infinite ([TimeSpan]::MaxValue)' } else { $_.ValidLifetime }</ScriptBlock>
+              </ListItem>
+              <ListItem>
+                <Label>PreferredLifetime</Label>
+                <ScriptBlock>if ($_.PreferredLifetime -eq [TimeSpan]::MaxValue) { 'Infinite ([TimeSpan]::MaxValue)' } else { $_.PreferredLifetime }</ScriptBlock>
+              </ListItem>
+              <ListItem><PropertyName>SkipAsSource</PropertyName></ListItem>
+              <ListItem><PropertyName>PolicyStore</PropertyName></ListItem>
+            </ListItems>
+          </ListEntry>
+        </ListEntries>
+      </ListControl>
+    </View>
+  </ViewDefinitions>
+</Configuration>
