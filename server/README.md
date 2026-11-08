@@ -866,9 +866,8 @@ were built with. Two consequences worth knowing:
   from `/bin` to `/usr/local/bin` so that the edit `ipv6-basics` asks students to make survives.
   An existing image is skipped, so that needs `gns3build.py docker --only ipv6node --force`.
 
-`vm-fix-persistence.sh` in this directory does the same job over the REST API on an appliance that
-is already built. It was the July 2026 post-release fix for `v027` and is still what those
-appliances need; it is not part of the build.
+`vm-fix-persistence.sh` did the same job over the REST API on an already-built appliance: the July
+2026 post-release fix for `v027`. It was retired after T2 2026 and is in git history.
 
 ## Reaching a VNC node
 

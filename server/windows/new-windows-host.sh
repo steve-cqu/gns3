@@ -38,7 +38,7 @@
 #      with no network needed. Without it Get-NetAdapter returns nothing at all.
 #   3. ANSWER SETUP BY HAND. Windows 11 25H2 does not read autounattend.xml from a second
 #      CD, so the unattend ISO configures nothing during Setup - it is only how
-#      configure-windows-host.ps1 reaches the guest. Accepted for the Mac path (Steve,
+#      configure-windows-host.ps1 reaches the guest. Accepted for the Mac path (decided
 #      21 Sep 2026): few students, and remastering an 8 GB ISO is not worth it. Bypass the
 #      Microsoft-account screen with Fn+Shift+F10 then  start ms-cxh:localonly  and make a
 #      local gns3 / gns3 account, then run E:\configure-windows-host.ps1 yourself.

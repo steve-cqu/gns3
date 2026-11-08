@@ -249,8 +249,8 @@ causes the hang, without the reused address, is not established.*
 
 ### `Cannot export project: [Errno 13] Permission denied: /opt/gns3/projects/…/etc/wireguard`
 
-**Applies to:** exporting a project whose nodes keep `/etc` or `/root`, which is the case once you
-have set up persistence as described in [Saving Your Work in GNS3](gns3-saving-work.md). The folder
+**Applies to:** exporting a project whose nodes keep `/etc` or `/root`, which every node on a
+current appliance does (see [Saving Your Work in GNS3](gns3-saving-work.md)). The folder
 named in the error may be different, but it is usually `/etc/wireguard`.
 
 **The fix:** open the project, click **Start all nodes**, wait until every node is green, then

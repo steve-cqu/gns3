@@ -34,7 +34,7 @@ REPLY=$(valkey-cli ping 2>&1)
 if echo "$REPLY" | grep -q PONG; then
     echo "valkey-server started (replied PONG)."
     echo
-    echo "Set and read a key here:      valkey-cli set course COIT12202 ; valkey-cli get course"
+    echo "Set and read a key here:      valkey-cli set course networking ; valkey-cli get course"
     echo "From another node (exposed):  valkey-cli -h <this-node-ip> ping"
     echo "See every setting in force:   valkey-cli config get '*' | head"
     echo "Check what it is doing:       cache-status.sh"

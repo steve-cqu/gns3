@@ -618,12 +618,12 @@ nodes:
     source: {type: local, path: sambadc}
     templates: [docker-sambadc]
 
-  # Patch Server — the estate's package source for the patch-management activity (COIT13146
-  # Week 4). Its own image, derived from ubuntunode, because what makes it a node is CONTENT
+  # Patch Server — the estate's package source for the patch-management activity. Its own
+  # image, derived from ubuntunode, because what makes it a node is CONTENT
   # rather than software: a three-suite apt repository baked into /opt/cqu-repo at build time,
   # so patching can be taught offline and deterministically. The real archive cannot do that —
-  # it needs Internet in the topology and gives a different answer every week, which is why
-  # nothing in the major teaches patching today. Built AFTER ubuntunode: it is FROM it.
+  # it needs Internet in the topology and gives a different answer every week, so no lab
+  # written against it stays correct. Built AFTER ubuntunode: it is FROM it.
   # See gns3-dev/notes/patch-management-activity.md.
   patchnode:
     kind: docker

@@ -1,8 +1,8 @@
-# Patch Server node — the estate's package source, for the patch-management activity
-# (COIT13146 Week 4). See gns3-dev/notes/patch-management-activity.md.
+# Patch Server node — the estate's package source, for the patch-management activity.
+# See gns3-dev/notes/patch-management-activity.md.
 #
-# WHY THIS NODE EXISTS. Patching is the one operations topic the major does not teach anywhere,
-# and it cannot be taught against the real Ubuntu archive: that needs Internet inside the
+# WHY THIS NODE EXISTS. Patching is an operations topic network labs rarely cover, because
+# it cannot be taught against the real Ubuntu archive: that needs Internet inside the
 # topology, downloads tens of MB per student, and gives a different answer every week, so no
 # activity written against it stays correct. A repository the appliance owns is deterministic,
 # offline and instant — the same three updates, in the same three suites, on every student's

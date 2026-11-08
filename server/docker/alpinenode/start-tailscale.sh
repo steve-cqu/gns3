@@ -212,7 +212,8 @@ echo "Checking this node can reach a coordination server..."
 [ -c /dev/net/tun ] || fail \
     "this node has no /dev/net/tun, so tailscaled cannot create its interface." \
 "That is a setting on the GNS3 VM, not something you can fix from here. The tun module must
-be loaded on the VM (kernel_modules in the appliance manifest). Tell your lecturer."
+be loaded on the VM (kernel_modules in the appliance manifest). Ask whoever looks after your
+appliance (at CQU, your lecturer)."
 echo "  ok       /dev/net/tun is present"
 
 # 2. A default route. Which interface it points at is also which leg faces the Internet, so it is

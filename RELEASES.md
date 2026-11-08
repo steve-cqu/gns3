@@ -131,15 +131,15 @@ given, and that difference is invisible otherwise.
 
 | Release | Date | Fix | How it reached students |
 | --- | --- | --- | --- |
-| `v027` | 31 Jul 2026 | `server/vm-fix-persistence.sh` — sets `extra_volumes` on the Docker templates so node configuration survives closing a project | Students ran `git pull` in `~/git/gns3` on the VM and ran the script, per the *Saving Your Work* guide |
+| `v027` | 31 Jul 2026 | `server/vm-fix-persistence.sh` (retired 9 Nov 2026, after T2 2026; in git history) — set `extra_volumes` on the Docker templates so node configuration survives closing a project | Students ran `git pull` in `~/git/gns3` on the VM and ran the script, per the *Saving Your Work* guide |
 
 That `git pull` is the exception, not the mechanism. A released appliance is a finished
 artefact; students are not normally expected to touch the repo on it at all.
 
 **That fix is now in the build** (13 Aug 2026). The directories live in `extra_volumes` in the
 `templates/docker-*.conf` files, so the `templates` phase installs them and every release from
-the next one on ships with persistence already set — no script, no `git pull`. `v027` appliances
-still need the script, which is why it is still in the repository and still in the guide.
+the next one on ships with persistence already set — no script, no `git pull`. The script and the
+guide's section for it were retired at the end of T2 2026, when `v027` went out of use.
 See [Node persistence](server/README.md#what-survives-a-project-being-closed).
 
 ## What a release records

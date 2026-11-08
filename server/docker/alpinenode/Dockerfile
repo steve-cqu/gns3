@@ -194,6 +194,6 @@ RUN addgroup --gid "20001" "class" \
 # Cost measured before making the change: /home is empty in this image, so a node's bind seeds empty
 # and the export grows only by what somebody actually writes. See
 # gns3-dev/notes/node-persistence.md for the measurement and for why the templates were left alone
-# (extra_volumes is a delta over this list, and vm-fix-persistence.sh -- which repairs T2 2026
-# appliances -- sets only extra_volumes, so nothing here reaches a v027 VM).
+# (extra_volumes is a delta over this list; the retired vm-fix-persistence.sh, which repaired T2
+# 2026 appliances, set only extra_volumes, so nothing here reached a v027 VM).
 VOLUME /root/.ssh /etc/ssh /data /home
