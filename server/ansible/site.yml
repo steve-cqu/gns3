@@ -305,6 +305,50 @@
       changed_when: false
       check_mode: false
 
+    # ------------------------------------------------ leftovers, before hours of work ----
+    # The export gate at the end fails on any project not in projects.txt. A test project left
+    # by an earlier run that crashed (v043: a host crash mid-verify; 7 Oct 2026: a crashed
+    # walkthrough) used to be found there, hours in. Sweep the harness's own throwaway projects
+    # first, then run the same gate early, so anything else unlisted fails in seconds.
+    # INCOMPLETE is non-fatal in export-check, so the permitted projects not being imported yet
+    # (they arrive in the projects phase) does not trip it.
+    - name: Sweep leftover test projects from earlier runs
+      ansible.builtin.command: >-
+        {{ gns3build }} sweep --server http://localhost
+        {{ '--dry-run' if ansible_check_mode else '' }}
+      register: gns3_sweep
+      changed_when: "'removed 0,' not in gns3_sweep.stdout and 'no leftover' not in gns3_sweep.stdout"
+      failed_when: false
+      check_mode: false
+
+    - name: Report the sweep
+      ansible.builtin.debug:
+        msg: "{{ gns3_sweep.stdout_lines }}"
+
+    - name: Fail if a leftover test project could not be removed
+      ansible.builtin.assert:
+        that: gns3_sweep.rc == 0
+        fail_msg: >-
+          sweep could not remove every leftover test project — see the FAIL lines above. Remove
+          them on the VM by hand (gns3/server/README.md, *export-check says a project is
+          UNLISTED*) before building.
+        quiet: true
+
+    - name: Check nothing unlisted is already on the VM
+      ansible.builtin.command: "{{ gns3build }} export-check --profile {{ profile }}"
+      register: gns3_export_precheck
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Fail early if the VM already carries something outside projects.txt
+      ansible.builtin.assert:
+        that: gns3_export_precheck.rc == 0
+        fail_msg: >-
+          {{ gns3_export_precheck.stdout_lines | select('search', 'UNLISTED') | list }} —
+          the export gate at the end of this build would fail on these. Remove them now.
+        quiet: true
+
     # ---------------------------------------------------- qemu cache (optional) ----
     # The `qemu` phase runs ON THE VM and skips any image already in qemu_images_dir whose
     # .md5sum sidecar matches the manifest. That check does nothing on a FRESH VM, where the

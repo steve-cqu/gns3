@@ -60,6 +60,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2297,6 +2298,108 @@ def installed_images(ctrl):
     return qemu, docker
 
 
+# Throwaway projects the gns3-dev harness creates: gns3_autotest.py, the coverage walkthroughs
+# (tools/tests/coverage/cover.py) and gns3_export.py. Each deletes its own project when it ends, so
+# one that is still here was left by a run that never got to its teardown.
+SWEEP_PREFIXES = ("autotest-", "cover-", "export-")
+
+
+def cmd_sweep(args):
+    """Delete throwaway test projects a crashed run left behind.             [run on the VM]
+
+    The export gate at the end of a build fails on any project not in projects.txt, so a
+    leftover from an earlier run (a host crash mid-verify did this to v043, a crashed walkthrough
+    on 7 Oct 2026) used to be found hours into the build. Run first, it costs seconds.
+
+    Only names starting with SWEEP_PREFIXES are touched, and never a name projects.txt permits.
+    The API delete is tried first. It answers 409 for a project whose nodes were hard-stopped:
+    DockerVM._fix_permissions() hands the volume directories back to the gns3 user only on a
+    clean stop, so they stay root:root 0700 and the server cannot remove them. The fallback is
+    `sudo rm -rf` of that project's own directory, then a restart of gns3.service so the
+    controller forgets it. That needs this machine to be the appliance, so it is refused when
+    --server is another host.
+    """
+    m = load_manifest(args.manifest)
+    _, allowed = read_project_list(m)
+    allowed_set = set(allowed)
+    ctrl = Controller(args.server)
+    try:
+        ctrl.version()
+    except urllib.error.URLError as e:
+        sys.exit(f"cannot reach controller at {args.server}: {e}")
+
+    victims = [p for p in ctrl.projects()
+               if p.get("name", "").startswith(SWEEP_PREFIXES) and p["name"] not in allowed_set]
+    if not victims:
+        print("sweep: no leftover test projects")
+        return 0
+
+    local = controller_is_local(args.server)
+    removed, failed, restart = 0, 0, False
+    for p in victims:
+        pid, name, path = p["project_id"], p["name"], p.get("path") or ""
+        if args.dry_run:
+            print(f"  would delete  {name}  ({pid})")
+            continue
+        try:
+            ctrl._req("POST", f"/projects/{pid}/close", {}, timeout=120)
+        except urllib.error.HTTPError:
+            pass                                   # already closed, or past closing: delete decides
+        try:
+            ctrl._req("DELETE", f"/projects/{pid}", timeout=120)
+            print(f"  delete  {name}")
+            removed += 1
+            continue
+        except urllib.error.HTTPError as e:
+            why = f"HTTP {e.code}"
+        # The fallback removes a directory as root, so be certain which one: it must be this
+        # project's own directory, named by its id, on this machine.
+        d = Path(path)
+        if not local:
+            print(f"  FAIL    {name}: API delete refused ({why}); the sudo fallback needs the "
+                  f"sweep run on the appliance itself")
+            failed += 1
+            continue
+        if d.name != pid or len(d.parts) < 4:
+            print(f"  FAIL    {name}: API delete refused ({why}) and its path {path!r} is not a "
+                  f"project directory named by its id; remove it by hand")
+            failed += 1
+            continue
+        rc = subprocess.run(["sudo", "rm", "-rf", "--one-file-system", str(d)]).returncode
+        if rc:
+            print(f"  FAIL    {name}: sudo rm -rf {d} exited {rc}")
+            failed += 1
+            continue
+        print(f"  remove  {name}  ({why} from the API; deleted {d} as root)")
+        removed += 1
+        restart = True
+
+    if restart:
+        # The controller still lists a project whose directory has gone until it restarts.
+        subprocess.run(["sudo", "systemctl", "restart", "gns3.service"], check=False)
+        for _ in range(60):
+            try:
+                ctrl.version()
+                break
+            except (urllib.error.URLError, ConnectionError, OSError):
+                time.sleep(2)
+        else:
+            print("  FAIL    gns3.service did not answer within 2 minutes of the restart")
+            failed += 1
+        left = [p["name"] for p in ctrl.projects()
+                if p.get("name", "").startswith(SWEEP_PREFIXES)
+                and p["name"] not in allowed_set] if not failed else []
+        for n in left:
+            print(f"  FAIL    {n} is still listed after the restart")
+            failed += 1
+
+    if args.dry_run:
+        print(f"\nsweep: would delete {len(victims)} project(s)")
+        return 0
+    print(f"\nsweep: {removed} removed, {failed} failed")
+    return 1 if failed else 0
+
+
 def cmd_export_check(args):
     """Refuse to bless an appliance whose contents are not exactly projects.txt.
 
@@ -2896,6 +2999,11 @@ def main():
                                      "sha256 (feeds `provenance --imports`)")
     pr.add_argument("--dry-run", action="store_true")
 
+    sw = sub.add_parser("sweep", help="delete leftover autotest-/cover-/export- projects "
+                                      "(run on the VM)")
+    sw.add_argument("--server", default=os.environ.get("GNS3_SERVER", "http://localhost"))
+    sw.add_argument("--dry-run", action="store_true")
+
     ec = sub.add_parser("export-check",
                         help="refuse to bless an OVA whose projects are not exactly "
                              "projects.txt")
@@ -2941,7 +3049,7 @@ def main():
             "novnc": cmd_novnc, "labnic": cmd_labnic, "quiesce": cmd_quiesce,
             "timesync": cmd_timesync, "projects": cmd_projects, "build": cmd_build,
             "freeze": cmd_freeze, "thaw": cmd_thaw,
-            "export-check": cmd_export_check,
+            "export-check": cmd_export_check, "sweep": cmd_sweep,
             "provenance": cmd_provenance}[args.cmd](args)
 
 

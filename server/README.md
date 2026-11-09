@@ -1189,6 +1189,14 @@ under the old two-appliance scheme — the projects that were legitimate then ar
 Delete them through the GNS3 GUI or the API (`DELETE /v2/projects/<id>`), or start from a
 clean VM snapshot. Add it to `projects.txt` only if it really should ship to everyone.
 
+**The build stops at *Sweep leftover test projects* or *Fail early*.** From v045, `site.yml` runs
+two checks before any phase. First `gns3build.py sweep` deletes the test harness's own throwaway
+projects (`autotest-*`, `cover-*`, `export-*`) that an earlier crashed run left behind. If the API
+refuses with 409, which it does for a project whose nodes were hard-stopped, the sweep deletes that
+project's directory as root and restarts `gns3.service`. Then `export-check` runs early, so any
+*other* unlisted project fails in seconds instead of at the export gate hours later. To see what
+the sweep would remove, run `gns3build.py sweep --dry-run` on the VM.
+
 **A node fails to start after a rebuild.** If you edited a Dockerfile, the image is only
 rebuilt with `--force` — an existing image is skipped by design.
 
