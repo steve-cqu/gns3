@@ -65,6 +65,16 @@ novnc:
     web_dir: /usr/local/share/gns3-novnc
     novnc_dir: /usr/share/novnc         # symlinked into web_dir as ./novnc
 
+# The read-only file page (server/files/gns3_files.py), installed by the `files` phase as
+# gns3-files.service. Students download captures and their nodes' saved files from
+# http://<vm-ip>:<port>/ instead of using scp or FileZilla. The port is below 5000 on purpose:
+# GNS3 gives node consoles ports from 5000 to 10000, so 8080 could collide with one.
+files:
+  dir: ../files                         # sources: gns3_files.py and the unit
+  unit: gns3-files.service              # -> /etc/systemd/system/
+  port: 4080
+  lib_dir: /usr/local/lib/gns3-files
+
 # GNS3 registry raw base (for docker nodes pulled from upstream).
 #
 # PINNED TO A COMMIT, deliberately — this was `refs/heads/master` until 14 August 2026, and an

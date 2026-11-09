@@ -68,6 +68,20 @@ The page lists the desktop nodes in the project you have open. Start the node in
 
 You can leave the desktop tab open while you work in GNS3, and you can open more than one at a time when an activity has two of these nodes.
 
+### Downloading Captures and Node Files: the Files Page
+
+A packet capture you start in GNS3 (right-click a link, then *Start capture*) is saved on the virtual machine, not on your computer. To open it in Wireshark, download it from the files page. Open a new browser tab and visit the address of your GNS3 virtual machine with `:4080` after it:
+
+```
+http://192.168.56.101:4080/
+```
+
+Use your own virtual machine's address, as for the VNC page. Select your project, and under *Captures* select *Download* beside the capture you want. The newest capture is at the top. A capture that is still running downloads as everything recorded so far, so you can download it again later to get more.
+
+The same page shows the files your nodes have saved, such as a node's `/etc/network/interfaces`. Select a node under *Nodes* to browse them: a text file opens in the browser, and *Download* saves it. Only the folders a node keeps when the project closes are there. The page is read-only, so nothing you do on it changes the virtual machine.
+
+This page is new in appliance `v045`. On an older appliance, copy the capture off the virtual machine with FileZilla or `scp` instead.
+
 ### Copy and Paste in Web Console: Ctrl/Shift-Insert
 
 The web console does not support the traditional Ctrl-C and Ctrl-V copy and paste. This is because those keyboard combinations have special meanings in some console. However most browsers while support the special commands of:

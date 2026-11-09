@@ -575,6 +575,7 @@ the VM (`cd ~/git/gns3/server/build`):
 ./gns3build.py timesync                    # keep ntpd alive through a clock jump
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + the gns3-novnc service
+./gns3build.py files                       # install the gns3-files page (port 4080)
 ./gns3build.py labnic --profile arm64      # the Windows Host lab NIC (eth2 amd64 / eth1 arm64)
 ./gns3build.py projects  --profile amd64   # import the projects in projects.txt
 ./gns3build.py export-check --profile amd64
@@ -600,7 +601,7 @@ Common options:
 `validate`, `plan`, `templates`, `projects`, `export-check` and `provenance` also accept
 `--server http://<vm-ip>` and can be run from your own machine — though `export-check` can
 only half-answer from there and says so (see [Check before you export](#2-check-before-you-export)). `docker`, `qemu`, `logos`,
-`novnc`, `labnic`, `quiesce` and `timesync` must run on the VM itself, because they touch its Docker
+`novnc`, `files`, `labnic`, `quiesce` and `timesync` must run on the VM itself, because they touch its Docker
 daemon, filesystem and systemd — which is also why images are always built natively for the
 VM's architecture.
 
@@ -952,6 +953,28 @@ bridging a VNC port the service will not resolve because it is not a GNS3 node c
 it a web port other than 6080 — `./start-vnc.sh 5901 6081` — or it cannot bind.
 
 ---
+
+## Captures and node files on a page (`gns3-files`, from v045)
+
+A capture started in the GNS3 web UI is written to the VM, under
+`/opt/gns3/projects/<id>/project-files/captures/`, and students used to fetch it with FileZilla or
+`scp` before Wireshark could open it. **`gns3-files`**, installed by the `files` phase, is a page at
+`http://<gns3-vm-ip>:4080/` that lists each project's captures (newest first, with a note on any
+still being written) and its Docker nodes' persisted directories, and downloads any of them. Text
+files open in the browser.
+
+It is **read-only**. It answers GET and HEAD only, resolves every path component with `lstat`, lists
+symlinks without following them, and runs as `gns3`, so a root-only file is shown as unreadable
+rather than served. There is no login, the same as `:80` and `:6080`. Node files come from disk,
+so only what a template persists is there; nothing inside a running container is reached, which
+is why the service needs no Docker access. Project names come from the controller API, and node
+names from each project's own `.gns3` file, which exists whether the project is open or not.
+
+The port is **4080** (manifest `files.port`) because GNS3 assigns node console ports from 5000 to
+10000. **Parts:** `files/gns3_files.py` (standard library only, Python 3.8) and
+`files/gns3-files.service` (`@LIB@` and `@PORT@` substituted), installed to
+`/usr/local/lib/gns3-files` and `/etc/systemd/system`. To see what it can see:
+`python3 /usr/local/lib/gns3-files/gns3_files.py --list`.
 
 ## The Windows Host
 

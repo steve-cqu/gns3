@@ -1321,6 +1321,70 @@ def cmd_logos(args):
 
 
 # --------------------------------------------------------------------------- #
+# Phase: files — the read-only capture and node-file page             [run on the VM]
+# --------------------------------------------------------------------------- #
+def cmd_files(args):
+    """Install gns3-files: http://<vm-ip>:<port>/ lists each project's captures and its nodes'
+    saved files, so a student downloads a .pcap in the browser instead of with scp or FileZilla.
+
+    Two things go on the VM, both idempotent: the module and the systemd unit with the manifest's
+    path and port substituted in. Standard library only, so no packages. The unit is restarted
+    only when something changed. Returns non-zero if the service is not running afterwards.
+    """
+    m = load_manifest(args.manifest)
+    cfg = m.get("files") or {}
+    if not cfg:
+        print("  skip   no `files:` block in the manifest")
+        return 0
+    src_dir = (m["_dir"] / cfg.get("dir", "../files")).resolve()
+    port = int(cfg.get("port", 4080))
+    lib_dir = Path(cfg.get("lib_dir", "/usr/local/lib/gns3-files"))
+    unit_name = cfg.get("unit", "gns3-files.service")
+    module, unit_src = src_dir / "gns3_files.py", src_dir / unit_name
+    for f in (module, unit_src):
+        if not f.exists():
+            sys.exit(f"files service source missing: {f}")
+    unit_text = unit_src.read_text().replace("@LIB@", str(lib_dir)).replace("@PORT@", str(port))
+    installs = [(module, lib_dir / module.name, module.read_text()),
+                (unit_src, Path("/etc/systemd/system") / unit_name, unit_text)]
+
+    if args.dry_run:
+        for src, dst, _ in installs:
+            print(f"  [dry-run] install {src.name} -> {dst}")
+        print(f"  [dry-run] systemctl enable --now {unit_name}")
+        return 0
+
+    if not lib_dir.is_dir():
+        subprocess.run(["sudo", "mkdir", "-p", str(lib_dir)], check=True)
+    changed = False
+    for src, dst, text in installs:
+        if sudo_write(dst, text):
+            # 0644: sudo_write compares by reading as the build user (see install_novnc_service).
+            subprocess.run(["sudo", "chmod", "644", str(dst)], check=False)
+            print(f"  install {src.name} -> {dst}")
+            changed = True
+        else:
+            print(f"  skip   {dst} (already correct)")
+
+    if changed:
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+    active = subprocess.run(["systemctl", "is-active", "--quiet", unit_name]).returncode == 0
+    if changed or not active:
+        rc = subprocess.run(["sudo", "systemctl", "enable", "--now", unit_name]).returncode
+        if rc == 0 and changed and active:
+            rc = subprocess.run(["sudo", "systemctl", "restart", unit_name]).returncode
+        time.sleep(2)
+        if rc or subprocess.run(["systemctl", "is-active", "--quiet", unit_name]).returncode:
+            print(f"  FAIL   {unit_name} is not running — journalctl -u {unit_name} -n 30")
+            return 1
+        print(f"  service {unit_name} started")
+    else:
+        print(f"  skip   {unit_name} already enabled and running")
+    print(f"  url    http://<gns3-vm-ip>:{port}/ — captures and node files, read-only")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # Phase: quiesce — stop the appliance updating itself          [run on the VM]
 # --------------------------------------------------------------------------- #
 # systemctl's own vocabulary. Anything outside it is not a verdict we can act on — a
@@ -2843,7 +2907,7 @@ def cmd_provenance(args):
 # long phases (docker, qemu) rather than after them.
 # `timesync` follows it so the clock is being kept before anything is built or timestamped.
 BUILD_PHASES = ["quiesce", "timesync", "templates", "docker", "qemu", "accel", "logos", "novnc",
-                "labnic", "projects"]
+                "files", "labnic", "projects"]
 
 
 def cmd_build(args):
@@ -2865,7 +2929,8 @@ def cmd_build(args):
 
     handlers = {"quiesce": cmd_quiesce, "timesync": cmd_timesync, "templates": cmd_templates,
                 "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
-                "novnc": cmd_novnc, "labnic": cmd_labnic, "projects": cmd_projects}
+                "novnc": cmd_novnc, "files": cmd_files, "labnic": cmd_labnic,
+                "projects": cmd_projects}
     # Every phase reads its options off this one namespace, so it must carry a default
     # for every option any phase's sub-parser defines — a missing one is an AttributeError
     # at run time, not a parse error. Add new phase options here too.
@@ -2983,6 +3048,10 @@ def main():
                         help="install noVNC + the gns3-novnc service (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
 
+    fl = sub.add_parser("files", help="install the read-only capture and node-file page "
+                                      "(run on the VM)")
+    fl.add_argument("--dry-run", action="store_true")
+
     ln = sub.add_parser("labnic", help="bring up the Windows Host lab NIC (run on the VM)")
     ln.add_argument("--profile",
                     help="picks the platform's lab NIC (amd64 eth2, arm64 eth1); without it "
@@ -3046,7 +3115,7 @@ def main():
         pass
     return {"validate": cmd_validate, "plan": cmd_plan, "templates": cmd_templates,
             "docker": cmd_docker, "qemu": cmd_qemu, "accel": cmd_accel, "logos": cmd_logos,
-            "novnc": cmd_novnc, "labnic": cmd_labnic, "quiesce": cmd_quiesce,
+            "novnc": cmd_novnc, "files": cmd_files, "labnic": cmd_labnic, "quiesce": cmd_quiesce,
             "timesync": cmd_timesync, "projects": cmd_projects, "build": cmd_build,
             "freeze": cmd_freeze, "thaw": cmd_thaw,
             "export-check": cmd_export_check, "sweep": cmd_sweep,

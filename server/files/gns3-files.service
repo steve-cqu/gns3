@@ -1,0 +1,26 @@
+# Installed to /etc/systemd/system/ by `gns3build.py files`, which substitutes @LIB@ and @PORT@
+# from build/manifest.yml. Edit this file, not the installed copy.
+[Unit]
+Description=Read-only file page for GNS3 captures and node files
+Documentation=https://github.com/steve-cqu/gns3
+After=network-online.target gns3.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gns3
+Group=gns3
+ExecStart=/usr/bin/python3 @LIB@/gns3_files.py --port @PORT@
+# The controller is not a hard dependency: without it the page says so, which is what a student
+# rebooting the VM should see rather than a dead port.
+Restart=always
+RestartSec=3
+# It only ever reads. The projects live under /opt/gns3, which ProtectSystem=strict leaves
+# readable, and nothing at all is writable to this process.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
