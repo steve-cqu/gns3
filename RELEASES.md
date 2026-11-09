@@ -117,12 +117,16 @@ generated SSH *host* keys, which is why two students' nodes present the same hos
 
 **The assessment above is unchanged** — these authorise lab containers whose password is the
 published `gns3`, inside a student's own virtual network, and nothing else. **The remedy is
-different, because a project file has no history to rewrite: it is simply re-exported.** That work
-is scheduled *after* the T3 2026 release rather than before it. Stripping the keys changes what
-several activities' documented walkthroughs show — `ansible-basics` documents `ssh-copy-id`
-reporting that the keys are already present — so each affected activity has to be re-verified, and
-that is not work to start three weeks before an OVA. Tracked in
-`gns3-dev/notes/project-key-hygiene.md` in the private repo.
+different, because a project file has no history to rewrite: the keys are simply removed from it.**
+
+**Removed for `v045`, 9 November 2026.** The count turned out to be 27, not nineteen: the nineteen
+in `gns3-dev`'s activities, plus the eight self-learning lab projects the *Networking, Security
+and Cryptography* book offers for download. In all 27 the pair, its `.pub` files and the
+`authorized_keys` that accepted it are gone, and nothing else in the archives changed. A node
+from a cleaned project starts with no `~/.ssh`, the same as a node made fresh from the image. The
+activities that walk those projects were re-verified on the v044 appliance. A lint check in
+`gns3-dev` now fails if the pair returns. `v044` and every earlier release still carry it inside
+`GNS3-Intro-Solution`; `v045` does not. The generated host keys are unchanged.
 
 ### Post-release fixes
 
