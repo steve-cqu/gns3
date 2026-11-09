@@ -32,6 +32,14 @@ RUN sed -i \
 # and the activities, instead of Debian's default integrated /etc/frr/frr.conf.
 RUN echo 'no service integrated-vtysh-config' > /etc/frr/vtysh.conf \
     && chown frr:frr /etc/frr/vtysh.conf
+# Split config needs the Debian package's stub frr.conf gone. frrcommon.sh (line 142 in 8.4.4) hands each
+# daemon its own <daemon>.conf only while /etc/frr/frr.conf is absent, and in split mode vtysh -b
+# loads nothing either. With the stub present, `write memory` saved per-daemon files that nothing
+# read at boot, so every router came back empty after a restart or a project reopen. ospf-basics only
+# worked because its project's /etc/frr carries no frr.conf. Removed for v045; see
+# gns3-dev admin/diagnostics.md *FRR*. Projects with their own frr.conf (campus-core-ospf, integrated
+# mode) are unaffected: their project files replace the volume's seed.
+RUN rm -f /etc/frr/frr.conf
 
 ADD start-frr.sh /bin/start-frr.sh
 RUN chmod +x /bin/start-frr.sh

@@ -15,10 +15,13 @@ sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null
 /usr/lib/frr/frrinit.sh start >/dev/null 2>&1
 
 # The saved configuration ("startup-config"). FRR runs in split-config mode here (one file per
-# daemon) and in that mode neither the daemons nor `vtysh -b` load the saved files at boot (measured
-# 8 Nov 2026: the running config came up empty after a project close/reopen). So replay them:
+# daemon). Up to v044 the base image's stub frr.conf stopped the daemons reading those files at boot
+# (measured 8 Nov 2026: the running config came up empty after a project close/reopen), so this
+# replays them. From v045 frrnode drops the stub and the daemons load them themselves; re-applying
+# the same lines is harmless, and the replay stays until a v045 build shows it is not needed.
 # zebra.conf first (addresses, shutdown, hostname), then staticd.conf, whose routes are only
-# installed once their next hops are on a connected network.
+# installed once their next hops are on a connected network. (An empty zebra.conf, should FRR
+# create one, still counts as "nothing saved" for the factory default below.)
 if [ -s /etc/frr/zebra.conf ]; then
     vtysh -f /etc/frr/zebra.conf >/dev/null 2>&1
     sleep 1
