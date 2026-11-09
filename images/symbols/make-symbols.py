@@ -112,6 +112,10 @@ SYMBOLS = [
     ("computer-wazuhagent", "computer", "WAZUH",   None),
     ("computer-wifi",       "computer", "WIFI",    "arcs"),
     ("computer-domain",     "computer", "DOMAIN",  None),
+    # The PowerShell PC (cqugns3/pcnode, v045). Until then its template wore the stock
+    # computer-windows artwork's file, i.e. the same symbol as the real Windows Host (WIN11):
+    # a lab that puts both on one canvas could not tell the emulation from the real thing.
+    ("computer-pwsh",       "computer", "PWSH",    None),
 
     # --- forwarding, on the router ---------------------------------------
     ("router-frr",      "router", "FRR",      None),
@@ -144,6 +148,9 @@ SYMBOLS = [
     # host: the lesson is that the user's PC never talks RADIUS. Not "NAS" — students read that as
     # network-attached storage. Nine characters, the router budget exactly.
     ("router-radclient", "router", "RADCLIENT", None),
+    # The Lab Router (cqugns3/labrouter, v045): FRR with an IOS-style console. It sits on canvases
+    # beside plain FRR routers, so it needs its own band rather than router-frr's.
+    ("router-labrtr",    "router", "LABRTR",    None),
 
     # --- switches, on GNS3's multilayer switch -----------------------------
     # The first generated switch. The 802.1X access switch is a Linux bridge whose ports stay

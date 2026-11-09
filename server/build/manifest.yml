@@ -274,12 +274,13 @@ profiles:
 # revert. `validate` checks optional nodes exactly like installed ones, so a retired node
 # cannot quietly rot; `plan` lists what each platform offers.
 #
-# ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and TEN images are
+# ORDER MATTERS in the `docker:` lists. cmd_docker builds them in list order, and TWELVE images are
 # derived from another local image, so each must appear AFTER its base or its build has no base to
 # build on:
 #   FROM cqugns3/alpinenode (9): auth-kerberos, ipv6node, giteanode, servicenode, monitornode,
 #                                sambadc, faucetnode, strongswan, wifinode
-#   FROM cqugns3/ubuntunode (1): patchnode
+#   FROM cqugns3/ubuntunode (2): patchnode, pcnode
+#   FROM cqugns3/frrnode    (1): labrouter
 # (This said "three images ... ipv6node, servicenode and monitornode" until 6 September 2026. Six
 # more had been derived from alpinenode since without the count being updated, which understated
 # how much a change to that base costs to propagate.) The phase also skips any image
@@ -289,9 +290,9 @@ platforms:
   amd64:
     docker_platform: linux/amd64      # docker build --platform
     lab_nic_interface: eth2           # 3 adapters: NAT, host-only, lab
-    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
+    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode, pcnode,
              net_toolbox, auth-kerberos, ipv6node, suricata,
-             frrnode, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
+             frrnode, labrouter, netemnode, openwrtnode, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
     # Retired from the default build, still one flag away — see the note above.
@@ -323,9 +324,9 @@ platforms:
   arm64:
     docker_platform: linux/arm64/v8
     lab_nic_interface: eth1           # 2 adapters: NAT, lab — there is no eth2 here
-    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode,
+    docker: [openvswitch, ipterm-base, ipterm, webterm, alpinenode, ubuntunode, pcnode,
              net_toolbox, auth-kerberos, ipv6node, suricata,
-             frrnode, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
+             frrnode, labrouter, netemnode, openwrtnode-arm64, servicenode, monitornode, faucetnode, wifinode,
              giteanode, strongswan, sambadc, patchnode]
     qemu:   []          # none — see `optional:` below
     optional:
@@ -432,6 +433,13 @@ nodes:
     # domain. sssd/realmd/adcli exist on no Alpine branch, so a domain-joined Linux client can
     # only be an Ubuntu node — see gns3-dev/notes/directory-ad-dc-plan.md.
     templates: [docker-ubuntuhost, docker-trafficgen, docker-domainclient]
+  # PowerShell PC: PowerShell 7 with the NetCompat module emulating the Windows networking
+  # cmdlets. Added for v045; gns3-dev/notes/powershell-pc-node.md has the design.
+  pcnode:
+    kind: docker
+    image: cqugns3/pcnode:latest
+    source: {type: local, path: pcnode}
+    templates: [docker-pcnode]
   net_toolbox:
     kind: docker
     image: adosztal/net_toolbox:latest
@@ -472,6 +480,13 @@ nodes:
     image: cqugns3/frrnode:latest
     source: {type: local, path: frrnode}
     templates: [docker-frr]
+  # Lab Router: FRR underneath an IOS-style console (ios-cli.py), for introductory labs that copy
+  # a Cisco router sheet. Added for v045; gns3-dev/notes/powershell-pc-node.md has the design.
+  labrouter:
+    kind: docker
+    image: cqugns3/labrouter:latest
+    source: {type: local, path: labrouter}
+    templates: [docker-labrouter]
   netemnode:
     kind: docker
     image: cqugns3/netemnode:latest

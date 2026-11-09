@@ -5,8 +5,8 @@
 # Design: gns3-dev notes/powershell-pc-node.md (Phase 2).
 #
 # Its own image, FROM frrnode, because the front end needs Python and frrnode has none.
-# Template: ../../templates/docker-labrouter.conf ("Lab Router"). NOT YET in manifest.yml: built by
-# hand as cqugns3/labrouter-spike. Tests (not shipped): tests/ios-cli.selftest.sh.
+# Template: ../../templates/docker-labrouter.conf ("Lab Router"). In manifest.yml from v045.
+# Tests (not shipped): tests/ios-cli.selftest.sh.
 FROM cqugns3/frrnode
 
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
