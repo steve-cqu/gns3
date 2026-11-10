@@ -36,8 +36,9 @@ Three pieces have to line up.
 - **A private network inside VirtualBox.** This is a network that only your virtual machines can
   see. It is not connected to the internet, to CQUniversity, or to anything else on your computer.
 - **A third network adapter on the GNS3 VM**, connected to that private network. Inside the GNS3 VM
-  this adapter is called `eth2`. *(On a Mac there is no third adapter and the lab network is `eth1`
-  — see the Apple Mac section.)*
+  this adapter is called `eth2`. The CQU GNS3 VM comes with it already set up from version v045
+  onwards. *(On a Mac there is no third adapter and the lab network is `eth1` — see the Apple Mac
+  section.)*
 - **A *Windows Host* node in your GNS3 project**, which is joined to `eth2`. Anything you connect
   this node to in GNS3 can reach the Windows machine, and the other way around.
 
@@ -53,25 +54,40 @@ file of about 6 GB. Choose the 64-bit version for a PC.
 
 Start this download first and carry on with Step 2 while it runs.
 
-## Step 2: Add a Third Adapter to the GNS3 VM
+## Step 2: Check the GNS3 VM's Third Adapter
 
+The CQU GNS3 VM comes with its third adapter already set up, from version v045 onwards. This step
+checks that it is there and set correctly. You do not need to change anything unless the check
+fails.
+
+1. In VirtualBox, select the GNS3 VM and click *Settings*, then *Network*.
+2. Go to the *Adapter 3* tab and check that:
+   - *Enable Network Adapter* is ticked;
+   - *Attached to* is **Internal Network**;
+   - *Name* is `cqulab`;
+   - under *Advanced*, *Promiscuous Mode* is **Allow All**.
+3. Click *Cancel*. You have not changed anything.
+
+![The GNS3 VM's Adapter 3 set to Internal Network cqulab with Promiscuous Mode Allow All](../images/windows-host-gns3vm-adapter3-1.png)
+
+Leave Adapters 1 and 2 exactly as they are. They are how you reach GNS3 in your browser and how the
+GNS3 VM reaches the internet, and changing them will stop GNS3 working.
+
+### If Adapter 3 is missing or different
+
+You may have a GNS3 VM older than v045, or the setting may have been changed. Set it up yourself.
 The GNS3 VM must be **shut down** for this. Closing the GNS3 window in your browser is not enough –
 shut the virtual machine down properly from the VirtualBox window.
 
 1. In VirtualBox, select the GNS3 VM and click *Settings*, then *Network*.
 2. Go to the *Adapter 3* tab and tick *Enable Network Adapter*.
 3. Set *Attached to* to **Internal Network**.
-4. Set *Name* to `cqulab`. Type it carefully and remember exactly what you typed – VirtualBox
-   creates a brand new, separate network for any name it has not seen before, and a typing mistake
-   looks exactly like success until nothing works.
+4. Set *Name* to `cqulab`. Type it carefully – VirtualBox creates a brand new, separate network for
+   any name it has not seen before, and a typing mistake looks exactly like success until nothing
+   works.
 5. Open *Advanced* and set *Promiscuous Mode* to **Allow All**. Without this the Windows machine and
    your GNS3 nodes cannot exchange traffic.
 6. Click *OK*, then start the GNS3 VM again.
-
-![The GNS3 VM's Adapter 3 set to Internal Network cqulab with Promiscuous Mode Allow All](../images/windows-host-gns3vm-adapter3-1.png)
-
-Leave Adapters 1 and 2 exactly as they are. They are how you reach GNS3 in your browser and how the
-GNS3 VM reaches the internet, and changing them will stop GNS3 working.
 
 ## Step 3: Create the Windows Virtual Machine
 
@@ -92,8 +108,8 @@ Before starting the machine, open its *Settings* and give it **two** network ada
 
   ![The Windows machine's Adapter 1 attached to NAT](../images/windows-host-winvm-adapter1-1.png)
 
-- **Adapter 2:** *Attached to* **Internal Network**, *Name* `cqulab` – the same name you used in
-  Step 2. This is the lab network.
+- **Adapter 2:** *Attached to* **Internal Network**, *Name* `cqulab` – the same name as the GNS3
+  VM's Adapter 3 in Step 2. This is the lab network.
 
   ![The Windows machine's Adapter 2 on Internal Network cqulab](../images/windows-host-winvm-adapter2-1.png)
 

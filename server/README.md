@@ -232,6 +232,19 @@ shell you launched it from.
   ARM64 image in the older `GNS3/gns3-vm` repo stops at v0.15.0 (Feb 2024). Checked against the
   releases API 17 Aug 2026. That is the constraint behind pinning **2.2.54 on both**
   architectures — see [One GNS3 version on both appliances](#one-gns3-version-on-both-appliances)
+- **amd64: a third adapter, added before the build** — Internal Network `cqulab`, Promiscuous
+  Mode *Allow All*. It is the Windows Host lab NIC (`eth2`), and adding it here means the
+  `labnic` phase configures it during the build and the exported OVA carries it, so students
+  only check it (`../vm/windows-host.md` Step 2). With the VM shut down:
+
+  ```sh
+  VBoxManage modifyvm "<vm>" --nic3 intnet --intnet3 cqulab --nicpromisc3 allow-all --cableconnected3 on --nictype3 82540EM
+  ```
+
+  Match `--nictype3` to Adapters 1 and 2 (`VBoxManage showvminfo "<vm>" --machinereadable | grep nictype`).
+  Proven on v045 (10 Nov 2026): added on the Linux build host, then built, exported and imported
+  on Windows, and NIC 3 arrived intact. **arm64 gets no third adapter.** The Apple Silicon VM
+  keeps two, with the lab on `eth1` (see *The Windows Host*).
 - Default login `gns3`/`gns3` with passwordless sudo. If you have changed it, set
   `GNS3_VM_PASSWORD`, or install an SSH key and set `ansible_ssh_private_key_file`.
 - About **10 GB** free where GNS3 keeps its data (`/opt` on a stock VM): ~5.5 GB of Docker
@@ -993,12 +1006,13 @@ The build contributes three things, all automatic:
 | The `computer-windows.svg` symbol | `../images/symbols/`, installed by `logos` |
 | DHCP turned **off** on the lab NIC — `eth2` on amd64, **`eth1` on arm64** | the `labnic` phase, `platforms.<p>.lab_nic_interface` in the manifest |
 
-**Which interface it is depends on the platform.** A PC's GNS3 VM has three adapters — NAT,
-host-only, lab — so the lab NIC is `eth2`. The Apple Silicon VM has **two**, NAT and lab, so it is
-**`eth1`**. The phase takes it from `platforms.<profile>.lab_nic_interface`, which is why `labnic`
-needs `--profile` when run on its own; `--interface` still overrides both. Do not "simplify" this
-to one constant or to "whichever interface is last": `eth1` on a PC is the host-only adapter the
-student's browser reaches GNS3 through, and turning DHCP off there would strand them.
+**Which interface it is depends on the platform.** A PC's GNS3 VM has three adapters: host-only
+(`eth0`), NAT (`eth1`) and lab (`eth2`). The Apple Silicon VM has **two**, NAT (`eth0`) and lab, so
+its lab NIC is **`eth1`**. (On v045 amd64, 10 Nov 2026, `eth0` had `192.168.56.115`, `eth1` had
+`10.0.3.15` and `eth2` had no address.) The phase takes it from `platforms.<profile>.lab_nic_interface`,
+which is why `labnic` needs `--profile` when run on its own; `--interface` still overrides both. Do
+not "simplify" this to one constant or to "whichever interface is last": `eth1` on a PC is the NAT
+adapter that gives the GNS3 VM its internet, and turning DHCP off there would cut it off.
 
 **This was wrong until 21 September 2026** — the interface was a single `eth2` for both platforms,
 so on every Mac appliance the phase wrote a file naming an interface that does not exist, reported
@@ -1025,7 +1039,10 @@ phase runs over ssh on `eth0`, so applying would kill the connection driving the
 file covers every future boot; `ip link set eth2 up` covers the current one.
 
 On an **amd64** VM with only two adapters the phase writes the file, reports that `eth2` is absent
-and exits 0 — nothing is wrong, the interface appears when a third adapter is attached. On
+and exits 0. The build is not harmed, and the interface appears when a third adapter is attached.
+But from v045 the PC VM is meant to have the adapter before the build (*Before you start*, **The
+VM**). So on a release build that message means the OVA will ship without it, and every student
+has to add it by hand. On
 **arm64** a missing `eth1` is not benign and the phase says so: the Apple Silicon VM is meant to
 have two adapters, so it means the lab adapter was never attached.
 
