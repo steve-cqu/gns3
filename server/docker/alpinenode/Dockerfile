@@ -82,6 +82,8 @@ jq \
 wpa_supplicant \
 nftables \
 conntrack-tools \
+net-snmp \
+net-snmp-tools \
  && update-ca-certificates
 # nftables and conntrack-tools (added 13 November 2026, for the T1 2027 build). `nft` is what the
 # netsec-crypto book teaches and what the Ubuntu nodes already have; before this, the Alpine
@@ -92,6 +94,13 @@ conntrack-tools \
 # activities are unaffected. Measured 13 November 2026. `conntrack -L` is the only way to
 # see the NAT translation table on a node: /proc/net/nf_conntrack does not exist here. First user:
 # gns3-dev/activities/nat-basics.
+# net-snmp and net-snmp-tools (added 14 November 2026, for the T1 2027 build): the SNMP agent
+# (snmpd, snmptrapd) and the manager tools (snmpget, snmpwalk, snmptable, snmptrap). Before this no
+# image had an SNMP client at all; the Linux Server template runs an agent but nothing could poll
+# it. With both here, a Linux Router is the agent and any Linux Host the manager. NET-SNMP 5.9.5.2,
+# MIB files in /usr/share/snmp/mibs; there is no /etc/snmp, so the student writes snmpd.conf.
+# About +4 MB. Measured on v045 amd64, 14 November 2026: v2c and v3 authPriv polls, IF-MIB counters
+# and linkDown traps all work. First user: gns3-dev/activities/snmp-basics (planned).
 # wpa_supplicant (~5 MB with eapol_test, added 11 October 2026) so ANY Linux Host can log in to an
 # 802.1X switch, as every real operating system can: `wpa_supplicant -D wired -i eth0 -c <conf>`.
 # It is the PC half of network access control Design 2 (the 802.1X Switch template on servicenode
