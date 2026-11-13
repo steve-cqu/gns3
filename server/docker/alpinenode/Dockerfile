@@ -80,7 +80,18 @@ cifs-utils \
 sudo \
 jq \
 wpa_supplicant \
+nftables \
+conntrack-tools \
  && update-ca-certificates
+# nftables and conntrack-tools (added 13 November 2026, for the T1 2027 build). `nft` is what the
+# netsec-crypto book teaches and what the Ubuntu nodes already have; before this, the Alpine
+# family had only `iptables` (iptables-nft, pulled in as a dependency), so a NAT or firewall lab on
+# a Linux Router could not use the book's syntax. Both commands drive nf_tables in the kernel but
+# each keeps its own tables (iptables-nft's appear in `nft list ruleset` as "managed by
+# iptables-nft"; nft's own tables are invisible to `iptables -S`), so the existing iptables
+# activities are unaffected. Measured 13 November 2026. `conntrack -L` is the only way to
+# see the NAT translation table on a node: /proc/net/nf_conntrack does not exist here. First user:
+# gns3-dev/activities/nat-basics.
 # wpa_supplicant (~5 MB with eapol_test, added 11 October 2026) so ANY Linux Host can log in to an
 # 802.1X switch, as every real operating system can: `wpa_supplicant -D wired -i eth0 -c <conf>`.
 # It is the PC half of network access control Design 2 (the 802.1X Switch template on servicenode
