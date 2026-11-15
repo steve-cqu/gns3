@@ -233,7 +233,7 @@ RUN cd /etc/raddb/certs \
 # Every edit is checked with grep afterwards: a sed that silently matches nothing would ship a
 # server without the fix and no build error to say so.
 #
-#   clients.conf  - the lab-nas client (192.168.1.0/24) appended; sw1 for Design 2, commented.
+#   clients.conf  - the lab-net client (192.168.1.0/24) appended; sw1 for Design 2, commented.
 #   users         - three lab users with VLANs (10 Staff, 20 Student, 50 Guest) put FIRST,
 #                   since the file is first-match.
 #   eap           - use_tunneled_reply = yes in BOTH peap {} and ttls {}. With PEAP the VLAN is
