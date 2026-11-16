@@ -277,8 +277,8 @@ appliance. The `chmod` fallback has not been tested.*
 
 ### `[Errno 13] Permission denied: 'session1'` (a project with a PowerShell PC)
 
-**Applies to:** exporting or deleting a project that has a *PowerShell PC* node (appliance v045
-onwards). It happens only now and then. The message names `session1`, and the path, if it is
+**Applies to:** exporting or deleting a project that has a *PowerShell PC* node (appliances
+that include it, from the T1 2027 release). It happens only now and then. The message names `session1`, and the path, if it is
 shown, ends in `root/.dotnet/corefx/Runtime/SharedMemory/.dotnet/shm/session1`.
 
 **The fix:** open the project, click **Start all nodes**, wait until every node is green, then
@@ -299,7 +299,8 @@ the project can be exported. Occasionally PowerShell writes its lock file again 
 step, as `root`, and GNS3 is then not allowed to remove or export it. Stopping the nodes again
 usually lets GNS3 finish the job; the `chown` command does the same job by hand.
 
-*Seen once in seven test projects, 16 November 2026, appliance v046 (a delete, not yet an export).
+*Seen once in seven test projects, 16 November 2026, on a test build of
+the T1 2027 appliance (a delete, not yet an export).
 The cause is inferred from the files' times, not reproduced on demand. Neither the start-and-stop
 fix nor the `chown` fallback has been tested on a failing project yet. A fix in the PC node is
 planned for the T1 2027 appliance.*
