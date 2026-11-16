@@ -236,7 +236,10 @@ RUN cd /etc/raddb/certs \
 #   clients.conf  - the lab-net client (192.168.1.0/24) appended; sw1 for Design 2, commented.
 #   users         - three lab users with VLANs (10 Staff, 20 Student, 50 Guest) put FIRST,
 #                   since the file is first-match.
-#   eap           - use_tunneled_reply = yes in BOTH peap {} and ttls {}. With PEAP the VLAN is
+#   eap           - TLS stays at 1.2: the package's own tls_max_version = "1.2" is asserted, not
+#                   set, so a package that moved to 1.3 fails the build instead of silently
+#                   encrypting the certificate radius-eap-methods filters for (Task 4).
+#                   use_tunneled_reply = yes in BOTH peap {} and ttls {}. With PEAP the VLAN is
 #                   set inside the tunnel, and without this the outer Access-Accept leaves it out
 #                   (measured 7 Oct 2026: 174 bytes without, 190 with). It also copies the real
 #                   user name out of the tunnel, which is what lets a switch see "riley" behind
@@ -255,6 +258,7 @@ RUN cd /etc/raddb \
  && rm /tmp/radius-clients.conf /tmp/radius-users /tmp/authorize \
  && sed -i -E 's/^([[:space:]]*use_tunneled_reply[[:space:]]*=)[[:space:]]*no$/\1 yes/' mods-available/eap \
  && [ "$(grep -cE '^[[:space:]]*use_tunneled_reply = yes$' mods-available/eap)" = 2 ] \
+ && grep -qE '^[[:space:]]*tls_max_version = "1.2"$' mods-available/eap \
  && awk '!done && /^authorize \{/ { print; \
           print "\t#  The 802.1X lab switch'"'"'s VLAN lookup (policy.d/nac). Does nothing unless the"; \
           print "\t#  request carries Service-Type = Authorize-Only."; \
