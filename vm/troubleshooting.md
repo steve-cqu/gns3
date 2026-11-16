@@ -275,6 +275,35 @@ puts it back.
 was confirmed by reading GNS3 2.2.54's own code, but the failure has not been reproduced on a lab
 appliance. The `chmod` fallback has not been tested.*
 
+### `[Errno 13] Permission denied: 'session1'` (a project with a PowerShell PC)
+
+**Applies to:** exporting or deleting a project that has a *PowerShell PC* node (appliance v045
+onwards). It happens only now and then. The message names `session1`, and the path, if it is
+shown, ends in `root/.dotnet/corefx/Runtime/SharedMemory/.dotnet/shm/session1`.
+
+**The fix:** open the project, click **Start all nodes**, wait until every node is green, then
+click **Stop all nodes** and wait until every PC and router is red. Then export (or delete) again.
+
+**If it still fails:** get a shell on the GNS3 VM (open the VM's console window in VirtualBox or
+VMware and choose **Shell** from its menu) and give the project folders back to GNS3's own user:
+
+```sh
+sudo chown -R gns3:gns3 /opt/gns3/projects
+```
+
+Then export again. This changes only who owns the files, not what is in them.
+
+**Why:** PowerShell on the simulated PC keeps a small lock file in the PC's `/root` folder, which
+is saved inside your project. When GNS3 stops a node it hands that folder back to its own user so
+the project can be exported. Occasionally PowerShell writes its lock file again just after that
+step, as `root`, and GNS3 is then not allowed to remove or export it. Stopping the nodes again
+usually lets GNS3 finish the job; the `chown` command does the same job by hand.
+
+*Seen once in seven test projects, 16 November 2026, appliance v046 (a delete, not yet an export).
+The cause is inferred from the files' times, not reproduced on demand. Neither the start-and-stop
+fix nor the `chown` fallback has been tested on a failing project yet. A fix in the PC node is
+planned for the T1 2027 appliance.*
+
 ---
 
 ## Four checks to report a problem
