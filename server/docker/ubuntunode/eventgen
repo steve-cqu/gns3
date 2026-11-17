@@ -194,14 +194,16 @@ ev_grow() { # the day's slow climb: 1 MB an hour, as if an application log grew
     disk_up; dd if=/dev/zero of="$DISK/app.log.$(date +%s)" bs=1M count=1 2>/dev/null
 }
 ev_runaway() { # fill past 92%, hold 4 minutes so a `for:` rule can fire, then "logrotate" frees it
-    disk_up; newpid; p=$P
+    # Each episode writes and frees only its own files (named with its pid), so a triggered runaway
+    # and the day's own one can overlap without the first to finish cutting the other's hold short.
+    disk_up; newpid; p=$P; me=$$
     TYPE=disk say user.warning "app[$p]" "debug logging left on after a change; writing $DISK/debug.log"
     k=0; while [ "$(used_pct)" -lt 92 ] && [ $k -lt 60 ]; do
-        dd if=/dev/zero of="$DISK/debug.log.$k" bs=1M count=3 2>/dev/null; k=$((k+1)); sleep 5
+        dd if=/dev/zero of="$DISK/debug.log.$me.$k" bs=1M count=3 2>/dev/null; k=$((k+1)); sleep 5
     done
     sleep 240
     freed=$(du -sm "$DISK" 2>/dev/null | awk '{print $1}')
-    rm -f "$DISK"/debug.log.*
+    rm -f "$DISK"/debug.log."$me".*
     freed=$(( freed - $(du -sm "$DISK" | awk '{print $1}') ))
     TYPE=disk say syslog.info "logrotate" "rotated $DISK/debug.log, freed ${freed} MB"
 }
@@ -330,7 +332,7 @@ cmd_trigger() {
         login)      pick 6 $USERS; ev_login "$PICK.$(( $(date +%s) % 50 + 10 ))"; echo "One login written." ;;
         sudo)       pick 6 $USERS; ev_sudo "$PICK"; echo "One sudo line written." ;;
         cron)       ev_cron backup; echo "One cron line written." ;;
-        failed-ssh) ev_failed 20 1; echo "A burst of 20 failed logins written, from one address, over 20 seconds." ;;
+        failed-ssh) ev_failed 20 1; echo "A burst of 20 failed logins written, from one address, over about 20 seconds." ;;
         disk)       disk_up; nohup "$ME" _episode runaway now >/dev/null 2>&1 &
                     echo "A runaway is filling $DISK past 92% (under two minutes), holding for four minutes, then freeing it." ;;
         *) die "unknown type: $1" ;;
