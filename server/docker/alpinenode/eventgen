@@ -1,0 +1,351 @@
+#!/bin/sh
+# eventgen: a simulated "day" of ordinary operations on this node, run in half an hour.
+#
+#   eventgen start [--seed N] [--day MINUTES] [--only TYPES]
+#   eventgen stop
+#   eventgen status
+#   eventgen schedule [--seed N] [--day MINUTES] [--only TYPES]
+#   eventgen trigger TYPE          TYPE: login | sudo | cron | failed-ssh | disk
+#
+# What it makes: logins, sudo use, cron runs, failed SSH (a trickle and one burst) and a disk that
+# fills (a slow climb and one runaway that "logrotate" then frees). Log lines go through `logger`
+# in the format the real daemon writes, so whatever syslog this node runs carries them on: start
+# rsyslogd (Ubuntu Host) or syslogd (Alpine nodes) first. The disk is a 64 MB tmpfs at /srv/data,
+# which node_exporter reports like any other filesystem.
+#
+# Every line it writes ends in sim=HH:MM, the simulated time of day. The events are simulated:
+# no one logged in, nothing attacked this node. The clock is real (every node shares the VM's), so
+# what is compressed is the schedule, not the timestamps.
+#
+# The seed decides the day. By default it comes from this node's name and the second octet of its
+# first address, so the same host at two sites (10.11.x and 10.12.x) has different days, and each
+# has the same day every time it starts. The burst and the runaway always fall between minutes 8
+# and 25 after start (scaled down for a day shorter than 30 minutes), so a 30-minute session sees
+# both after a few minutes of quiet baseline. The day repeats until `eventgen stop`.
+#
+# The same file ships in ubuntunode and alpinenode; keep the two copies identical.
+
+STATE=/root/.eventgen
+DISK=/srv/data
+DISK_MB=64
+LOG=$STATE/events.log
+ME=$(command -v eventgen 2>/dev/null || echo "$0")
+
+USERS="jordan sam riley alex casey morgan"
+BADUSERS="admin root test oracle ubuntu pi user guest postgres git support"
+
+die() { echo "eventgen: $*" >&2; exit 1; }
+
+# ---- options --------------------------------------------------------------------------------
+SEED=""; DAY=30; ONLY="login sudo cron failed-ssh disk"
+parse_opts() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --seed) SEED=$2; shift 2 ;;
+            --day)  DAY=$2;  shift 2 ;;
+            --only) ONLY=$(echo "$2" | tr ',' ' '); shift 2 ;;
+            *) die "unknown option: $1" ;;
+        esac
+    done
+    case "$DAY" in ''|*[!0-9]*) die "--day takes whole minutes" ;; esac
+    [ "$DAY" -ge 5 ] || die "--day must be at least 5 minutes"
+    for t in $ONLY; do
+        case "$t" in login|sudo|cron|failed-ssh|disk) ;; *) die "unknown type: $t" ;; esac
+    done
+    [ -n "$SEED" ] || SEED=$(default_seed)
+    case "$SEED" in ''|*[!0-9]*) die "--seed takes a whole number" ;; esac
+}
+
+wanted() { case " $ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
+
+# ---- this node --------------------------------------------------------------------------------
+first_addr() { ip -4 -o addr show scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}'; }
+octet2() { first_addr | awk -F. '{print ($2==""?0:$2)}'; }
+octet3() { first_addr | awk -F. '{print ($3==""?0:$3)}'; }
+default_seed() {
+    h=$( (hostname 2>/dev/null || cat /etc/hostname) | cksum | awk '{print $1 % 100000}')
+    o=$(octet2); [ -n "$o" ] || o=0
+    echo $(( o * 100000 + h ))
+}
+is_debian() { [ -f /etc/debian_version ]; }
+
+# ---- a portable seeded random sequence (no $RANDOM, no awk srand: they differ by image) -------
+R=1
+rseed() { R=$(( ($1 % 2147483647) + 1 )); }
+# rnext sets RV and advances the sequence. Never call it inside $(...): the subshell's step is lost.
+rnext() { R=$(( (R * 1103515245 + 12345) % 2147483648 )); RV=$(( (R / 65536) % $1 )); }
+pick()  { n=$1; shift; rnext "$n"; i=0; for w in "$@"; do [ $i -eq "$RV" ] && { PICK=$w; return; }; i=$((i+1)); done; }
+
+# ---- the day's plan: "offset_seconds type arg" lines -----------------------------------------
+plan() {
+    secs=$(( DAY * 60 ))
+    hour=$(( secs / 24 ))
+    rseed "$SEED"
+    ulist=$USERS; set -- $ulist; nusers=$#
+    {
+        for h in $(seq 0 23); do
+            base=$(( h * hour ))
+            echo "$base tick $h"
+            if wanted login; then
+                if [ $h -ge 8 ] && [ $h -le 17 ]; then rnext 3; n=$(( RV + 1 )); else rnext 4; n=$(( RV == 0 ? 1 : 0 )); fi
+                k=0; while [ $k -lt $n ]; do
+                    rnext "$hour"; set -- $ulist; rnext "$nusers"; eval u=\${$((RV+1))}
+                    rnext "$hour"; at=$(( base + RV ))
+                    rnext 50; host=$(( RV + 10 ))
+                    echo "$at login $u.$host"
+                    rnext $(( hour * 3 )); out=$(( at + hour / 2 + RV ))
+                    [ $out -lt $secs ] && echo "$out logout $u"
+                    k=$((k+1))
+                done
+            fi
+            if wanted sudo && [ $h -ge 9 ] && [ $h -le 16 ]; then
+                rnext 2; if [ "$RV" -eq 0 ]; then
+                    set -- $ulist; rnext "$nusers"; eval u=\${$((RV+1))}
+                    rnext "$hour"; echo "$(( base + RV )) sudo $u"
+                fi
+            fi
+            if wanted cron; then
+                rnext 20; echo "$(( base + 1 + RV )) cron hourly"
+                [ $h -eq 2 ] && { rnext 20; echo "$(( base + 2 + RV )) cron backup"; }
+                [ $h -eq 3 ] && { rnext 20; echo "$(( base + 2 + RV )) cron logrotate"; }
+            fi
+            if wanted failed-ssh; then
+                rnext 5; if [ "$RV" -lt 2 ]; then rnext "$hour"; echo "$(( base + RV )) failed-ssh trickle"; fi
+            fi
+            if wanted disk; then
+                rnext "$hour"; echo "$(( base + RV )) disk grow"
+            fi
+        done
+        # The two episodes: minutes 8-25 of a 30-minute-or-longer day, at least 4 minutes apart.
+        lo=$(( secs * 8 / 30 )); hi=$(( secs * 25 / 30 ))
+        [ $lo -gt 480 ] && lo=480
+        [ $hi -gt 1500 ] && hi=1500
+        span=$(( hi - lo ))
+        rnext "$span"; b=$(( lo + RV ))
+        rnext "$span"; d=$(( lo + RV ))
+        gap=$(( 240 * secs / 1800 )); [ $gap -gt 240 ] && gap=240
+        if [ $(( b > d ? b - d : d - b )) -lt $gap ]; then
+            if [ $(( b + gap )) -le $hi ]; then d=$(( b + gap )); else d=$(( b - gap )); fi
+        fi
+        wanted failed-ssh && echo "$b failed-ssh burst"
+        wanted disk && echo "$d disk runaway"
+        echo "$secs end day"
+    } | sort -n -s -k1,1
+}
+
+simtime() { s=$(( $1 * 1440 / (DAY * 60) )); printf '%02d:%02d' $(( s / 60 % 24 )) $(( s % 60 )); }
+
+# ---- writing a line ---------------------------------------------------------------------------
+newpid() { rnext 28000; P=$(( RV + 1200 )); }
+say() { # facility.priority tag message
+    logger -p "$1" -t "$2" "$3 sim=$SIM"
+    echo "$(date +%s) $TYPE sim=$SIM" >>"$LOG"
+}
+attacker() { rnext 2; if [ "$RV" -eq 0 ]; then pre=203.0.113; else pre=198.51.100; fi; rnext 250; SRC="$pre.$(( RV + 2 ))"; }
+uid_of() { i=1001; for w in $USERS; do [ "$w" = "$1" ] && { echo $i; return; }; i=$((i+1)); done; echo 1001; }
+
+ev_login() { # user.hostoctet
+    u=${1%.*}; h=${1#*.}; src="10.$(octet2).$(octet3).$h"; newpid; p=$P; rnext 40000; port=$(( RV + 20000 ))
+    TYPE=login say authpriv.info "sshd[$p]" "Accepted password for $u from $src port $port ssh2"
+    is_debian && TYPE=login say authpriv.info "sshd[$p]" "pam_unix(sshd:session): session opened for user $u(uid=$(uid_of "$u")) by (uid=0)"
+}
+ev_logout() {
+    newpid; p=$P
+    if is_debian; then TYPE=login say authpriv.info "sshd[$p]" "pam_unix(sshd:session): session closed for user $1"
+    else TYPE=login say authpriv.info "sshd[$p]" "Disconnected from user $1"; fi
+}
+ev_sudo() {
+    u=$1
+    if is_debian; then pick 4 "/usr/bin/apt-get update" "/usr/sbin/nginx -s reload" "/usr/bin/tail -n 50 /var/log/auth.log" "/usr/bin/systemctl status ssh"
+    else pick 4 "/sbin/apk update" "/usr/sbin/nginx -s reload" "/usr/bin/tail -n 50 /var/log/messages" "/sbin/rc-service sshd status"; fi
+    c=$PICK
+    TYPE=sudo say authpriv.notice "sudo" "   $u : TTY=pts/0 ; PWD=/home/$u ; USER=root ; COMMAND=$c"
+}
+ev_cron() {
+    case "$1" in
+        hourly)    c="cd / && run-parts --report /etc/cron.hourly"; a="run-parts /etc/periodic/hourly" ;;
+        backup)    c="/usr/local/bin/backup.sh >/dev/null 2>&1";   a="/usr/local/bin/backup.sh" ;;
+        logrotate) c="test -x /usr/sbin/logrotate && /usr/sbin/logrotate /etc/logrotate.conf"; a="run-parts /etc/periodic/daily" ;;
+    esac
+    newpid; p=$P
+    if is_debian; then TYPE=cron say cron.info "CRON[$p]" "(root) CMD ($c)"
+    else TYPE=cron say cron.info "crond[$p]" "USER root pid $((p + 1)) cmd $a"; fi
+}
+ev_failed() { # n attempts, seconds apart, from one address
+    n=$1; gap=$2; attacker; src=$SRC; set -- $BADUSERS; nb=$#; k=0
+    while [ $k -lt "$n" ]; do
+        rnext "$nb"; eval u=\${$((RV+1))}; newpid; p=$P; rnext 40000; port=$(( RV + 20000 ))
+        if [ "$u" = root ]; then
+            TYPE=failed-ssh say authpriv.info "sshd[$p]" "Failed password for root from $src port $port ssh2"
+        else
+            TYPE=failed-ssh say authpriv.info "sshd[$p]" "Invalid user $u from $src port $port"
+            TYPE=failed-ssh say authpriv.info "sshd[$p]" "Failed password for invalid user $u from $src port $port ssh2"
+        fi
+        k=$((k+1)); [ $k -lt "$n" ] && sleep "$gap"
+    done
+}
+disk_up() {
+    mkdir -p "$DISK"
+    grep -q " $DISK tmpfs " /proc/mounts || mount -t tmpfs -o size=${DISK_MB}m tmpfs "$DISK" \
+        || die "could not mount a tmpfs at $DISK"
+}
+used_pct() { df -P "$DISK" | awk 'NR==2 {sub("%","",$5); print $5}'; }
+ev_grow() { # the day's slow climb: 1 MB an hour, as if an application log grew
+    disk_up; dd if=/dev/zero of="$DISK/app.log.$(date +%s)" bs=1M count=1 2>/dev/null
+}
+ev_runaway() { # fill past 92%, hold 4 minutes so a `for:` rule can fire, then "logrotate" frees it
+    disk_up; newpid; p=$P
+    TYPE=disk say user.warning "app[$p]" "debug logging left on after a change; writing $DISK/debug.log"
+    k=0; while [ "$(used_pct)" -lt 92 ] && [ $k -lt 60 ]; do
+        dd if=/dev/zero of="$DISK/debug.log.$k" bs=1M count=3 2>/dev/null; k=$((k+1)); sleep 5
+    done
+    sleep 240
+    freed=$(du -sm "$DISK" 2>/dev/null | awk '{print $1}')
+    rm -f "$DISK"/debug.log.*
+    freed=$(( freed - $(du -sm "$DISK" | awk '{print $1}') ))
+    TYPE=disk say syslog.info "logrotate" "rotated $DISK/debug.log, freed ${freed} MB"
+}
+
+# ---- the background run ----------------------------------------------------------------------
+run_day() {
+    start=$(date +%s)
+    plan | while read -r off type arg; do
+        now=$(date +%s); wait_s=$(( start + off - now )); [ $wait_s -gt 0 ] && sleep "$wait_s"
+        SIM=$(simtime "$off")
+        case "$type" in
+            tick)   echo "$start $DAY $SEED $(date +%s) $SIM" >"$STATE/now" ;;
+            login)  ev_login "$arg" ;;
+            logout) ev_logout "$arg" ;;
+            sudo)   ev_sudo "$arg" ;;
+            cron)   ev_cron "$arg" ;;
+            failed-ssh) if [ "$arg" = burst ]; then "$ME" _episode burst "$SIM" & else ev_failed 1 0; fi ;;
+            disk)   if [ "$arg" = runaway ]; then "$ME" _episode runaway "$SIM" & else ev_grow; fi ;;
+            end)    : ;;
+        esac
+    done
+}
+run() {
+    parse_opts "$@"; rseed "$SEED"
+    echo $$ >"$STATE/pid"
+    d=1
+    while :; do
+        echo "$d" >"$STATE/day"
+        rm -f "$DISK"/app.log.* 2>/dev/null       # a new day's log starts empty
+        run_day
+        d=$((d+1))
+    done
+}
+episode() { # runs as its own process so the day's timeline keeps going
+    SIM=$2; rseed "$(date +%s)"
+    case "$1" in
+        burst)   ev_failed $(( 15 + $(date +%s) % 16 )) 3 ;;
+        runaway) ev_runaway ;;
+    esac
+}
+
+# ---- commands ---------------------------------------------------------------------------------
+syslog_warn() {
+    if ! pgrep -x rsyslogd >/dev/null 2>&1 && ! pgrep -x syslogd >/dev/null 2>&1; then
+        echo "Warning: no syslog daemon is running, so the log lines go nowhere."
+        if is_debian; then echo "         Start one with: rsyslogd"; else echo "         Start one with: syslogd"; fi
+    fi
+}
+# Running means the recorded process exists AND is this loop: after a node Stop/Start the old pid
+# can belong to anything.
+# This generator's own processes: argv[1] is the eventgen script and argv[2] is _run or _episode.
+# Matched on the exact arguments, not with pgrep -f, which also matches any command line that merely
+# mentions "eventgen _run" (a grep, a docker exec) and would freeze it.
+egpids() {
+    for d in /proc/[0-9]*; do
+        [ "${d#/proc/}" = "$$" ] && continue
+        tr '\0' '\n' <"$d/cmdline" 2>/dev/null | awk -v want="${1:-any}" '
+            NR==2 { a1=$0 } NR==3 { a2=$0 }
+            END { n=split(a1,f,"/"); ok=(f[n]=="eventgen") && (want=="any" ? (a2=="_run"||a2=="_episode") : a2==want); exit !ok }' \
+            && echo "${d#/proc/}"
+    done
+}
+running() {
+    [ -f "$STATE/pid" ] || return 1
+    egpids _run | grep -qx "$(cat "$STATE/pid")"
+}
+
+cmd_start() {
+    parse_opts "$@"
+    running && die "already running (seed $(cat "$STATE/seed")); run 'eventgen stop' first"
+    mkdir -p "$STATE"; : >"$LOG"
+    wanted disk && disk_up
+    echo "$SEED" >"$STATE/seed"; echo "$DAY" >"$STATE/daylen"; echo "$ONLY" >"$STATE/only"
+    nohup "$ME" _run --seed "$SEED" --day "$DAY" --only "$(echo $ONLY | tr ' ' ',')" >/dev/null 2>&1 &
+    sleep 1
+    running || die "the generator did not start"
+    echo "eventgen: started. Seed $SEED, a $DAY-minute day, types: $ONLY."
+    echo "The events are simulated, and every line ends in sim=HH:MM."
+    syslog_warn
+    echo "See it:  eventgen status      Stop it:  eventgen stop"
+}
+cmd_stop() {
+    was=no; running && was=yes
+    # The loop, the episodes and their children. Freeze the whole tree first, or a child (a sleep,
+    # a dd) is re-parented when its parent dies and outlives the stop.
+    pids=$(egpids)
+    if [ -n "$pids" ]; then
+        kill -STOP $pids 2>/dev/null
+        for p in $pids; do pkill -P "$p" 2>/dev/null; done
+        kill $pids 2>/dev/null; kill -CONT $pids 2>/dev/null
+        sleep 1
+    fi
+    rm -f "$STATE/pid"
+    if grep -q " $DISK tmpfs " /proc/mounts 2>/dev/null; then rm -f "$DISK"/*; umount "$DISK" 2>/dev/null; fi
+    [ $was = yes ] && echo "eventgen: stopped, and $DISK emptied." || echo "eventgen: was not running."
+}
+cmd_status() {
+    if running; then
+        set -- $(cat "$STATE/now" 2>/dev/null)
+        echo "Running: yes (simulated events; seed $(cat "$STATE/seed"), $(cat "$STATE/daylen")-minute day, day $(cat "$STATE/day" 2>/dev/null), now about sim=${5:-00:00})"
+        echo "Types:   $(cat "$STATE/only")"
+    else
+        echo "Running: no"
+    fi
+    if [ -s "$LOG" ]; then
+        echo "Lines written since the last start:"
+        awk '{c[$2]++} END {for (t in c) printf "  %-11s %d\n", t, c[t]}' "$LOG" | sort
+    fi
+    if grep -q " $DISK tmpfs " /proc/mounts 2>/dev/null; then echo "Disk:    $DISK $(used_pct)% used of ${DISK_MB} MB"; fi
+    syslog_warn
+}
+cmd_schedule() {
+    parse_opts "$@"
+    echo "Seed $SEED, a $DAY-minute day. Minute after start, simulated time, event:"
+    plan | while read -r off type arg; do
+        case "$type" in tick|end|logout) continue ;; esac
+        case "$type$arg" in diskgrow|failed-sshtrickle|cronhourly) continue ;; esac
+        printf '  %3d:%02d  sim=%s  %s %s\n' $(( off / 60 )) $(( off % 60 )) "$(simtime "$off")" "$type" "$arg"
+    done
+    echo "(Not listed: the hourly cron run, the slow disk climb and the occasional single failed login.)"
+}
+cmd_trigger() {
+    [ -n "$1" ] || die "trigger what? login | sudo | cron | failed-ssh | disk"
+    mkdir -p "$STATE"; rseed "$(date +%s)"; SIM=now
+    case "$1" in
+        login)      pick 6 $USERS; ev_login "$PICK.$(( $(date +%s) % 50 + 10 ))"; echo "One login written." ;;
+        sudo)       pick 6 $USERS; ev_sudo "$PICK"; echo "One sudo line written." ;;
+        cron)       ev_cron backup; echo "One cron line written." ;;
+        failed-ssh) ev_failed 20 1; echo "A burst of 20 failed logins written, from one address, over 20 seconds." ;;
+        disk)       disk_up; nohup "$ME" _episode runaway now >/dev/null 2>&1 &
+                    echo "A runaway is filling $DISK past 92% (under two minutes), holding for four minutes, then freeing it." ;;
+        *) die "unknown type: $1" ;;
+    esac
+    syslog_warn
+}
+
+[ "$(id -u)" -eq 0 ] || die "run it as root"
+case "$1" in
+    start)    shift; cmd_start "$@" ;;
+    stop)     cmd_stop ;;
+    status)   cmd_status ;;
+    schedule) shift; cmd_schedule "$@" ;;
+    trigger)  shift; cmd_trigger "$@" ;;
+    _run)     shift; run "$@" ;;
+    _episode) shift; episode "$@" ;;
+    *) sed -n '2,9p' "$ME" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

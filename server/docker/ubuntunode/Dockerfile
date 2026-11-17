@@ -60,6 +60,14 @@ COPY reset-github.sh /bin/reset-github.sh
 COPY start-sshd      /bin/start-sshd
 RUN chmod +x /bin/setup-github.sh /bin/reset-github.sh /bin/start-sshd
 
+# eventgen: a simulated "day" of logins, sudo, cron, failed SSH and a filling disk, run in half an
+# hour, so a lab's logs and alert rules have something to work on. Seeded per node, switchable,
+# and every line it writes ends in sim=HH:MM. The same file ships in ubuntunode and alpinenode
+# (and so in every image built FROM them); keep the two copies identical. See
+# gns3-dev/notes/event-generators.md.
+COPY eventgen /usr/local/bin/eventgen
+RUN chmod +x /usr/local/bin/eventgen
+
 # A class group and a student user. The account is what ssh-hardening restricts logins to
 # with AllowUsers. It ships with NO SSH keys: a single private key copied into every node
 # of every image is the exact practice the SSH activities teach against, and students

@@ -185,6 +185,14 @@ RUN chmod +x /usr/local/bin/start-tailscale.sh \
              /usr/local/bin/tailscale-status.sh \
              /usr/local/bin/stop-tailscale.sh
 
+# eventgen: a simulated "day" of logins, sudo, cron, failed SSH and a filling disk, run in half an
+# hour, so a lab's logs and alert rules have something to work on. Seeded per node, switchable,
+# and every line it writes ends in sim=HH:MM. The same file ships in ubuntunode and alpinenode
+# (and so in every image built FROM them); keep the two copies identical. See
+# gns3-dev/notes/event-generators.md.
+COPY eventgen /usr/local/bin/eventgen
+RUN chmod +x /usr/local/bin/eventgen
+
 # A class group and a student user. The account is what ssh-hardening restricts logins to
 # with AllowUsers. It ships with NO SSH keys: a single private key copied into every node
 # of every image is the exact practice the SSH activities teach against, and students
