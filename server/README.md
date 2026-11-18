@@ -235,7 +235,7 @@ shell you launched it from.
 - **amd64: a third adapter, added before the build** — Internal Network `cqulab`, Promiscuous
   Mode *Allow All*. It is the Windows Host lab NIC (`eth2`), and adding it here means the
   `labnic` phase configures it during the build and the exported OVA carries it, so students
-  only check it (`../vm/windows-host.md` Step 2). With the VM shut down:
+  only check it (`../students/windows-host.md` Step 2). With the VM shut down:
 
   ```sh
   VBoxManage modifyvm "<vm>" --nic3 intnet --intnet3 cqulab --nicpromisc3 allow-all --cableconnected3 on --nictype3 82540EM
@@ -516,7 +516,7 @@ VBoxManage export    "GNS3 VM" -o GNS3-CQU-v<version>-amd64.ova
 **If you exported on Linux or macOS, retarget the host-only adapter for Windows** before
 releasing. The `.ovf` carries the exporting host's name for the host-only network: `vboxnet0`
 here, `VirtualBox Host-Only Ethernet Adapter` on Windows. Without the rewrite, every Windows
-student hits the *interface not found* error in `../vm/troubleshooting.md` on first boot:
+student hits the *interface not found* error in `../students/troubleshooting.md` on first boot:
 
 ```sh
 server/ova-set-hostonly.py GNS3-CQU-v<version>-amd64.ova --show   # expect vboxnet0
@@ -563,7 +563,7 @@ rm -rf ~/VMs/GNS3-export.vmwarevm                 # or delete it from Fusion
 no suffix. They import happily on an Intel
 machine and then never boot, so a student who grabs the wrong file sees a broken download
 rather than an obvious mismatch. The student instructions in
-[`../vm/getting-started-mac.md`](../vm/getting-started-mac.md) tell them to look for the Mac
+[`../students/getting-started-mac.md`](../students/getting-started-mac.md) tell them to look for the Mac
 appliance; the filename is what makes that possible.
 
 That is the whole export. There is no second pass: the staff appliance was retired in

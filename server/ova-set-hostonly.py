@@ -4,7 +4,7 @@
 VirtualBox records the exporting host's own name for the host-only network in the `.ovf`, in the
 `<vbox:Machine>` section: `vboxnet0` on Linux and macOS, `VirtualBox Host-Only Ethernet Adapter`
 on Windows. An appliance exported on one and imported on the other refuses to start until the
-user visits both adapter tabs in *Settings → Network* (`../vm/troubleshooting.md`). The amd64
+user visits both adapter tabs in *Settings → Network* (`../students/troubleshooting.md`). The amd64
 appliance is built on Linux but almost every student imports it on Windows, so this rewrites the
 name before release instead of leaving every student to hit the error.
 

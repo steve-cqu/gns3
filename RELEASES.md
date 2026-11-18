@@ -63,7 +63,7 @@ exported on the Linux build host. `-amd64-windows.ova` is the same file after
 the `.mf`, so the Windows file has its own checksum, recorded 27 Sep 2026. It is 8,192 bytes
 larger because Python's tar writer pads the end of the archive to a 10 KB record and VirtualBox's does not. Both amd64 files
 hold the same machine. Before this release, an OVA exported on Linux failed its first boot on
-Windows with the host-only *interface not found* error in `vm/troubleshooting.md`. Shipping both
+Windows with the host-only *interface not found* error in `students/troubleshooting.md`. Shipping both
 files may be dropped in T1 2027, going back to one file per architecture.
 
 **The arm64 appliance was changed after its test sweep, and kept the v044 label.** Built 25 Sep
@@ -202,7 +202,7 @@ repo.
    ```
 5. Add the row above, with the OVA filenames, sizes and sha256 sums. v044 is the first release
    to record them; v022 and v027 were reconstructed after the fact and have none. The size is
-   what `vm/virtualbox.md` tells students to check with you when they suspect a corrupt
+   what `students/virtualbox.md` tells students to check with you when they suspect a corrupt
    download.
 5a. **Archive the release to the shared drive.** The appliance is frozen for years, not months,
    and a from-source rebuild in 2028 depends on upstreams that will have moved or gone. Freeze

@@ -27,8 +27,8 @@ engine and its manifest, the node Dockerfiles and their start-up scripts, the
 GNS3 template definitions, the symbol generator, the noVNC console service and
 the host-side Windows Host scripts.
 
-DOCUMENTATION AND IMAGES — the student guides in vm/, the build and release
-runbooks, the screenshots and the node symbols — are published under
+DOCUMENTATION AND IMAGES — the student guides in students/, the educator guides
+in educators/, the build and release runbooks, the screenshots and the node symbols — are published under
 Creative Commons Attribution 4.0 International (CC BY 4.0):
 
     https://creativecommons.org/licenses/by/4.0/
