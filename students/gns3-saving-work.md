@@ -99,8 +99,8 @@ a node's kept directories readable for the export when it stops a node that has 
 skipping this can make the export fail with `Permission denied` on a folder such as
 `/etc/wireguard`. The built-in switches stay green after stopping, and that is normal.
 
-To export, right-click the project name and choose the export option, then save the file somewhere
-outside the GNS3 VM.
+To export, open the GNS3 menu (the logo at the top left) and choose **Project settings → Export
+portable project**, then save the file somewhere outside the GNS3 VM.
 
 ## Starting a Node Again From Scratch
 

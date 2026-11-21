@@ -20,6 +20,19 @@ If the import fails, the two common causes are that the file did not download co
 
 Importing a project does not install anything else. All of the node images the activities use are already on the virtual machine, so an imported project is ready to start.
 
+## Closing and Exporting a Project
+
+Both are in the GNS3 menu: click the GNS3 logo at the top left, then **Project settings**.
+
+- **Close project** closes it. Open it again from the project list with **Open project**.
+- **Export portable project** saves the whole project as one `.gns3project` file. Stop all nodes
+  first; [Saving Your Work](gns3-saving-work.md) explains why and what an export contains.
+
+The toolbar along the top of a project has **Start/Resume all nodes** (▶) and **Stop all nodes**
+(■).
+
+*Checked on the web interface of GNS3 2.2.54, 21 November 2026.*
+
 ## GNS3 Web Interface Basics
 
 ### Adding a Node

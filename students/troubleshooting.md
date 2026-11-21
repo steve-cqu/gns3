@@ -253,8 +253,8 @@ causes the hang, without the reused address, is not established.*
 current appliance does (see [Saving Your Work in GNS3](gns3-saving-work.md)). The folder
 named in the error may be different, but it is usually `/etc/wireguard`.
 
-**The fix:** open the project, click **Start all nodes**, wait until every node is green, then
-click **Stop all nodes** and wait until every host and router is red. Then export again. The
+**The fix:** open the project, click **Start/Resume all nodes** (the ▶ button), wait until every node is green, then
+click **Stop all nodes** (the ■ button) and wait until every host and router is red. Then export again. The
 built-in switches stay green after stopping, and that is normal.
 
 Clicking **Stop** on nodes that already look stopped is not enough. They must be started first.
@@ -281,8 +281,8 @@ appliance. The `chmod` fallback has not been tested.*
 that include it, from the T1 2027 release). It happens only now and then. The message names `session1`, and the path, if it is
 shown, ends in `root/.dotnet/corefx/Runtime/SharedMemory/.dotnet/shm/session1`.
 
-**The fix:** open the project, click **Start all nodes**, wait until every node is green, then
-click **Stop all nodes** and wait until every PC and router is red. Then export (or delete) again.
+**The fix:** open the project, click **Start/Resume all nodes** (the ▶ button), wait until every node is green, then
+click **Stop all nodes** (the ■ button) and wait until every PC and router is red. Then export (or delete) again.
 
 **If it still fails:** get a shell on the GNS3 VM (open the VM's console window in VirtualBox or
 VMware and choose **Shell** from its menu) and give the project folders back to GNS3's own user:
