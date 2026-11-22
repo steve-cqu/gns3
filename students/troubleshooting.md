@@ -277,33 +277,31 @@ appliance. The `chmod` fallback has not been tested.*
 
 ### `[Errno 13] Permission denied: 'session1'` (a project with a PowerShell PC)
 
-**Applies to:** exporting or deleting a project that has a *PowerShell PC* node (appliances
-that include it, from the T1 2027 release). It happens only now and then. The message names `session1`, and the path, if it is
-shown, ends in `root/.dotnet/corefx/Runtime/SharedMemory/.dotnet/shm/session1`.
+**Applies to:** exporting or deleting a project that has a *PowerShell PC* node, on a test build
+of the appliance made before 22 November 2026. The PC node was fixed then, so the T1 2027 appliance
+should not show it. The message names `session1`, and the path, if it is shown, ends in
+`root/.dotnet/corefx/Runtime/SharedMemory/.dotnet/shm/session1`.
 
-**The fix:** open the project, click **Start/Resume all nodes** (the ▶ button), wait until every node is green, then
-click **Stop all nodes** (the ■ button) and wait until every PC and router is red. Then export (or delete) again.
-
-**If it still fails:** get a shell on the GNS3 VM (open the VM's console window in VirtualBox or
-VMware and choose **Shell** from its menu) and give the project folders back to GNS3's own user:
+**The fix:** get a shell on the GNS3 VM (open the VM's console window in VirtualBox or VMware and
+choose **Shell** from its menu) and give the project folders back to GNS3's own user:
 
 ```sh
 sudo chown -R gns3:gns3 /opt/gns3/projects
 ```
 
-Then export again. This changes only who owns the files, not what is in them.
+Then export (or delete) again. This changes only who owns the files, not what is in them.
 
-**Why:** PowerShell on the simulated PC keeps a small lock file in the PC's `/root` folder, which
+Starting and stopping all the nodes again rarely helps: in testing, nine stops out of ten left the
+file behind.
+
+**Why:** PowerShell on the simulated PC kept a small lock file in the PC's `/root` folder, which
 is saved inside your project. When GNS3 stops a node it hands that folder back to its own user so
-the project can be exported. Occasionally PowerShell writes its lock file again just after that
-step, as `root`, and GNS3 is then not allowed to remove or export it. Stopping the nodes again
-usually lets GNS3 finish the job; the `chown` command does the same job by hand.
+the project can be exported, and PowerShell often wrote its lock file again just after that step,
+as `root`. GNS3 was then not allowed to remove or export it.
 
-*Seen once in seven test projects, 16 November 2026, on a test build of
-the T1 2027 appliance (a delete, not yet an export).
-The cause is inferred from the files' times, not reproduced on demand. Neither the start-and-stop
-fix nor the `chown` fallback has been tested on a failing project yet. A fix in the PC node is
-planned for the T1 2027 appliance.*
+*Verified 22 November 2026 on a v046 test build: 9 of 10 start-and-stop cycles of a four-PC project
+left the file, the export failed with this message, and the `chown` above fixed it. With the fixed
+PC node, 0 of 20 cycles left it and the export worked.*
 
 ---
 

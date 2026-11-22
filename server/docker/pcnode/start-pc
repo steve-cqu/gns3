@@ -25,13 +25,40 @@ banner() {
     echo
 }
 
+# Keep .NET's and PowerShell's per-user files out of /root, which is a GNS3 volume. .NET creates
+# $HOME/.dotnet/corefx/.../shm/session1 as root 0700 for PSReadLine's history mutex. When that is
+# written after GNS3's stop-time chown of the volume, the project cannot be exported or deleted:
+# 409 "Permission denied: 'session1'" (gns3-dev notes/powershell-pc-node.md, section 7g).
+# /run/pc-home is in the container's own layer, so GNS3 never chowns it. The cost: a file saved to
+# `~` lasts only until the project is closed. /var/www/html is still persisted.
+export HOME=/run/pc-home
+mkdir -p "$HOME"
+
+# GNS3 stops a node by chowning its volumes and then `docker stop`, which sends SIGTERM to PID 1
+# (this script). Without a trap, PID 1 ignores it, and PowerShell keeps running, writing as root,
+# until Docker kills everything 5 seconds later. With the trap, the node stops at once, and the loop
+# below never starts a new PowerShell during a stop. pwsh runs in the background and the script
+# `wait`s, because bash runs a trap only after its foreground command ends. Without job control a
+# background command still reads the console once stdin is passed explicitly (`<&0`). It also
+# starts with SIGINT and SIGQUIT ignored, which .NET keeps, so Ctrl-C would no longer stop a running
+# command (measured 22 Nov 2026); `env --default-signal` gives them back.
+child=
+on_stop() {
+    [ -n "$child" ] && kill -TERM "$child" 2>/dev/null
+    exit 0
+}
+trap on_stop TERM HUP
+
 while true; do
     if [ "${PC_CONSOLE_LAZY:-0}" = "1" ]; then
         read -r -p "Press Enter to start PowerShell. " _ || sleep 1
     fi
     ensure_size
     banner
-    pwsh -NoLogo
+    env --default-signal=INT,QUIT pwsh -NoLogo <&0 &
+    child=$!
+    wait "$child"
+    child=
     echo "PowerShell exited. Starting it again..."
     sleep 1
 done
