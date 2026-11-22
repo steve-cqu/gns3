@@ -1,7 +1,8 @@
-# Installed to /etc/systemd/system/ by `gns3build.py files`, which substitutes @LIB@ and @PORT@
-# from build/manifest.yml. Edit this file, not the installed copy.
+# Installed to /etc/systemd/system/ by `gns3build.py files`, which substitutes @LIB@, @PORT@ and
+# @ARGS@ (`--upload --upload-max-mb N` when manifest `files.upload` is true) from
+# build/manifest.yml. Edit this file, not the installed copy.
 [Unit]
-Description=Read-only file page for GNS3 captures and node files
+Description=File page for GNS3 captures and node files (downloads; uploads with --upload)
 Documentation=https://github.com/steve-cqu/gns3
 After=network-online.target gns3.service
 Wants=network-online.target
@@ -10,13 +11,14 @@ Wants=network-online.target
 Type=simple
 User=gns3
 Group=gns3
-ExecStart=/usr/bin/python3 @LIB@/gns3_files.py --port @PORT@
+ExecStart=/usr/bin/python3 @LIB@/gns3_files.py --port @PORT@ @ARGS@
 # The controller is not a hard dependency: without it the page says so, which is what a student
 # rebooting the VM should see rather than a dead port.
 Restart=always
 RestartSec=3
-# It only ever reads. The projects live under /opt/gns3, which ProtectSystem=strict leaves
-# readable, and nothing at all is writable to this process.
+# It never writes to the VM's disk. The projects live under /opt/gns3, which ProtectSystem=strict
+# leaves readable, and nothing at all is writable to this process. An upload goes into a running
+# node through `docker exec` (the gns3 user is in the docker group), not through the filesystem.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

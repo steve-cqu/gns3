@@ -1326,6 +1326,7 @@ def cmd_logos(args):
 def cmd_files(args):
     """Install gns3-files: http://<vm-ip>:<port>/ lists each project's captures and its nodes'
     saved files, so a student downloads a .pcap in the browser instead of with scp or FileZilla.
+    With `files.upload: true` it also takes uploads into a running node's /root/uploads/.
 
     Two things go on the VM, both idempotent: the module and the systemd unit with the manifest's
     path and port substituted in. Standard library only, so no packages. The unit is restarted
@@ -1344,7 +1345,10 @@ def cmd_files(args):
     for f in (module, unit_src):
         if not f.exists():
             sys.exit(f"files service source missing: {f}")
-    unit_text = unit_src.read_text().replace("@LIB@", str(lib_dir)).replace("@PORT@", str(port))
+    upload = bool(cfg.get("upload", False))
+    extra = ("--upload --upload-max-mb %d" % int(cfg.get("upload_max_mb", 50))) if upload else ""
+    unit_text = (unit_src.read_text().replace("@LIB@", str(lib_dir))
+                 .replace("@PORT@", str(port)).replace("@ARGS@", extra))
     installs = [(module, lib_dir / module.name, module.read_text()),
                 (unit_src, Path("/etc/systemd/system") / unit_name, unit_text)]
 
@@ -1380,7 +1384,8 @@ def cmd_files(args):
         print(f"  service {unit_name} started")
     else:
         print(f"  skip   {unit_name} already enabled and running")
-    print(f"  url    http://<gns3-vm-ip>:{port}/ — captures and node files, read-only")
+    print(f"  url    http://<gns3-vm-ip>:{port}/ — captures and node files"
+          + (", uploads into running nodes" if upload else ", read-only"))
     return 0
 
 
@@ -3048,7 +3053,7 @@ def main():
                         help="install noVNC + the gns3-novnc service (run on the VM)")
     nv.add_argument("--dry-run", action="store_true")
 
-    fl = sub.add_parser("files", help="install the read-only capture and node-file page "
+    fl = sub.add_parser("files", help="install the capture, node-file and upload page "
                                       "(run on the VM)")
     fl.add_argument("--dry-run", action="store_true")
 

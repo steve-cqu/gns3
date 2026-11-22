@@ -588,7 +588,7 @@ the VM (`cd ~/git/gns3/server/build`):
 ./gns3build.py timesync                    # keep ntpd alive through a clock jump
 ./gns3build.py logos                       # install the CQU node symbols
 ./gns3build.py novnc                       # install noVNC + the gns3-novnc service
-./gns3build.py files                       # install the gns3-files page (port 4080)
+./gns3build.py files                       # install the gns3-files page (port 4080, uploads)
 ./gns3build.py labnic --profile arm64      # the Windows Host lab NIC (eth2 amd64 / eth1 arm64)
 ./gns3build.py projects  --profile amd64   # import the projects in projects.txt
 ./gns3build.py export-check --profile amd64
@@ -967,7 +967,7 @@ it a web port other than 6080 — `./start-vnc.sh 5901 6081` — or it cannot bi
 
 ---
 
-## Captures and node files on a page (`gns3-files`, from v045)
+## Captures, node files and uploads on a page (`gns3-files`, from v045)
 
 A capture started in the GNS3 web UI is written to the VM, under
 `/opt/gns3/projects/<id>/project-files/captures/`, and students used to fetch it with FileZilla or
@@ -976,16 +976,28 @@ A capture started in the GNS3 web UI is written to the VM, under
 still being written) and its Docker nodes' persisted directories, and downloads any of them. Text
 files open in the browser.
 
-It is **read-only**. It answers GET and HEAD only, resolves every path component with `lstat`, lists
-symlinks without following them, and runs as `gns3`, so a root-only file is shown as unreadable
-rather than served. There is no login, the same as `:80` and `:6080`. Node files come from disk,
-so only what a template persists is there; nothing inside a running container is reached, which
-is why the service needs no Docker access. Project names come from the controller API, and node
-names from each project's own `.gns3` file, which exists whether the project is open or not.
+**Downloads are read-only.** They resolve every path component with `lstat`, list symlinks
+without following them, and run as `gns3`, so a root-only file is shown as unreadable rather than
+served. There is no login, the same as `:80` and `:6080`. Node files come from disk, so only what a
+template persists is there. Project names come from the controller API, and node names from each
+project's own `.gns3` file, which exists whether the project is open or not.
+
+**Uploads (from the T1 2027 build) put a file into a running node's `/root/uploads/`.** Each node
+has an *Upload* button; the browser sends a `PUT` with the file as the body, and the page streams
+it into the node with `docker exec … /gns3/bin/busybox sh` (GNS3 injects that busybox into every
+Docker node; `gns3` is in the `docker` group). So the file is written inside the container, as root
+there, and never to the VM's disk: while a node runs, its saved `/root` on disk is `root` 0700, so
+the disk route could not work anyway. Names are one plain component, the size is capped (50 MB),
+the write goes to a temporary name and is moved into place only at the full size, and an existing
+file is replaced only when the student ticks *Replace*. A `PUT` from another web site needs a CORS
+preflight that the page never grants, and a foreign `Origin` is refused. The node must be running
+and its project open; the page says whether that node keeps `/root` when the project closes.
+`files.upload: false` in the manifest turns it off (GET and HEAD only, as before). Design and
+measurements: `gns3-dev/notes/files-upload.md`.
 
 The port is **4080** (manifest `files.port`) because GNS3 assigns node console ports from 5000 to
 10000. **Parts:** `files/gns3_files.py` (standard library only, Python 3.8) and
-`files/gns3-files.service` (`@LIB@` and `@PORT@` substituted), installed to
+`files/gns3-files.service` (`@LIB@`, `@PORT@` and `@ARGS@` substituted), installed to
 `/usr/local/lib/gns3-files` and `/etc/systemd/system`. To see what it can see:
 `python3 /usr/local/lib/gns3-files/gns3_files.py --list`.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A read-only web page for getting files off this GNS3 VM: captures, and the nodes' saved files.
+"""A web page for moving files on and off this GNS3 VM: captures, the nodes' saved files, uploads.
 
 A link capture started from the GNS3 web UI is written to the VM's disk, and the student then
 has to get it onto their own computer to open it in Wireshark: FileZilla, WinSCP or scp, plus
@@ -13,14 +13,25 @@ What it shows, per project:
     (project-files/docker/<node_id>/..., usually /etc, /root, /home). Only those exist outside
     the running container, so a path a node does not persist is simply not here.
 
-Read-only by construction:
-  - GET and HEAD only; every other method is refused.
+Downloads are read-only by construction:
   - Paths are resolved component by component with lstat. A symlink is listed but never
     followed (the persisted directories contain them), and no path can leave its project.
   - It runs as the gns3 user, so a file only root can read (/etc/shadow, the directories of a
     node that was hard-stopped) is listed as unreadable rather than served.
+
+Uploads exist only with --upload (manifest `files.upload: true`); without it every method but GET
+and HEAD is refused, as before. With it, a PUT to /p/<project>/n/<node>/upload?name=<file> puts
+the request body at /root/uploads/<file> inside that node, which must be running. The write goes
+through `docker exec` into the node, as root there, never to the VM's disk: while a node runs its
+saved /root on disk is root 0700, so the gns3 user could not write it anyway, and inside the
+container a symlink or `..` can only reach the container's own files. Filenames are one plain
+component; the size is capped (--upload-max-mb); an existing file is replaced only on request.
+A PUT from another web site needs a CORS preflight, which this page never grants, and a request
+whose Origin names another host is refused. Design: gns3-dev notes/files-upload.md.
+
 No login, like the GNS3 web UI on :80 and the noVNC gateway on :6080: the VM is reachable only
-from the student's own host-only network.
+from the student's own host-only network, and the web UI already gives that network a root console
+on every node.
 
 Project names come from the GNS3 controller (for the same reason as the noVNC gateway: the API
 cannot be called from a browser page on another port, because of gns3server's CORS list). Node
@@ -29,7 +40,7 @@ names come from each project's own .gns3 file, which is there whether the projec
 Run as a systemd unit (gns3-files.service) installed by `gns3build.py files`, or by hand:
 
     python3 gns3_files.py --list                 # what it can see, then exit
-    python3 gns3_files.py --port 4080
+    python3 gns3_files.py --port 4080 [--upload]
 """
 import argparse
 import configparser
@@ -41,6 +52,7 @@ import mimetypes
 import os
 import re
 import stat
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -56,6 +68,10 @@ CAPTURE_SUFFIXES = (".pcap", ".pcapng")
 HIDDEN = {".gns3_perms", "ubridge.log"}  # GNS3's own bookkeeping, not the node's files
 VIEW_LIMIT = 1024 * 1024                 # text files up to this size open in the browser
 CHUNK = 64 * 1024
+UPLOAD_DIR = "/root/uploads"             # inside the node
+UPLOAD_MAX_MB = 50
+UPLOAD_NAME = re.compile(r"^[^./\x00-\x1f\x7f][^/\x00-\x1f\x7f]*$")
+BUSYBOX = "/gns3/bin/busybox"            # GNS3 injects it into every Docker node
 
 
 # --------------------------------------------------------------------- controller ----
@@ -220,6 +236,78 @@ def safe_walk(root, parts):
         return None, None, "unreadable"
 
 
+# --------------------------------------------------------------------- uploads ----
+
+# Runs inside the node as root, under GNS3's busybox, so it works on every image (Alpine, Ubuntu,
+# the vendor ones). $1 name, $2 "1" to replace, $3 the expected size. Writes to a temporary name and
+# moves it into place only when the size matches, so a broken upload leaves nothing behind.
+# Exit codes: 17 exists, 18 short, 19 the name is a directory.
+UPLOAD_SCRIPT = r'''
+B=%(bb)s
+d=%(dir)s; f="$d/$1"; t="$d/.upload.$$"
+$B mkdir -p "$d" || exit 1
+[ -d "$f" ] && exit 19
+if [ -e "$f" ] && [ "$2" != 1 ]; then exit 17; fi
+$B cat > "$t" || { $B rm -f "$t"; exit 1; }
+n=$($B stat -c %%s "$t")
+if [ "$n" != "$3" ]; then $B rm -f "$t"; exit 18; fi
+$B mv -f "$t" "$f"
+''' % {"bb": BUSYBOX, "dir": UPLOAD_DIR}
+
+UPLOAD_ERRORS = {
+    17: (409, "%s is already in %s on this node. Tick Replace to overwrite it."),
+    18: (400, "The upload of %s stopped part way, so nothing was saved. Try again."),
+    19: (409, "%s is a folder in %s on this node, so a file cannot replace it."),
+}
+
+
+def node_container(api, project, nid):
+    """(container id, None) for a running node, or (None, the reason a student can act on)."""
+    if not project.opened:
+        return None, "The project is closed. Open it in GNS3 and start the node first."
+    try:
+        n = api_get(api, "/projects/%s/nodes/%s" % (project.id, nid))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None, "GNS3 did not answer about this node. Is the project open?"
+    if n.get("status") != "started":
+        return None, "The node is not running. Start it in GNS3, then upload."
+    cid = (n.get("properties") or {}).get("container_id")
+    if not cid or not re.match(r"^[0-9a-f]{12,64}$", cid):
+        return None, "GNS3 has no container for this node yet. Start it, then upload."
+    return cid, None
+
+
+def keeps_root(project, nid):
+    """True if the node saves /root when the project closes, False if not, None if not yet known."""
+    base = os.path.join(project.path, "project-files", "docker", nid)
+    if not os.path.isdir(base):
+        return None
+    return os.path.isdir(os.path.join(base, "root"))
+
+
+UPLOAD_JS = """
+const files = document.getElementById('files'), replace = document.getElementById('replace'),
+      out = document.getElementById('out');
+document.getElementById('go').addEventListener('click', async () => {
+  if (!files.files.length) { out.textContent = 'Choose a file first.'; return; }
+  out.textContent = '';
+  for (const file of files.files) {
+    const line = document.createElement('div');
+    line.textContent = 'Uploading ' + file.name + '...';
+    out.appendChild(line);
+    const url = location.pathname + '?name=' + encodeURIComponent(file.name) +
+                (replace.checked ? '&replace=1' : '');
+    try {
+      const res = await fetch(url, {method: 'PUT', body: file});
+      line.textContent = (res.ok ? 'Done: ' : 'Not saved: ') + await res.text();
+    } catch (e) {
+      line.textContent = 'Not saved: ' + file.name + ' (' + e + ')';
+    }
+  }
+});
+"""
+
+
 # ----------------------------------------------------------------------- the page ----
 
 STYLE = """
@@ -248,6 +336,11 @@ STYLE = """
   .note { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1rem;
           color:var(--dim); }
   code { font-size:.9em; }
+  form.up { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1rem; }
+  form.up label { display:block; margin:.5rem 0; }
+  button { padding:.45rem 1.1rem; border-radius:6px; font-weight:600; border:0; cursor:pointer;
+           background:var(--accent); color:var(--accent-ink); font-size:1rem; }
+  #out { margin-top:1rem; } #out div { margin:.25rem 0; overflow-wrap:anywhere; }
 """
 
 
@@ -270,7 +363,7 @@ def q(s):
     return urllib.parse.quote(s, safe="")
 
 
-def page(title, body, crumbs=()):
+def page(title, body, crumbs=(), script=""):
     nav = ""
     if crumbs:
         nav = "<nav>" + " / ".join(
@@ -278,8 +371,9 @@ def page(title, body, crumbs=()):
             for href, label in crumbs) + "</nav>"
     return ("<!DOCTYPE html><html lang=\"en-AU\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-            "<title>%s</title><style>%s</style></head><body><main>%s%s</main></body></html>"
-            % (esc(title), STYLE, nav, body)).encode()
+            "<title>%s</title><style>%s</style></head><body><main>%s%s</main>%s</body></html>"
+            % (esc(title), STYLE, nav, body,
+               "<script>%s</script>" % script if script else "")).encode()
 
 
 def item(name_html, meta, button=""):
@@ -292,14 +386,29 @@ def item(name_html, meta, button=""):
 class Handler(BaseHTTPRequestHandler):
     server_version = "gns3-files"
     api = None
+    upload = False                      # --upload
+    upload_max = UPLOAD_MAX_MB * 1024 * 1024
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
-    # Read-only: anything but GET and HEAD is refused outright.
+    # Anything but GET and HEAD is refused outright, and PUT too unless uploads are switched on.
     def _refuse(self):
-        self.send_error(405, "This page is read-only")
-    do_POST = do_PUT = do_DELETE = do_PATCH = _refuse
+        self.send_error(405, "Not allowed here" if self.upload else "This page is read-only")
+    do_POST = do_DELETE = do_PATCH = do_OPTIONS = _refuse
+
+    def do_PUT(self):
+        if not self.upload:
+            return self._refuse()
+        url = urllib.parse.urlsplit(self.path)
+        parts = [urllib.parse.unquote(p) for p in url.path.split("/") if p]
+        if not (len(parts) == 4 and parts[0] == "p" and UUID.match(parts[1])
+                and parts[2] == "u" and UUID.match(parts[3])):
+            return self.send_error(404)
+        try:
+            self.put_file(parts[1], parts[3], urllib.parse.parse_qs(url.query))
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_HEAD(self):
         self.do_GET(head=True)
@@ -321,6 +430,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.capture(project, parts[3])
                 if parts[2] == "n" and len(parts) >= 4 and UUID.match(parts[3]):
                     return self.node(project, parts[3], parts[4:])
+                if parts[2] == "u" and len(parts) == 4 and UUID.match(parts[3]) and self.upload:
+                    return self.upload_page(project, parts[3])
             return self.send_error(404)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -362,7 +473,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_page(page("GNS3 files", (
             "<h1>Files on this GNS3 VM</h1>"
             "<p class=\"lede\">Download packet captures to open in Wireshark, and the files your "
-            "nodes have saved. Read-only: nothing here can change the VM.</p>" + body)))
+            "nodes have saved.%s</p>" % (
+                " Upload a file into a running node." if self.upload else
+                " Read-only: nothing here can change the VM.") + body)))
 
     def project(self, p):
         live = capturing(self.api, p)
@@ -388,9 +501,11 @@ class Handler(BaseHTTPRequestHandler):
                 meta = "saves " + ", ".join("/" + d for d in dirs)
             link = ('<a href="/p/%s/n/%s/">%s</a>' % (p.id, nid, esc(name)) if dirs
                     else esc(name))
-            nodes.append(item(link, esc(meta),
-                              '<a class="btn" href="/p/%s/n/%s/">Browse</a>' % (p.id, nid)
-                              if dirs else ""))
+            buttons = ('<a class="btn" href="/p/%s/n/%s/">Browse</a>' % (p.id, nid)
+                       if dirs else "")
+            if self.upload:
+                buttons += ' <a class="btn" href="/p/%s/u/%s">Upload</a>' % (p.id, nid)
+            nodes.append(item(link, esc(meta), buttons))
         body = ("<h1>%s</h1><p class=\"lede\">%s</p><h2>Captures</h2>%s<h2>Nodes</h2>%s" % (
             esc(p.name),
             "Open in GNS3." if p.opened else "Closed in GNS3: these are the files it saved.",
@@ -478,11 +593,119 @@ class Handler(BaseHTTPRequestHandler):
                            if i < len(parts) - 1 else None, x))
         body = ("<h1>%s <span class=\"meta\">%s</span></h1>"
                 "<p class=\"lede\">The files this node has saved. Click a text file to read it, or "
-                "<b>Download</b> to save it.</p>%s" % (
+                "<b>Download</b> to save it.%s</p>%s" % (
                     esc(node_name), esc(here),
+                    (' To put a file on this node, <a href="/p/%s/u/%s">upload it</a>.'
+                     % (p.id, nid)) if self.upload else "",
                     "<ul>%s</ul>" % "".join(rows) if rows else
                     '<div class="note">This folder is empty.</div>'))
         self.send_page(page("%s %s" % (node_name, here), body, crumbs))
+
+    # ---------------------------------------------------------------- uploads ----
+    def upload_page(self, p, nid):
+        names = dict(p.docker_nodes())
+        if nid not in names:
+            return self.send_error(404, "No such node")
+        _, why = node_container(self.api, p, nid)
+        kept = keeps_root(p, nid)
+        if kept is True:
+            keep = ("It stays there when you close the project, because this node saves "
+                    "<code>/root</code>.")
+        elif kept is False:
+            keep = ("<b>This node does not save <code>/root</code></b>, so the file is gone when "
+                    "you close the project: upload it again next time, or copy it somewhere the "
+                    "node saves.")
+        else:
+            keep = "Start the node once to see whether it keeps the file when the project closes."
+        state = ('<div class="note">%s</div>' % esc(why)) if why else ""
+        body = ("<h1>Upload to %s</h1>"
+                "<p class='lede'>Files go to <code>%s/</code> on the node, owned by root. Copy them "
+                "on from there, for example <code>cp %s/site.conf /etc/nginx/</code>. %s "
+                "Up to %d MB each.</p>%s"
+                "<form class='up' onsubmit='return false'>"
+                "<label>Files: <input type='file' id='files' multiple></label>"
+                "<label><input type='checkbox' id='replace'> Replace a file of the same name</label>"
+                "<button type='button' id='go'>Upload</button>"
+                "<div id='out' aria-live='polite'></div></form>" % (
+                    esc(names[nid]), UPLOAD_DIR, UPLOAD_DIR, keep,
+                    self.upload_max // (1024 * 1024), state))
+        self.send_page(page("Upload to %s" % names[nid], body,
+                            [("/", "All projects"), ("/p/%s" % p.id, p.name),
+                             (None, "Upload to " + names[nid])], script=UPLOAD_JS))
+
+    def reply(self, code, text):
+        body = text.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def put_file(self, pid, nid, query):
+        origin = self.headers.get("Origin")
+        if origin and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host"):
+            return self.reply(403, "Uploads are accepted only from this page.")
+        name = (query.get("name") or [""])[0]
+        if (not UPLOAD_NAME.match(name) or len(name.encode()) > 255
+                or name.startswith(".upload.")):
+            return self.reply(400, "Not a usable file name: %r. Use a plain name such as "
+                                   "server.py, without folders or a leading dot." % name)
+        replace = (query.get("replace") or [""])[0] == "1"
+        try:
+            size = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return self.reply(411, "The browser did not say how big the file is.")
+        if size < 0 or size > self.upload_max:
+            return self.reply(413, "%s is %s; the limit is %d MB." % (
+                name, human(size), self.upload_max // (1024 * 1024)))
+        project = self.find(pid)
+        if project is None:
+            return self.reply(404, "No such project.")
+        if nid not in dict(project.docker_nodes()):
+            return self.reply(404, "No such node in this project.")
+        cid, why = node_container(self.api, project, nid)
+        if why:
+            return self.reply(409, why)
+        cmd = ["docker", "exec", "-i", cid, BUSYBOX, "sh", "-c", UPLOAD_SCRIPT, "sh",
+               name, "1" if replace else "0", str(size)]
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.PIPE)
+        except OSError as e:
+            return self.reply(500, "Could not reach the node (%s)." % e)
+        left = size
+        try:
+            while left > 0:
+                chunk = self.rfile.read(min(CHUNK, left))
+                if not chunk:
+                    break                   # the browser went away; the script sees a short file
+                proc.stdin.write(chunk)
+                left -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+        # Not communicate(): Python 3.8's flushes stdin, which is closed by now. The script's
+        # stderr is a line at most, so reading it after the exit cannot fill a pipe.
+        try:
+            proc.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            return self.reply(504, "The node did not finish saving %s." % name)
+        err = proc.stderr.read()
+        proc.stderr.close()
+        if proc.returncode == 0:
+            self.log_message("upload %s (%d bytes) to node %s", name, size, nid)
+            return self.reply(201, "%s saved as %s/%s (%s)." % (name, UPLOAD_DIR, name, human(size)))
+        if proc.returncode in UPLOAD_ERRORS:
+            code, msg = UPLOAD_ERRORS[proc.returncode]
+            return self.reply(code, msg % ((name, UPLOAD_DIR) if msg.count("%s") == 2 else (name,)))
+        detail = err.decode(errors="replace").strip()[:200] or "exit %d" % proc.returncode
+        return self.reply(500, "The node could not save %s: %s" % (name, detail))
 
     @staticmethod
     def kind(path, st):
@@ -530,6 +753,9 @@ def main(argv=None):
     ap.add_argument("--bind", default="0.0.0.0")
     ap.add_argument("--api", default=None, help="GNS3 controller URL (default: found locally)")
     ap.add_argument("--list", action="store_true", help="print what is visible and exit")
+    ap.add_argument("--upload", action="store_true",
+                    help="allow uploads into running nodes' %s" % UPLOAD_DIR)
+    ap.add_argument("--upload-max-mb", type=int, default=UPLOAD_MAX_MB)
     args = ap.parse_args(argv)
     api = args.api or default_api()
 
@@ -542,9 +768,12 @@ def main(argv=None):
         return 0
 
     Handler.api = api
+    Handler.upload = args.upload
+    Handler.upload_max = args.upload_max_mb * 1024 * 1024
     srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     srv.daemon_threads = True
-    print("gns3-files on http://%s:%d/ (controller %s)" % (args.bind, args.port, api), flush=True)
+    print("gns3-files on http://%s:%d/ (controller %s)%s" % (
+        args.bind, args.port, api, ", uploads on" if args.upload else ""), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
